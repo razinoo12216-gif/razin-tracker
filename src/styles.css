@@ -29,10 +29,7 @@ body {
 }
 
 header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 18px 24px;
+  padding: 16px 24px;
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
@@ -41,21 +38,37 @@ header {
   -webkit-backdrop-filter: blur(12px);
   z-index: 10;
 }
+.header-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  max-width: 920px;
+  margin-left: auto;
+  margin-right: auto;
+}
 header h1 {
   margin: 0;
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.01em;
+  flex-shrink: 0;
 }
-.stats {
+#month-select {
   flex: 1;
-  color: var(--muted);
-  font-size: 13px;
-}
-.stats span {
+  background: var(--panel);
+  border: 1px solid var(--border);
   color: var(--text);
+  padding: 8px 12px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
   font-weight: 600;
+  max-width: 240px;
+  margin-left: auto;
 }
+#month-select:focus { border-color: var(--border-2); }
 
 button {
   background: var(--accent);
@@ -68,11 +81,43 @@ button {
   font-family: inherit;
   cursor: pointer;
   transition: opacity 0.15s, transform 0.05s;
+  flex-shrink: 0;
 }
 button:hover { opacity: 0.88; }
 button:active { transform: scale(0.98); }
 button.danger { background: var(--danger); color: white; margin-right: auto; }
 button#cancel-btn { background: var(--border); color: var(--text); }
+
+.totals {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  max-width: 920px;
+  margin: 0 auto;
+}
+.totals-item {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.totals-item label {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.totals-item span {
+  display: block;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.totals-item.net span.pos { color: var(--green); }
+.totals-item.net span.neg { color: var(--danger); }
 
 main {
   padding: 20px 24px 40px;
@@ -96,15 +141,9 @@ main {
   outline: none;
 }
 .filter-bar input { flex: 1; }
-.filter-bar input:focus, .filter-bar select:focus {
-  border-color: var(--border-2);
-}
+.filter-bar input:focus, .filter-bar select:focus { border-color: var(--border-2); }
 
-#list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
+#list { display: flex; flex-direction: column; gap: 10px; }
 
 .card {
   background: var(--panel);
@@ -124,12 +163,7 @@ main {
   gap: 12px;
   margin-bottom: 12px;
 }
-.card-head h3 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.005em;
-}
+.card-head h3 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.005em; }
 .status {
   flex-shrink: 0;
   font-size: 10px;
@@ -164,18 +198,16 @@ main {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 600;
 }
+.card-grid span.pos { color: var(--green); }
+.card-grid span.neg { color: var(--danger); }
 .block { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
-.block p {
-  margin: 0;
-  white-space: pre-wrap;
-  color: var(--text);
-  font-size: 13px;
-}
+.block p { margin: 0; white-space: pre-wrap; color: var(--text); font-size: 13px; }
 
 .empty {
   text-align: center;
-  padding: 60px 24px;
+  padding: 50px 24px;
   color: var(--muted);
   border: 1px dashed var(--border);
   border-radius: 10px;
@@ -199,16 +231,8 @@ dialog {
   color: var(--text);
   box-shadow: 0 20px 60px rgba(0,0,0,0.5);
 }
-dialog::backdrop {
-  background: rgba(0,0,0,0.65);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
-dialog h2 {
-  margin: 0 0 18px;
-  font-size: 17px;
-  font-weight: 700;
-}
+dialog::backdrop { background: rgba(0,0,0,0.65); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+dialog h2 { margin: 0 0 18px; font-size: 17px; font-weight: 700; }
 dialog form { display: flex; flex-direction: column; gap: 12px; }
 dialog label {
   display: flex;
@@ -234,26 +258,21 @@ dialog input, dialog select, dialog textarea {
   font-weight: 400;
   outline: none;
 }
-dialog input:focus, dialog select:focus, dialog textarea:focus {
-  border-color: var(--border-2);
-}
-dialog textarea {
-  min-height: 64px;
-  resize: vertical;
-  line-height: 1.5;
-}
-dialog .actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 8px;
-}
+dialog input:focus, dialog select:focus, dialog textarea:focus { border-color: var(--border-2); }
+dialog input[type="month"] { color-scheme: dark; }
+dialog textarea { min-height: 64px; resize: vertical; line-height: 1.5; }
+dialog .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
 
 @media (max-width: 640px) {
-  header { padding: 14px 16px; gap: 10px; }
+  header { padding: 12px 16px; }
+  .header-top { gap: 8px; margin-bottom: 12px; }
   header h1 { font-size: 16px; }
-  .stats { font-size: 12px; }
+  #month-select { max-width: none; }
+  .totals { grid-template-columns: repeat(2, 1fr); }
+  .totals-item span { font-size: 15px; }
   main { padding: 16px; }
-  .card-grid { grid-template-columns: repeat(2, 1fr); }
+  .card-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .card-grid > div { font-size: 12px; }
+  .card-grid label { font-size: 9px; }
   dialog { padding: 20px; }
 }
