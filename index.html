@@ -6,16 +6,16 @@
   <meta name="theme-color" content="#0a0a0a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Projects" />
+  <meta name="apple-mobile-web-app-title" content="Money" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" type="image/svg+xml" href="icon.svg" />
-  <title>Razin — Projects</title>
+  <title>Razin — Money</title>
   <link rel="stylesheet" href="src/styles.css" />
 </head>
 <body>
   <header>
     <div class="header-top">
-      <h1>Projects</h1>
+      <h1>Money</h1>
       <select id="month-select" aria-label="Month"></select>
       <button id="add-btn" type="button">+ New</button>
     </div>
@@ -23,44 +23,68 @@
       <div class="totals-item"><label>Revenue</label><span id="t-rev">£0</span></div>
       <div class="totals-item"><label>Expenses</label><span id="t-exp">£0</span></div>
       <div class="totals-item net"><label>Net</label><span id="t-net">£0</span></div>
-      <div class="totals-item"><label>Projects</label><span id="t-count">0</span></div>
+      <div class="totals-item"><label>Entries</label><span id="t-count">0</span></div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="project" type="button">Projects <span class="tab-count" id="tc-project">0</span></button>
+      <button class="tab" data-tab="expense" type="button">Expenses <span class="tab-count" id="tc-expense">0</span></button>
     </div>
   </header>
 
   <main>
     <div class="filter-bar">
-      <input id="search" type="search" placeholder="Search name or notes…" autocomplete="off" />
-      <select id="status-filter" aria-label="Filter by status">
-        <option value="">All status</option>
-        <option value="Active">Active</option>
-        <option value="Paused">Paused</option>
-        <option value="Completed">Completed</option>
-      </select>
+      <input id="search" type="search" placeholder="Search…" autocomplete="off" />
+      <select id="secondary-filter" aria-label="Filter"></select>
     </div>
     <div id="list"></div>
   </main>
 
   <dialog id="editor">
     <form id="editor-form">
-      <h2 id="editor-title">Project</h2>
+      <h2 id="editor-title">Entry</h2>
+      <input type="hidden" name="type" value="project" />
+
       <label>Name<input name="name" required autocomplete="off" /></label>
+
       <div class="row">
         <label>Month<input name="month" type="month" required /></label>
-        <label>Status
+
+        <label data-field="status">Status
           <select name="status">
             <option>Active</option>
             <option>Paused</option>
             <option>Completed</option>
           </select>
         </label>
+
+        <label data-field="category" style="display:none">Category
+          <select name="category">
+            <option>Operations</option>
+            <option>Marketing</option>
+            <option>Subscriptions</option>
+            <option>Transport</option>
+            <option>Food</option>
+            <option>Stock</option>
+            <option>Wages</option>
+            <option>Rent / Bills</option>
+            <option>Tax</option>
+            <option>Personal</option>
+            <option>Other</option>
+          </select>
+        </label>
       </div>
-      <div class="row">
+
+      <div data-field="project-money" class="row">
         <label>Revenue<input name="revenue" autocomplete="off" placeholder="£" inputmode="decimal" /></label>
         <label>Expenses<input name="expenses" autocomplete="off" placeholder="£" inputmode="decimal" /></label>
       </div>
-      <label>Tasks<textarea name="tasks" placeholder="One per line"></textarea></label>
-      <label>People<textarea name="people" placeholder="Names, roles, contacts"></textarea></label>
+
+      <label data-field="expense-amount" style="display:none">Amount<input name="expenses" autocomplete="off" placeholder="£" inputmode="decimal" /></label>
+
+      <label data-field="people">People<textarea name="people" placeholder="Names, roles, contacts"></textarea></label>
+      <label data-field="tasks">Tasks<textarea name="tasks" placeholder="One per line"></textarea></label>
       <label>Notes<textarea name="notes"></textarea></label>
+
       <div class="actions">
         <button type="button" id="delete-btn" class="danger">Delete</button>
         <button type="button" id="cancel-btn">Cancel</button>
