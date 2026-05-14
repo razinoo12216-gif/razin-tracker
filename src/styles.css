@@ -11,6 +11,7 @@
   --amber: #f59e0b;
   --gray: #6b7280;
   --danger: #ef4444;
+  --blue: #3b82f6;
 }
 
 * { box-sizing: border-box; }
@@ -86,7 +87,7 @@ button {
 button:hover { opacity: 0.88; }
 button:active { transform: scale(0.98); }
 button.danger { background: var(--danger); color: white; margin-right: auto; }
-button#cancel-btn { background: var(--border); color: var(--text); }
+button#cancel-btn, button#review-cancel-btn { background: var(--border); color: var(--text); }
 
 .totals {
   display: grid;
@@ -126,6 +127,7 @@ button#cancel-btn { background: var(--border); color: var(--text); }
   max-width: 920px;
   margin-left: auto;
   margin-right: auto;
+  overflow-x: auto;
 }
 .tab {
   background: transparent;
@@ -140,6 +142,7 @@ button#cancel-btn { background: var(--border); color: var(--text); }
   display: flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
 }
 .tab:hover { color: var(--text); }
 .tab.active {
@@ -205,7 +208,26 @@ main {
   gap: 12px;
   margin-bottom: 12px;
 }
-.card-head h3 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.005em; }
+.card-head h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.recurring-tag {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: rgba(59,130,246,0.15);
+  color: var(--blue);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
 .status {
   flex-shrink: 0;
   font-size: 10px;
@@ -218,10 +240,7 @@ main {
 .status.active { background: rgba(34,197,94,0.15); color: var(--green); }
 .status.paused { background: rgba(245,158,11,0.15); color: var(--amber); }
 .status.completed { background: rgba(107,114,128,0.2); color: var(--gray); }
-.status.category {
-  background: rgba(107,114,128,0.18);
-  color: var(--text);
-}
+.status.category { background: rgba(107,114,128,0.18); color: var(--text); }
 
 .card-grid {
   display: grid;
@@ -229,7 +248,7 @@ main {
   gap: 12px;
 }
 .card-grid > div { font-size: 13px; min-width: 0; }
-.card-grid label, .block label {
+.card-grid label, .block label, .review-snippet label {
   display: block;
   color: var(--muted);
   font-size: 10px;
@@ -258,6 +277,40 @@ main {
   color: var(--danger);
 }
 
+/* Review card */
+.card.review .card-head h3 { font-size: 15px; }
+.review-score {
+  flex-shrink: 0;
+  background: var(--border);
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 10px;
+  letter-spacing: -0.01em;
+}
+.review-score small { font-size: 11px; opacity: 0.6; font-weight: 600; }
+.review-score.pos { background: rgba(34,197,94,0.18); color: var(--green); }
+.review-score.neg { background: rgba(239,68,68,0.18); color: var(--danger); }
+.review-score.mid { background: rgba(245,158,11,0.18); color: var(--amber); }
+.review-snippet { margin-bottom: 10px; }
+.review-snippet p { margin: 0; color: var(--text); font-size: 13px; }
+.review-scores {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.review-scores span {
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--bg);
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
 .empty {
   text-align: center;
   padding: 50px 24px;
@@ -281,9 +334,12 @@ dialog {
   padding: 24px;
   max-width: 500px;
   width: 92%;
+  max-height: 88vh;
+  overflow-y: auto;
   color: var(--text);
   box-shadow: 0 20px 60px rgba(0,0,0,0.5);
 }
+dialog#review-editor { max-width: 600px; }
 dialog::backdrop { background: rgba(0,0,0,0.65); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 dialog h2 { margin: 0 0 18px; font-size: 17px; font-weight: 700; }
 dialog form { display: flex; flex-direction: column; gap: 12px; }
@@ -312,9 +368,91 @@ dialog input, dialog select, dialog textarea {
   outline: none;
 }
 dialog input:focus, dialog select:focus, dialog textarea:focus { border-color: var(--border-2); }
-dialog input[type="month"] { color-scheme: dark; }
-dialog textarea { min-height: 64px; resize: vertical; line-height: 1.5; }
-dialog .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+dialog input[type="month"], dialog input[type="date"] { color-scheme: dark; }
+dialog textarea { min-height: 60px; resize: vertical; line-height: 1.5; }
+dialog .actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 8px;
+  position: sticky;
+  bottom: -24px;
+  margin-bottom: -24px;
+  padding: 16px 0;
+  background: linear-gradient(to bottom, transparent, var(--panel) 30%);
+}
+
+/* Recurring controls */
+.recurring-block {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.checkbox-label {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 10px !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: var(--text) !important;
+  cursor: pointer;
+}
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  margin: 0;
+  flex-shrink: 0;
+}
+
+/* Review form */
+.review-section {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.review-section:first-of-type { border-top: none; padding-top: 0; }
+.review-section-header {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.scores {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+.scores label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: center;
+  gap: 4px;
+}
+.scores input {
+  text-align: center;
+  padding: 8px 4px;
+  font-size: 16px;
+  font-weight: 700;
+}
+.score-help {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+  margin-top: 4px;
+}
 
 @media (max-width: 640px) {
   header { padding: 12px 16px 0; }
@@ -328,5 +466,11 @@ dialog .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top
   .card-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .card-grid > div { font-size: 12px; }
   .card-grid label { font-size: 9px; }
-  dialog { padding: 20px; }
+  .card-head h3 { font-size: 15px; }
+  .recurring-tag { font-size: 9px; padding: 2px 6px; }
+  dialog { padding: 20px; max-height: 92vh; }
+  .scores { grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  .scores label { font-size: 9px; }
+  .scores input { font-size: 14px; padding: 6px 2px; }
+  .review-scores span { font-size: 10px; padding: 2px 6px; }
 }
