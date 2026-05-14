@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a0a0a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Projects" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="icon" type="image/svg+xml" href="icon.svg" />
+  <title>Razin — Projects</title>
+  <link rel="stylesheet" href="src/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Projects</h1>
+    <div class="stats">
+      <span id="stat-total">0</span> total · <span id="stat-active">0</span> active
+    </div>
+    <button id="add-btn" type="button">+ New</button>
+  </header>
+
+  <main>
+    <div class="filter-bar">
+      <input id="search" type="search" placeholder="Search name or notes…" autocomplete="off" />
+      <select id="status-filter" aria-label="Filter by status">
+        <option value="">All status</option>
+        <option value="Active">Active</option>
+        <option value="Paused">Paused</option>
+        <option value="Completed">Completed</option>
+      </select>
+    </div>
+    <div id="list"></div>
+  </main>
+
+  <dialog id="editor">
+    <form id="editor-form">
+      <h2 id="editor-title">Project</h2>
+      <label>Name<input name="name" required autocomplete="off" /></label>
+      <label>Status
+        <select name="status">
+          <option>Active</option>
+          <option>Paused</option>
+          <option>Completed</option>
+        </select>
+      </label>
+      <div class="row">
+        <label>Revenue<input name="revenue" autocomplete="off" placeholder="£" /></label>
+        <label>Expenses<input name="expenses" autocomplete="off" placeholder="£" /></label>
+      </div>
+      <label>Tasks<textarea name="tasks" placeholder="One per line"></textarea></label>
+      <label>People<textarea name="people" placeholder="Names, roles, contacts"></textarea></label>
+      <label>Notes<textarea name="notes"></textarea></label>
+      <div class="actions">
+        <button type="button" id="delete-btn" class="danger">Delete</button>
+        <button type="button" id="cancel-btn">Cancel</button>
+        <button type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="src/supabase.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>
