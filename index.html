@@ -6,16 +6,16 @@
   <meta name="theme-color" content="#0a0a0a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Money" />
+  <meta name="apple-mobile-web-app-title" content="Book" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" type="image/svg+xml" href="icon.svg" />
-  <title>Razin — Money</title>
+  <title>Razin — Book</title>
   <link rel="stylesheet" href="src/styles.css" />
 </head>
 <body>
   <header>
     <div class="header-top">
-      <h1>Money</h1>
+      <h1>Book</h1>
       <select id="month-select" aria-label="Month"></select>
       <button id="add-btn" type="button">+ New</button>
     </div>
@@ -28,17 +28,19 @@
     <div class="tabs">
       <button class="tab active" data-tab="project" type="button">Projects <span class="tab-count" id="tc-project">0</span></button>
       <button class="tab" data-tab="expense" type="button">Expenses <span class="tab-count" id="tc-expense">0</span></button>
+      <button class="tab" data-tab="review" type="button">Reviews <span class="tab-count" id="tc-review">0</span></button>
     </div>
   </header>
 
   <main>
-    <div class="filter-bar">
+    <div class="filter-bar" id="filter-bar">
       <input id="search" type="search" placeholder="Search…" autocomplete="off" />
       <select id="secondary-filter" aria-label="Filter"></select>
     </div>
     <div id="list"></div>
   </main>
 
+  <!-- Project / Expense editor -->
   <dialog id="editor">
     <form id="editor-form">
       <h2 id="editor-title">Entry</h2>
@@ -81,6 +83,14 @@
 
       <label data-field="expense-amount" style="display:none">Amount<input name="expenses" autocomplete="off" placeholder="£" inputmode="decimal" /></label>
 
+      <div class="recurring-block">
+        <label class="checkbox-label">
+          <input type="checkbox" name="recurring" id="recurring-check" />
+          <span>Recurring monthly — auto-applies to every month from this one</span>
+        </label>
+        <label data-field="end-month" style="display:none">End month (optional)<input name="end_month" type="month" /></label>
+      </div>
+
       <label data-field="people">People<textarea name="people" placeholder="Names, roles, contacts"></textarea></label>
       <label data-field="tasks">Tasks<textarea name="tasks" placeholder="One per line"></textarea></label>
       <label>Notes<textarea name="notes"></textarea></label>
@@ -88,6 +98,62 @@
       <div class="actions">
         <button type="button" id="delete-btn" class="danger">Delete</button>
         <button type="button" id="cancel-btn">Cancel</button>
+        <button type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Sunday Review editor -->
+  <dialog id="review-editor">
+    <form id="review-form">
+      <h2 id="review-title">Sunday Review</h2>
+
+      <label>Week of (Sunday)<input name="week_of" type="date" required /></label>
+
+      <div class="review-section">
+        <div class="review-section-header">The week</div>
+        <label>Wins<textarea name="wins" rows="3" placeholder="Top 3 things that landed this week"></textarea></label>
+        <label>Losses / setbacks<textarea name="losses" rows="3" placeholder="What went sideways, who let me down, what I dropped"></textarea></label>
+        <label>Lessons<textarea name="lessons" rows="2" placeholder="One per line — what won't I repeat?"></textarea></label>
+      </div>
+
+      <div class="review-section">
+        <div class="review-section-header">Honesty</div>
+        <label>What did I avoid?<textarea name="avoided" rows="2" placeholder="The hard call I didn't make. The DM I didn't send."></textarea></label>
+        <label>Where did I break my word or lie?<textarea name="broken_word" rows="2" placeholder="Including to myself"></textarea></label>
+      </div>
+
+      <div class="review-section">
+        <div class="review-section-header">Discipline (1–10)</div>
+        <div class="scores">
+          <label>Prayer<input name="score_prayer" type="number" min="0" max="10" inputmode="numeric" /></label>
+          <label>Gym &lt;9am<input name="score_gym" type="number" min="0" max="10" inputmode="numeric" /></label>
+          <label>NoPMO<input name="score_nopmo" type="number" min="0" max="10" inputmode="numeric" /></label>
+          <label>Focus<input name="score_focus" type="number" min="0" max="10" inputmode="numeric" /></label>
+          <label>Sleep<input name="score_sleep" type="number" min="0" max="10" inputmode="numeric" /></label>
+        </div>
+        <div class="score-help">Self-rated 0 = didn't happen / total slip · 10 = all reps clean.</div>
+      </div>
+
+      <div class="review-section">
+        <div class="review-section-header">Money</div>
+        <div class="row">
+          <label>Money in this week<input name="money_in" placeholder="£" inputmode="decimal" /></label>
+          <label>Money out this week<input name="money_out" placeholder="£" inputmode="decimal" /></label>
+        </div>
+      </div>
+
+      <div class="review-section">
+        <div class="review-section-header">Forward</div>
+        <label>Top 3 priorities next week<textarea name="priorities" rows="3" placeholder="If only 3 things happen, which 3?"></textarea></label>
+        <label>Gratitudes (3 things)<textarea name="gratitudes" rows="2" placeholder="Health, family, dua answered, anything"></textarea></label>
+        <label>Dua / intention<textarea name="dua" rows="2" placeholder="What am I asking Allah for this week?"></textarea></label>
+        <label>Other notes<textarea name="notes" rows="2"></textarea></label>
+      </div>
+
+      <div class="actions">
+        <button type="button" id="review-delete-btn" class="danger">Delete</button>
+        <button type="button" id="review-cancel-btn">Cancel</button>
         <button type="submit">Save</button>
       </div>
     </form>
