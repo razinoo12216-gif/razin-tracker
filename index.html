@@ -14,11 +14,17 @@
 </head>
 <body>
   <header>
-    <h1>Projects</h1>
-    <div class="stats">
-      <span id="stat-total">0</span> total · <span id="stat-active">0</span> active
+    <div class="header-top">
+      <h1>Projects</h1>
+      <select id="month-select" aria-label="Month"></select>
+      <button id="add-btn" type="button">+ New</button>
     </div>
-    <button id="add-btn" type="button">+ New</button>
+    <div class="totals">
+      <div class="totals-item"><label>Revenue</label><span id="t-rev">£0</span></div>
+      <div class="totals-item"><label>Expenses</label><span id="t-exp">£0</span></div>
+      <div class="totals-item net"><label>Net</label><span id="t-net">£0</span></div>
+      <div class="totals-item"><label>Projects</label><span id="t-count">0</span></div>
+    </div>
   </header>
 
   <main>
@@ -38,16 +44,19 @@
     <form id="editor-form">
       <h2 id="editor-title">Project</h2>
       <label>Name<input name="name" required autocomplete="off" /></label>
-      <label>Status
-        <select name="status">
-          <option>Active</option>
-          <option>Paused</option>
-          <option>Completed</option>
-        </select>
-      </label>
       <div class="row">
-        <label>Revenue<input name="revenue" autocomplete="off" placeholder="£" /></label>
-        <label>Expenses<input name="expenses" autocomplete="off" placeholder="£" /></label>
+        <label>Month<input name="month" type="month" required /></label>
+        <label>Status
+          <select name="status">
+            <option>Active</option>
+            <option>Paused</option>
+            <option>Completed</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label>Revenue<input name="revenue" autocomplete="off" placeholder="£" inputmode="decimal" /></label>
+        <label>Expenses<input name="expenses" autocomplete="off" placeholder="£" inputmode="decimal" /></label>
       </div>
       <label>Tasks<textarea name="tasks" placeholder="One per line"></textarea></label>
       <label>People<textarea name="people" placeholder="Names, roles, contacts"></textarea></label>
