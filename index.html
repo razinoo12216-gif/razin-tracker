@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#0a0a0a" />
+  <meta name="theme-color" content="#050505" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="12 World" />
@@ -27,6 +27,7 @@
     </div>
     <div class="tabs">
       <button class="tab active" data-tab="project" type="button">Projects <span class="tab-count" id="tc-project">0</span></button>
+      <button class="tab" data-tab="potential" type="button">Potentials <span class="tab-count" id="tc-potential">0</span></button>
       <button class="tab" data-tab="expense" type="button">Expenses <span class="tab-count" id="tc-expense">0</span></button>
       <button class="tab" data-tab="invoice" type="button">Invoices <span class="tab-count" id="tc-invoice">0</span></button>
       <button class="tab" data-tab="review" type="button">Reviews <span class="tab-count" id="tc-review">0</span></button>
@@ -41,7 +42,7 @@
     <div id="list"></div>
   </main>
 
-  <!-- Project / Expense editor -->
+  <!-- Project / Expense / Potential editor -->
   <dialog id="editor">
     <form id="editor-form">
       <h2 id="editor-title">Entry</h2>
@@ -50,7 +51,7 @@
       <label>Name<input name="name" required autocomplete="off" /></label>
 
       <div class="row">
-        <label>Month<input name="month" type="month" required /></label>
+        <label data-field="month-field">Month<input name="month" type="month" required /></label>
 
         <label data-field="status">Status
           <select name="status">
@@ -84,7 +85,14 @@
 
       <label data-field="expense-amount" style="display:none">Amount<input name="expenses" autocomplete="off" placeholder="£" inputmode="decimal" /></label>
 
-      <div class="recurring-block">
+      <label data-field="potential-value" style="display:none">Estimated value<input name="revenue" autocomplete="off" placeholder="£" inputmode="decimal" /></label>
+
+      <div data-field="potential-dates" class="row" style="display:none">
+        <label>Last contact<input name="last_contact" type="date" /></label>
+        <label>Next follow-up<input name="next_followup" type="date" /></label>
+      </div>
+
+      <div data-field="recurring-block" class="recurring-block">
         <label class="checkbox-label">
           <input type="checkbox" name="recurring" id="recurring-check" />
           <span>Recurring monthly — auto-applies to every month from this one</span>
@@ -98,6 +106,7 @@
 
       <div class="actions">
         <button type="button" id="delete-btn" class="danger">Delete</button>
+        <button type="button" id="convert-btn" class="secondary" style="display:none">Convert to Project →</button>
         <button type="button" id="cancel-btn">Cancel</button>
         <button type="submit">Save</button>
       </div>
