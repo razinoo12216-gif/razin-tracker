@@ -6,16 +6,16 @@
   <meta name="theme-color" content="#0a0a0a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Book" />
+  <meta name="apple-mobile-web-app-title" content="12 World" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" type="image/svg+xml" href="icon.svg" />
-  <title>Razin — Book</title>
+  <title>Razin — 12 World</title>
   <link rel="stylesheet" href="src/styles.css" />
 </head>
 <body>
   <header>
     <div class="header-top">
-      <h1>Book</h1>
+      <h1>12 World</h1>
       <select id="month-select" aria-label="Month"></select>
       <button id="add-btn" type="button">+ New</button>
     </div>
@@ -28,6 +28,7 @@
     <div class="tabs">
       <button class="tab active" data-tab="project" type="button">Projects <span class="tab-count" id="tc-project">0</span></button>
       <button class="tab" data-tab="expense" type="button">Expenses <span class="tab-count" id="tc-expense">0</span></button>
+      <button class="tab" data-tab="invoice" type="button">Invoices <span class="tab-count" id="tc-invoice">0</span></button>
       <button class="tab" data-tab="review" type="button">Reviews <span class="tab-count" id="tc-review">0</span></button>
     </div>
   </header>
@@ -154,6 +155,37 @@
       <div class="actions">
         <button type="button" id="review-delete-btn" class="danger">Delete</button>
         <button type="button" id="review-cancel-btn">Cancel</button>
+        <button type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Monthly Invoice editor -->
+  <dialog id="invoice-editor">
+    <form id="invoice-form">
+      <h2 id="invoice-title">Monthly Invoice</h2>
+
+      <div class="row">
+        <label>Month<input name="month" type="month" required /></label>
+        <label>Title<input name="title" placeholder="April Invoice Clean" autocomplete="off" /></label>
+      </div>
+
+      <div id="invoice-sections"></div>
+
+      <button type="button" id="add-section-btn" class="ghost">+ Add section</button>
+
+      <div class="invoice-grand-total">
+        <label>Grand Total</label>
+        <span id="invoice-grand-total-value">£0</span>
+      </div>
+
+      <label>Final message<textarea name="final_message" rows="2" placeholder="Can I pay 820 towards my bill please?"></textarea></label>
+      <label>Private notes (not copied)<textarea name="notes" rows="2"></textarea></label>
+
+      <div class="actions">
+        <button type="button" id="invoice-delete-btn" class="danger">Delete</button>
+        <button type="button" id="invoice-copy-btn" class="secondary">Copy for WhatsApp</button>
+        <button type="button" id="invoice-cancel-btn">Cancel</button>
         <button type="submit">Save</button>
       </div>
     </form>
