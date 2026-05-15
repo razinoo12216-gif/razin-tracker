@@ -87,7 +87,20 @@ button {
 button:hover { opacity: 0.88; }
 button:active { transform: scale(0.98); }
 button.danger { background: var(--danger); color: white; margin-right: auto; }
-button#cancel-btn, button#review-cancel-btn { background: var(--border); color: var(--text); }
+button#cancel-btn,
+button#review-cancel-btn,
+button#invoice-cancel-btn { background: var(--border); color: var(--text); }
+button.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border-2); }
+button.secondary.copied { background: var(--green); color: #000; border-color: var(--green); }
+button.ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px dashed var(--border-2);
+  align-self: flex-start;
+  width: 100%;
+  padding: 10px;
+}
+button.ghost:hover { color: var(--text); border-color: var(--text); opacity: 1; }
 
 .totals {
   display: grid;
@@ -311,6 +324,42 @@ main {
   font-weight: 600;
 }
 
+/* Invoice card */
+.card.invoice .card-head h3 { font-size: 15px; }
+.invoice-head-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.invoice-total {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.copy-btn {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border-2);
+  padding: 5px 11px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.copy-btn.copied { background: var(--green); color: #000; border-color: var(--green); }
+.invoice-sections-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.invoice-line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--muted);
+}
+.invoice-line span:last-child { color: var(--text); font-weight: 600; }
+
 .empty {
   text-align: center;
   padding: 50px 24px;
@@ -339,7 +388,8 @@ dialog {
   color: var(--text);
   box-shadow: 0 20px 60px rgba(0,0,0,0.5);
 }
-dialog#review-editor { max-width: 600px; }
+dialog#review-editor,
+dialog#invoice-editor { max-width: 600px; }
 dialog::backdrop { background: rgba(0,0,0,0.65); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 dialog h2 { margin: 0 0 18px; font-size: 17px; font-weight: 700; }
 dialog form { display: flex; flex-direction: column; gap: 12px; }
@@ -380,6 +430,7 @@ dialog .actions {
   margin-bottom: -24px;
   padding: 16px 0;
   background: linear-gradient(to bottom, transparent, var(--panel) 30%);
+  flex-wrap: wrap;
 }
 
 /* Recurring controls */
@@ -454,6 +505,77 @@ dialog .actions {
   margin-top: 4px;
 }
 
+/* Invoice form */
+#invoice-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.invoice-section-row {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.invoice-section-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.invoice-section-head .section-title {
+  flex: 1;
+  font-weight: 700;
+  font-size: 14px;
+}
+.invoice-section-head .section-total {
+  width: 110px;
+  text-align: right;
+  font-weight: 700;
+  font-size: 14px;
+}
+.remove-section {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 6px;
+  font-size: 18px;
+  line-height: 1;
+}
+.remove-section:hover { color: var(--danger); border-color: var(--danger); opacity: 1; }
+.invoice-section-row textarea {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}
+.invoice-grand-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+}
+.invoice-grand-total label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  font-weight: 700;
+}
+.invoice-grand-total span {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
 @media (max-width: 640px) {
   header { padding: 12px 16px 0; }
   .header-top { gap: 8px; margin-bottom: 12px; }
@@ -462,6 +584,7 @@ dialog .actions {
   .totals { grid-template-columns: repeat(2, 1fr); }
   .totals-item span { font-size: 15px; }
   .tabs { margin-top: 14px; }
+  .tab { padding: 10px 10px 12px; font-size: 12px; }
   main { padding: 16px; }
   .card-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .card-grid > div { font-size: 12px; }
@@ -473,4 +596,5 @@ dialog .actions {
   .scores label { font-size: 9px; }
   .scores input { font-size: 14px; padding: 6px 2px; }
   .review-scores span { font-size: 10px; padding: 2px 6px; }
+  .invoice-section-head .section-total { width: 90px; }
 }

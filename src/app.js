@@ -1,4 +1,4 @@
-// Razin Book — projects, expenses, recurring entries, weekly reviews.
+// 12 World — projects, expenses, recurring entries, weekly reviews, monthly invoices.
 
 const $ = (s) => document.querySelector(s);
 const list = $('#list');
@@ -6,20 +6,31 @@ const editor = $('#editor');
 const form = $('#editor-form');
 const reviewEditor = $('#review-editor');
 const reviewForm = $('#review-form');
+const invoiceEditor = $('#invoice-editor');
+const invoiceForm = $('#invoice-form');
 const monthSelect = $('#month-select');
 const secondaryFilter = $('#secondary-filter');
 const filterBar = $('#filter-bar');
 
 let entries = [];
 let reviews = [];
+let invoices = [];
 let editingId = null;
 let editingReviewId = null;
+let editingInvoiceId = null;
+let currentInvoiceSections = [];
 let selectedMonth = currentMonth();
 let activeTab = 'project';
 
 const EXPENSE_CATEGORIES = ['Operations','Marketing','Subscriptions','Transport','Food','Stock','Wages','Rent / Bills','Tax','Personal','Other'];
 const PROJECT_STATUSES = ['Active','Paused','Completed'];
 const SCORE_FIELDS = ['score_prayer','score_gym','score_nopmo','score_focus','score_sleep'];
+const DEFAULT_INVOICE_SECTIONS = [
+  { title: 'Admin', body: '', total: '' },
+  { title: 'Travel', body: '', total: '' },
+  { title: 'Expenses', body: '', total: '' },
+  { title: 'Directorship', body: '', total: '' },
+];
 
 function currentMonth() {
   const d = new Date();
@@ -82,9 +93,10 @@ async function loadAll() {
     list.innerHTML = '<div class="empty error">Supabase keys not set.</div>';
     return;
   }
-  const [eRes, rRes] = await Promise.all([
+  const [eRes, rRes, iRes] = await Promise.all([
     window.db.from('projects').select('*').order('created_at', { ascending: false }),
     window.db.from('reviews').select('*').order('week_of', { ascending: false }),
+    window.db.from('invoices').select('*').order('month', { ascending: false }),
   ]);
   if (eRes.error) {
     list.innerHTML = `<div class="empty error">Load failed: ${esc(eRes.error.message)}</div>`;
@@ -96,8 +108,8 @@ async function loadAll() {
     type: p.type || 'project',
     recurring: !!p.recurring,
   }));
-  // Reviews table may not exist yet on first run; tolerate the error
   reviews = (rRes && !rRes.error) ? (rRes.data || []) : [];
+  invoices = (iRes && !iRes.error) ? (iRes.data || []) : [];
   rebuildMonthSelect();
   rebuildSecondaryFilter();
   render();
@@ -114,7 +126,7 @@ function rebuildMonthSelect() {
 }
 
 function rebuildSecondaryFilter() {
-  if (activeTab === 'review') {
+  if (activeTab === 'review' || activeTab === 'invoice') {
     filterBar.style.display = 'none';
     return;
   }
@@ -129,7 +141,6 @@ function rebuildSecondaryFilter() {
 }
 
 function render() {
-  // Compute month-scoped entries (for tab counts and totals)
   const inMonth = entries.filter((e) => matchesMonth(e, selectedMonth));
   const projectsInMonth = inMonth.filter((e) => e.type === 'project');
   const expensesInMonth = inMonth.filter((e) => e.type === 'expense');
@@ -151,11 +162,10 @@ function render() {
   $('#tc-project').textContent = String(projectsInMonth.length);
   $('#tc-expense').textContent = String(expensesInMonth.length);
   $('#tc-review').textContent = String(reviews.length);
+  $('#tc-invoice').textContent = String(invoices.length);
 
-  if (activeTab === 'review') {
-    renderReviews();
-    return;
-  }
+  if (activeTab === 'review') return renderReviews();
+  if (activeTab === 'invoice') return renderInvoices();
 
   const q = $('#search').value.trim().toLowerCase();
   const sf = secondaryFilter.value;
@@ -267,6 +277,53 @@ function renderReview(r) {
         <span>NoPMO ${scores[2]}</span>
         <span>Focus ${scores[3]}</span>
         <span>Sleep ${scores[4]}</span>
+      </div>
+    </div>`;
+}
+
+function renderInvoices() {
+  if (invoices.length === 0) {
+    list.innerHTML = '<div class="empty">No invoices yet. Hit <strong>+ New</strong> to draft this month.</div>';
+    return;
+  }
+  list.innerHTML = invoices.map(renderInvoice).join('');
+  list.querySelectorAll('.card.invoice').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.copy-btn')) return;
+      openInvoiceEditor(el.dataset.id);
+    });
+  });
+  list.querySelectorAll('.card.invoice .copy-btn').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const inv = invoices.find((x) => x.id === btn.dataset.id);
+      if (!inv) return;
+      await copyInvoiceText(formatInvoiceForCopy(inv), btn);
+    });
+  });
+}
+
+function renderInvoice(inv) {
+  const sections = inv.sections || [];
+  const grand = sections.reduce((sum, s) => sum + parseNum(s.total), 0);
+  const monthLbl = monthLabel(inv.month);
+  const title = inv.title || monthLbl;
+  return `
+    <div class="card invoice" data-id="${esc(inv.id)}">
+      <div class="card-head">
+        <h3>${esc(title)}</h3>
+        <div class="invoice-head-right">
+          <span class="invoice-total">${fmt(grand)}</span>
+          <button type="button" class="copy-btn" data-id="${esc(inv.id)}">Copy</button>
+        </div>
+      </div>
+      <div class="invoice-sections-preview">
+        ${sections.filter((s) => s.title || s.total).map((s) => `
+          <div class="invoice-line">
+            <span>${esc(s.title || '—')}</span>
+            <span>${fmt(parseNum(s.total))}</span>
+          </div>
+        `).join('')}
       </div>
     </div>`;
 }
@@ -416,7 +473,6 @@ reviewForm.addEventListener('submit', async (e) => {
 
   const fd = new FormData(reviewForm);
   const payload = Object.fromEntries(fd.entries());
-  // Coerce score fields to integers
   for (const k of SCORE_FIELDS) {
     const v = parseInt(payload[k], 10);
     payload[k] = isNaN(v) ? 0 : Math.max(0, Math.min(10, v));
@@ -448,10 +504,207 @@ $('#review-delete-btn').addEventListener('click', async () => {
   loadAll();
 });
 
+// ─── Invoice editor ─────────────────────────────────────────
+
+function renderInvoiceSections() {
+  const container = $('#invoice-sections');
+  container.innerHTML = currentInvoiceSections.map((s, idx) => `
+    <div class="invoice-section-row" data-idx="${idx}">
+      <div class="invoice-section-head">
+        <input class="section-title" placeholder="Section name" value="${esc(s.title || '')}" autocomplete="off" />
+        <input class="section-total" type="number" step="0.01" placeholder="0" inputmode="decimal" value="${esc(s.total ?? '')}" />
+        <button type="button" class="remove-section" aria-label="Remove section">×</button>
+      </div>
+      <textarea class="section-body" rows="4" placeholder="One line per item — type freely">${esc(s.body || '')}</textarea>
+    </div>
+  `).join('');
+
+  container.querySelectorAll('.invoice-section-row').forEach((row) => {
+    const idx = parseInt(row.dataset.idx, 10);
+    row.querySelector('.section-title').addEventListener('input', (e) => {
+      currentInvoiceSections[idx].title = e.target.value;
+    });
+    row.querySelector('.section-total').addEventListener('input', (e) => {
+      currentInvoiceSections[idx].total = e.target.value;
+      recomputeInvoiceGrandTotal();
+    });
+    row.querySelector('.section-body').addEventListener('input', (e) => {
+      currentInvoiceSections[idx].body = e.target.value;
+    });
+    row.querySelector('.remove-section').addEventListener('click', () => {
+      if (!confirm('Remove this section?')) return;
+      currentInvoiceSections.splice(idx, 1);
+      renderInvoiceSections();
+      recomputeInvoiceGrandTotal();
+    });
+  });
+}
+
+function recomputeInvoiceGrandTotal() {
+  const total = currentInvoiceSections.reduce((sum, s) => sum + parseNum(s.total), 0);
+  $('#invoice-grand-total-value').textContent = fmt(total);
+}
+
+function defaultInvoiceTitle(ym) {
+  const month = monthLabel(ym).split(' ')[0];
+  return `${month} Invoice Clean`;
+}
+
+function openInvoiceEditor(id) {
+  editingInvoiceId = id || null;
+  const existing = id ? invoices.find((x) => x.id === id) : null;
+
+  invoiceForm.reset();
+  $('#invoice-title').textContent = existing ? 'Edit Invoice' : 'New Invoice';
+  $('#invoice-delete-btn').style.display = existing ? '' : 'none';
+
+  if (existing) {
+    invoiceForm.month.value = existing.month || selectedMonth;
+    invoiceForm.title.value = existing.title || '';
+    invoiceForm.final_message.value = existing.final_message || '';
+    invoiceForm.notes.value = existing.notes || '';
+    currentInvoiceSections = Array.isArray(existing.sections) && existing.sections.length
+      ? JSON.parse(JSON.stringify(existing.sections))
+      : JSON.parse(JSON.stringify(DEFAULT_INVOICE_SECTIONS));
+  } else {
+    invoiceForm.month.value = selectedMonth || currentMonth();
+    invoiceForm.title.value = defaultInvoiceTitle(invoiceForm.month.value);
+    invoiceForm.final_message.value = '';
+    invoiceForm.notes.value = '';
+    currentInvoiceSections = JSON.parse(JSON.stringify(DEFAULT_INVOICE_SECTIONS));
+  }
+
+  renderInvoiceSections();
+  recomputeInvoiceGrandTotal();
+  invoiceEditor.showModal();
+  setTimeout(() => invoiceForm.title?.focus(), 50);
+}
+
+invoiceForm.month.addEventListener('change', (e) => {
+  // Update title to match month if user hasn't customised it
+  const t = invoiceForm.title.value.trim();
+  if (!t || /Invoice Clean$/.test(t)) {
+    invoiceForm.title.value = defaultInvoiceTitle(e.target.value);
+  }
+});
+
+$('#add-section-btn').addEventListener('click', () => {
+  currentInvoiceSections.push({ title: '', body: '', total: '' });
+  renderInvoiceSections();
+  recomputeInvoiceGrandTotal();
+});
+
+invoiceForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!window.SUPABASE_CONFIGURED) return;
+
+  const payload = {
+    month: invoiceForm.month.value || currentMonth(),
+    title: invoiceForm.title.value.trim(),
+    sections: currentInvoiceSections,
+    final_message: invoiceForm.final_message.value,
+    notes: invoiceForm.notes.value,
+  };
+
+  const op = editingInvoiceId
+    ? window.db.from('invoices').update(payload).eq('id', editingInvoiceId)
+    : (() => {
+        payload.id = (crypto.randomUUID && crypto.randomUUID()) ||
+          Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        return window.db.from('invoices').insert(payload);
+      })();
+
+  const { error } = await op;
+  if (error) return alert('Save failed: ' + error.message);
+
+  invoiceEditor.close();
+  loadAll();
+});
+
+$('#invoice-cancel-btn').addEventListener('click', () => invoiceEditor.close());
+
+$('#invoice-delete-btn').addEventListener('click', async () => {
+  if (!editingInvoiceId) return;
+  if (!confirm('Delete this invoice? This cannot be undone.')) return;
+  const { error } = await window.db.from('invoices').delete().eq('id', editingInvoiceId);
+  if (error) return alert('Delete failed: ' + error.message);
+  invoiceEditor.close();
+  loadAll();
+});
+
+$('#invoice-copy-btn').addEventListener('click', async (e) => {
+  const inv = {
+    title: invoiceForm.title.value.trim(),
+    month: invoiceForm.month.value,
+    sections: currentInvoiceSections,
+    final_message: invoiceForm.final_message.value,
+  };
+  await copyInvoiceText(formatInvoiceForCopy(inv), e.currentTarget);
+});
+
+function formatInvoiceForCopy(inv) {
+  const lines = [];
+  const title = (inv.title || '').trim();
+  if (title) {
+    lines.push(title.replace(/:\s*$/, '') + ': ');
+    lines.push('');
+  }
+
+  const sections = inv.sections || [];
+  for (const s of sections) {
+    const sTitle = (s.title || '').trim();
+    if (!sTitle) continue;
+    const total = parseNum(s.total);
+    const totalStr = Number.isInteger(total) ? String(total) : total.toFixed(2);
+    lines.push(`${sTitle}: ${totalStr}`);
+    const body = (s.body || '').trim();
+    if (body) {
+      lines.push(body);
+    }
+    lines.push('');
+  }
+
+  const grand = sections.reduce((sum, s) => sum + parseNum(s.total), 0);
+  const grandStr = Number.isInteger(grand) ? String(grand) : grand.toFixed(2);
+  lines.push(`Total: ${grandStr}`);
+
+  const finalMsg = (inv.final_message || '').trim();
+  if (finalMsg) lines.push(finalMsg);
+
+  return lines.join('\n');
+}
+
+async function copyInvoiceText(text, btn) {
+  try {
+    await navigator.clipboard.writeText(text);
+    const original = btn.textContent;
+    btn.textContent = 'Copied ✓';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = original;
+      btn.classList.remove('copied');
+    }, 1500);
+  } catch (e) {
+    // Fallback: legacy approach via hidden textarea
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (_) {}
+    document.body.removeChild(ta);
+    const original = btn.textContent;
+    btn.textContent = 'Copied ✓';
+    setTimeout(() => { btn.textContent = original; }, 1500);
+  }
+}
+
 // ─── Wiring ─────────────────────────────────────────────────
 
 $('#add-btn').addEventListener('click', () => {
   if (activeTab === 'review') openReviewEditor(null);
+  else if (activeTab === 'invoice') openInvoiceEditor(null);
   else openEditor(null, activeTab);
 });
 
@@ -472,7 +725,7 @@ document.querySelectorAll('.tab').forEach((btn) => {
   });
 });
 
-[editor, reviewEditor].forEach((dlg) => {
+[editor, reviewEditor, invoiceEditor].forEach((dlg) => {
   dlg.addEventListener('click', (e) => {
     const rect = dlg.getBoundingClientRect();
     const inside = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
