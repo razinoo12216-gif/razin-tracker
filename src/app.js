@@ -1,4 +1,4 @@
-// 12 World — projects, expenses, recurring entries, weekly reviews, monthly invoices.
+// 12 World — projects, potentials, expenses, invoices, reviews.
 
 const $ = (s) => document.querySelector(s);
 const list = $('#list');
@@ -24,6 +24,7 @@ let activeTab = 'project';
 
 const EXPENSE_CATEGORIES = ['Operations','Marketing','Subscriptions','Transport','Food','Stock','Wages','Rent / Bills','Tax','Personal','Other'];
 const PROJECT_STATUSES = ['Active','Paused','Completed'];
+const POTENTIAL_STATUSES = ['Lead','Pitching','Negotiating','Won','Lost'];
 const SCORE_FIELDS = ['score_prayer','score_gym','score_nopmo','score_focus','score_sleep'];
 const DEFAULT_INVOICE_SECTIONS = [
   { title: 'Admin', body: '', total: '' },
@@ -41,6 +42,10 @@ function lastSundayISO() {
   const d = new Date();
   d.setDate(d.getDate() - d.getDay());
   return d.toISOString().slice(0, 10);
+}
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function monthLabel(ym) {
@@ -61,6 +66,17 @@ function weekLabel(iso) {
   if (!iso) return '—';
   const d = new Date(iso + 'T00:00:00');
   return 'Week of ' + d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function shortDate(iso) {
+  if (!iso) return '';
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+function daysBetween(isoA, isoB) {
+  const a = new Date(isoA + 'T00:00:00');
+  const b = new Date(isoB + 'T00:00:00');
+  return Math.floor((b - a) / (1000 * 60 * 60 * 24));
 }
 
 function parseNum(s) {
@@ -86,6 +102,19 @@ function matchesMonth(entry, month) {
     return true;
   }
   return entry.month === month;
+}
+
+function isStalePotential(p) {
+  if (!p || p.status === 'Won' || p.status === 'Lost') return false;
+  const today = todayISO();
+  if (p.next_followup && p.next_followup < today) return true;
+  if (p.last_contact) {
+    if (daysBetween(p.last_contact, today) > 14) return true;
+  } else if (p.created_at) {
+    const createdISO = p.created_at.slice(0, 10);
+    if (daysBetween(createdISO, today) > 7) return true;
+  }
+  return false;
 }
 
 async function loadAll() {
@@ -116,7 +145,7 @@ async function loadAll() {
 }
 
 function rebuildMonthSelect() {
-  const months = new Set(entries.map((e) => e.month).filter(Boolean));
+  const months = new Set(entries.filter(e => e.type !== 'potential').map((e) => e.month).filter(Boolean));
   months.add(currentMonth());
   const sorted = [...months].sort().reverse();
   if (!sorted.includes(selectedMonth)) selectedMonth = sorted[0] || currentMonth();
@@ -134,6 +163,9 @@ function rebuildSecondaryFilter() {
   if (activeTab === 'project') {
     secondaryFilter.innerHTML = '<option value="">All status</option>' +
       PROJECT_STATUSES.map((s) => `<option value="${s}">${s}</option>`).join('');
+  } else if (activeTab === 'potential') {
+    secondaryFilter.innerHTML = '<option value="">All stages</option>' +
+      POTENTIAL_STATUSES.map((s) => `<option value="${s}">${s}</option>`).join('');
   } else {
     secondaryFilter.innerHTML = '<option value="">All categories</option>' +
       EXPENSE_CATEGORIES.map((c) => `<option value="${c}">${c}</option>`).join('');
@@ -141,9 +173,12 @@ function rebuildSecondaryFilter() {
 }
 
 function render() {
-  const inMonth = entries.filter((e) => matchesMonth(e, selectedMonth));
+  // Month-scoped entries (projects/expenses use month, potentials/reviews/invoices ignore)
+  const moneyEntries = entries.filter((e) => e.type !== 'potential');
+  const inMonth = moneyEntries.filter((e) => matchesMonth(e, selectedMonth));
   const projectsInMonth = inMonth.filter((e) => e.type === 'project');
   const expensesInMonth = inMonth.filter((e) => e.type === 'expense');
+  const potentials = entries.filter((e) => e.type === 'potential');
 
   let totalRev = 0, totalExp = 0;
   for (const e of inMonth) {
@@ -161,11 +196,13 @@ function render() {
 
   $('#tc-project').textContent = String(projectsInMonth.length);
   $('#tc-expense').textContent = String(expensesInMonth.length);
+  $('#tc-potential').textContent = String(potentials.filter(p => p.status !== 'Won' && p.status !== 'Lost').length);
   $('#tc-review').textContent = String(reviews.length);
   $('#tc-invoice').textContent = String(invoices.length);
 
   if (activeTab === 'review') return renderReviews();
   if (activeTab === 'invoice') return renderInvoices();
+  if (activeTab === 'potential') return renderPotentials(potentials);
 
   const q = $('#search').value.trim().toLowerCase();
   const sf = secondaryFilter.value;
@@ -244,6 +281,63 @@ function renderExpense(e) {
       </div>
       <div class="expense-amount neg">${fmt(amt)}</div>
       ${e.notes ? `<div class="block"><label>Notes</label><p>${esc(e.notes)}</p></div>` : ''}
+    </div>`;
+}
+
+function renderPotentials(potentials) {
+  const q = $('#search').value.trim().toLowerCase();
+  const sf = secondaryFilter.value;
+  const filtered = potentials.filter((p) => {
+    if (sf && p.status !== sf) return false;
+    if (!q) return true;
+    return (
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.notes || '').toLowerCase().includes(q) ||
+      (p.people || '').toLowerCase().includes(q)
+    );
+  });
+
+  // Stable sort: stale first, then by status priority, then by next_followup soonest
+  const statusOrder = { Lead: 1, Pitching: 2, Negotiating: 3, Won: 4, Lost: 5 };
+  filtered.sort((a, b) => {
+    const sA = isStalePotential(a) ? 0 : statusOrder[a.status] || 6;
+    const sB = isStalePotential(b) ? 0 : statusOrder[b.status] || 6;
+    if (sA !== sB) return sA - sB;
+    const nA = a.next_followup || '9999-12-31';
+    const nB = b.next_followup || '9999-12-31';
+    return nA.localeCompare(nB);
+  });
+
+  if (filtered.length === 0) {
+    list.innerHTML = potentials.length === 0
+      ? '<div class="empty">No potentials yet. Hit <strong>+ New</strong> to log a lead you want to follow up on.</div>'
+      : '<div class="empty">No matches.</div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(renderPotential).join('');
+  list.querySelectorAll('.card.potential').forEach((el) => {
+    el.addEventListener('click', () => openEditor(el.dataset.id));
+  });
+}
+
+function renderPotential(p) {
+  const value = parseNum(p.revenue);
+  const stale = isStalePotential(p);
+  const statusClass = (p.status || 'Lead').toLowerCase();
+  return `
+    <div class="card potential ${stale ? 'stale' : ''}" data-id="${esc(p.id)}">
+      <div class="card-head">
+        <h3>${esc(p.name)} ${stale ? '<span class="stale-tag">⚠ Stale</span>' : ''}</h3>
+        <span class="status potential-status ${statusClass}">${esc(p.status || 'Lead')}</span>
+      </div>
+      <div class="card-grid">
+        <div><label>Est. value</label><span>${value ? fmt(value) : '—'}</span></div>
+        <div><label>Last contact</label><span>${p.last_contact ? esc(shortDate(p.last_contact)) : '—'}</span></div>
+        <div><label>Next follow-up</label><span class="${stale && p.next_followup ? 'neg' : ''}">${p.next_followup ? esc(shortDate(p.next_followup)) : '—'}</span></div>
+      </div>
+      ${p.people ? `<div class="block"><label>Source / contacts</label><p>${esc(p.people)}</p></div>` : ''}
+      ${p.notes ? `<div class="block"><label>Notes</label><p>${esc(p.notes)}</p></div>` : ''}
     </div>`;
 }
 
@@ -331,21 +425,55 @@ function renderInvoice(inv) {
 // ─── Entry editor ───────────────────────────────────────────
 
 function applyTypeMode(type) {
+  const isProject = type === 'project';
   const isExpense = type === 'expense';
+  const isPotential = type === 'potential';
+
   const config = {
-    'status': !isExpense,
+    'status': isProject || isPotential,
     'category': isExpense,
-    'project-money': !isExpense,
+    'project-money': isProject,
     'expense-amount': isExpense,
+    'potential-value': isPotential,
+    'potential-dates': isPotential,
+    'recurring-block': !isPotential,
     'people': !isExpense,
-    'tasks': !isExpense,
+    'tasks': isProject,
   };
+
   for (const [field, show] of Object.entries(config)) {
     document.querySelectorAll(`#editor-form [data-field="${field}"]`).forEach((el) => {
       el.style.display = show ? '' : 'none';
       el.querySelectorAll('input, select, textarea').forEach((input) => { input.disabled = !show; });
     });
   }
+
+  // Swap status options
+  const statusSel = form.querySelector('select[name="status"]');
+  if (statusSel) {
+    const current = statusSel.value;
+    if (isPotential) {
+      statusSel.innerHTML = POTENTIAL_STATUSES.map((s) => `<option>${esc(s)}</option>`).join('');
+    } else if (isProject) {
+      statusSel.innerHTML = PROJECT_STATUSES.map((s) => `<option>${esc(s)}</option>`).join('');
+    }
+    if (current && [...statusSel.options].some((o) => o.value === current)) statusSel.value = current;
+  }
+
+  // Rename "People" → "Source / contacts" for potentials
+  const peopleLabel = document.querySelector('#editor-form [data-field="people"]');
+  if (peopleLabel && peopleLabel.firstChild && peopleLabel.firstChild.nodeType === 3) {
+    peopleLabel.firstChild.textContent = isPotential ? 'Source / contacts' : 'People';
+  }
+
+  updateConvertVisibility();
+}
+
+function updateConvertVisibility() {
+  const type = form.type.value;
+  const status = form.status?.value;
+  const btn = $('#convert-btn');
+  if (btn) btn.style.display = (type === 'potential' && status === 'Won' && editingId) ? '' : 'none';
 }
 
 function applyRecurringMode(isRecurring) {
@@ -363,30 +491,34 @@ function openEditor(id, defaultType) {
   form.type.value = type;
   applyTypeMode(type);
 
-  const noun = type === 'expense' ? 'expense' : 'project';
+  const nouns = { project: 'project', expense: 'expense', potential: 'potential' };
+  const noun = nouns[type] || 'entry';
   $('#editor-title').textContent = (existing ? 'Edit ' : 'New ') + noun;
   $('#delete-btn').style.display = existing ? '' : 'none';
 
   const recurringCheck = $('#recurring-check');
   if (existing) {
-    for (const k of ['name', 'status', 'category', 'revenue', 'expenses', 'tasks', 'people', 'notes', 'month', 'end_month']) {
+    for (const k of ['name', 'status', 'category', 'revenue', 'expenses', 'tasks', 'people', 'notes', 'month', 'end_month', 'last_contact', 'next_followup']) {
       if (form[k]) form[k].value = existing[k] || '';
     }
     recurringCheck.checked = !!existing.recurring;
     if (!form.month.value) form.month.value = currentMonth();
   } else {
     if (type === 'project') form.status.value = 'Active';
+    if (type === 'potential') form.status.value = 'Lead';
     if (type === 'expense') form.category.value = 'Operations';
     form.month.value = selectedMonth || currentMonth();
     recurringCheck.checked = false;
   }
   applyRecurringMode(recurringCheck.checked);
+  updateConvertVisibility();
 
   editor.showModal();
   setTimeout(() => form.name?.focus(), 50);
 }
 
 $('#recurring-check').addEventListener('change', (e) => applyRecurringMode(e.target.checked));
+form.querySelector('select[name="status"]').addEventListener('change', updateConvertVisibility);
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -398,14 +530,26 @@ form.addEventListener('submit', async (e) => {
   if (!payload.month) payload.month = currentMonth();
   if (!payload.type) payload.type = 'project';
   if (!payload.end_month) payload.end_month = null;
+  if (!payload.last_contact) payload.last_contact = null;
+  if (!payload.next_followup) payload.next_followup = null;
 
   if (payload.type === 'expense') {
     payload.revenue = '';
     payload.status = '';
     payload.people = '';
     payload.tasks = '';
+    payload.last_contact = null;
+    payload.next_followup = null;
+  } else if (payload.type === 'potential') {
+    payload.expenses = '';
+    payload.category = '';
+    payload.tasks = '';
+    payload.recurring = false;
+    payload.end_month = null;
   } else {
     payload.category = '';
+    payload.last_contact = null;
+    payload.next_followup = null;
   }
 
   const op = editingId
@@ -419,8 +563,8 @@ form.addEventListener('submit', async (e) => {
   const { error } = await op;
   if (error) return alert('Save failed: ' + error.message);
 
-  if (!payload.recurring) selectedMonth = payload.month;
-  if (activeTab !== payload.type && (payload.type === 'project' || payload.type === 'expense')) {
+  if (payload.type !== 'potential' && !payload.recurring) selectedMonth = payload.month;
+  if (activeTab !== payload.type) {
     activeTab = payload.type;
     document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === activeTab));
     rebuildSecondaryFilter();
@@ -441,6 +585,24 @@ $('#delete-btn').addEventListener('click', async () => {
   const { error } = await window.db.from('projects').delete().eq('id', editingId);
   if (error) return alert('Delete failed: ' + error.message);
   editor.close();
+  loadAll();
+});
+
+$('#convert-btn').addEventListener('click', async () => {
+  if (!editingId) return;
+  if (!confirm('Convert this potential to an Active Project? It will move to the Projects tab and start fresh as a project entry.')) return;
+  const { error } = await window.db.from('projects').update({
+    type: 'project',
+    status: 'Active',
+    last_contact: null,
+    next_followup: null,
+    month: currentMonth(),
+  }).eq('id', editingId);
+  if (error) return alert('Convert failed: ' + error.message);
+  editor.close();
+  activeTab = 'project';
+  document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === 'project'));
+  rebuildSecondaryFilter();
   loadAll();
 });
 
@@ -581,7 +743,6 @@ function openInvoiceEditor(id) {
 }
 
 invoiceForm.month.addEventListener('change', (e) => {
-  // Update title to match month if user hasn't customised it
   const t = invoiceForm.title.value.trim();
   if (!t || /Invoice Clean$/.test(t)) {
     invoiceForm.title.value = defaultInvoiceTitle(e.target.value);
@@ -658,9 +819,7 @@ function formatInvoiceForCopy(inv) {
     const totalStr = Number.isInteger(total) ? String(total) : total.toFixed(2);
     lines.push(`${sTitle}: ${totalStr}`);
     const body = (s.body || '').trim();
-    if (body) {
-      lines.push(body);
-    }
+    if (body) lines.push(body);
     lines.push('');
   }
 
@@ -685,7 +844,6 @@ async function copyInvoiceText(text, btn) {
       btn.classList.remove('copied');
     }, 1500);
   } catch (e) {
-    // Fallback: legacy approach via hidden textarea
     const ta = document.createElement('textarea');
     ta.value = text;
     ta.style.position = 'fixed';
