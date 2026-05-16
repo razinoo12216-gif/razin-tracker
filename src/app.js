@@ -24,7 +24,7 @@ let activeTab = 'project';
 
 const EXPENSE_CATEGORIES = ['Operations','Marketing','Subscriptions','Transport','Food','Stock','Wages','Rent / Bills','Tax','Personal','Other'];
 const PROJECT_STATUSES = ['Active','Paused','Completed'];
-const POTENTIAL_STATUSES = ['Lead','Pitching','Negotiating','Won','Lost'];
+const POTENTIAL_STATUSES = ['Lead','Pitching','Negotiating','Waiting on Green','Won','Lost'];
 const SCORE_FIELDS = ['score_prayer','score_gym','score_nopmo','score_focus','score_sleep'];
 const DEFAULT_INVOICE_SECTIONS = [
   { title: 'Admin', body: '', total: '' },
@@ -172,14 +172,21 @@ function rebuildSecondaryFilter() {
   }
 }
 
-function render() {
-  // Month-scoped entries (projects/expenses use month, potentials/reviews/invoices ignore)
-  const moneyEntries = entries.filter((e) => e.type !== 'potential');
-  const inMonth = moneyEntries.filter((e) => matchesMonth(e, selectedMonth));
-  const projectsInMonth = inMonth.filter((e) => e.type === 'project');
-  const expensesInMonth = inMonth.filter((e) => e.type === 'expense');
-  const potentials = entries.filter((e) => e.type === 'potential');
+function setTotalsLabels(labels) {
+  const els = document.querySelectorAll('.totals-item label');
+  els.forEach((el, i) => { if (labels[i] !== undefined) el.textContent = labels[i]; });
+}
 
+function clearTotalSpanClasses() {
+  ['#t-rev', '#t-exp', '#t-net', '#t-count'].forEach((s) => {
+    const el = $(s);
+    if (el) el.className = '';
+  });
+}
+
+function renderMoneyTotals(inMonth) {
+  setTotalsLabels(['Revenue', 'Expenses', 'Net', 'Entries']);
+  clearTotalSpanClasses();
   let totalRev = 0, totalExp = 0;
   for (const e of inMonth) {
     totalRev += parseNum(e.revenue);
@@ -193,6 +200,46 @@ function render() {
   netEl.classList.toggle('neg', net < 0);
   netEl.classList.toggle('pos', net > 0);
   $('#t-count').textContent = String(inMonth.length);
+}
+
+function renderPotentialTotals(potentials) {
+  setTotalsLabels(['Pipeline', 'Active', 'Stale', 'Won']);
+  clearTotalSpanClasses();
+  const active = potentials.filter((p) => p.status !== 'Won' && p.status !== 'Lost');
+  const pipelineSum = active.reduce((sum, p) => sum + parseNum(p.revenue), 0);
+  const wonSum = potentials
+    .filter((p) => p.status === 'Won')
+    .reduce((sum, p) => sum + parseNum(p.revenue), 0);
+  const staleCount = potentials.filter(isStalePotential).length;
+
+  const rev = $('#t-rev');
+  rev.textContent = fmt(pipelineSum);
+  rev.classList.add('pipeline');
+
+  $('#t-exp').textContent = String(active.length);
+
+  const stale = $('#t-net');
+  stale.textContent = String(staleCount);
+  if (staleCount > 0) stale.classList.add('amber');
+
+  const won = $('#t-count');
+  won.textContent = fmt(wonSum);
+  if (wonSum > 0) won.classList.add('pos');
+}
+
+function render() {
+  // Month-scoped entries (projects/expenses use month, potentials/reviews/invoices ignore)
+  const moneyEntries = entries.filter((e) => e.type !== 'potential');
+  const inMonth = moneyEntries.filter((e) => matchesMonth(e, selectedMonth));
+  const projectsInMonth = inMonth.filter((e) => e.type === 'project');
+  const expensesInMonth = inMonth.filter((e) => e.type === 'expense');
+  const potentials = entries.filter((e) => e.type === 'potential');
+
+  if (activeTab === 'potential') {
+    renderPotentialTotals(potentials);
+  } else {
+    renderMoneyTotals(inMonth);
+  }
 
   $('#tc-project').textContent = String(projectsInMonth.length);
   $('#tc-expense').textContent = String(expensesInMonth.length);
@@ -298,10 +345,10 @@ function renderPotentials(potentials) {
   });
 
   // Stable sort: stale first, then by status priority, then by next_followup soonest
-  const statusOrder = { Lead: 1, Pitching: 2, Negotiating: 3, Won: 4, Lost: 5 };
+  const statusOrder = { Lead: 1, Pitching: 2, Negotiating: 3, 'Waiting on Green': 4, Won: 5, Lost: 6 };
   filtered.sort((a, b) => {
-    const sA = isStalePotential(a) ? 0 : statusOrder[a.status] || 6;
-    const sB = isStalePotential(b) ? 0 : statusOrder[b.status] || 6;
+    const sA = isStalePotential(a) ? 0 : statusOrder[a.status] || 7;
+    const sB = isStalePotential(b) ? 0 : statusOrder[b.status] || 7;
     if (sA !== sB) return sA - sB;
     const nA = a.next_followup || '9999-12-31';
     const nB = b.next_followup || '9999-12-31';
@@ -324,7 +371,7 @@ function renderPotentials(potentials) {
 function renderPotential(p) {
   const value = parseNum(p.revenue);
   const stale = isStalePotential(p);
-  const statusClass = (p.status || 'Lead').toLowerCase();
+  const statusClass = (p.status || 'Lead').toLowerCase().replace(/\s+/g, '-');
   return `
     <div class="card potential ${stale ? 'stale' : ''}" data-id="${esc(p.id)}">
       <div class="card-head">

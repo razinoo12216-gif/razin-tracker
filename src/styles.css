@@ -184,6 +184,21 @@ button.ghost:hover { color: var(--text); border-color: var(--text); opacity: 1; 
   color: var(--danger);
   text-shadow: 0 0 24px rgba(239,68,68,0.35);
 }
+.totals-item span.pos {
+  color: var(--green);
+  text-shadow: 0 0 24px rgba(34,197,94,0.3);
+}
+.totals-item span.amber {
+  color: var(--amber);
+  text-shadow: 0 0 24px rgba(245,158,11,0.35);
+}
+.totals-item span.pipeline {
+  background: linear-gradient(135deg, var(--green) 0%, var(--gold) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 12px rgba(251,191,36,0.25));
+}
 
 .tabs {
   display: flex;
@@ -328,6 +343,7 @@ main {
 .potential-status.lead { background: rgba(59,130,246,0.18); color: var(--blue); }
 .potential-status.pitching { background: rgba(245,158,11,0.18); color: var(--amber); }
 .potential-status.negotiating { background: rgba(245,158,11,0.3); color: var(--amber); }
+.potential-status.waiting-on-green { background: rgba(234,179,8,0.22); color: #facc15; }
 .potential-status.won { background: rgba(34,197,94,0.2); color: var(--green); }
 .potential-status.lost { background: rgba(107,114,128,0.2); color: var(--gray); }
 
