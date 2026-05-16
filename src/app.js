@@ -548,7 +548,7 @@ function renderToday() {
         </div>
       </div>
       <div class="today-list">
-        ${dayTasks.length === 0 ? '<div class="today-empty">Empty list. Add your first task below or copy yesterday\\'s.</div>' : ''}
+        ${dayTasks.length === 0 ? `<div class="today-empty">Empty list. Add your first task below, or tap "Copy yesterday".</div>` : ''}
         ${dayTasks.map(renderTask).join('')}
       </div>
       <div class="task-add-bar">
