@@ -15,12 +15,27 @@ const filterBar = $('#filter-bar');
 let entries = [];
 let reviews = [];
 let invoices = [];
+let tasks = [];
 let editingId = null;
 let editingReviewId = null;
 let editingInvoiceId = null;
+let editingTaskId = null;
 let currentInvoiceSections = [];
 let selectedMonth = currentMonth();
-let activeTab = 'project';
+let selectedDay = todayISO();
+let activeTab = 'today';
+
+const taskEditor = $('#task-editor');
+const taskForm = $('#task-form');
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+function shiftISO(iso, days) {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
 
 const EXPENSE_CATEGORIES = ['Operations','Marketing','Subscriptions','Transport','Food','Stock','Wages','Rent / Bills','Tax','Personal','Other'];
 const PROJECT_STATUSES = ['Active','Paused','Completed'];
@@ -193,10 +208,11 @@ async function loadAll() {
     list.innerHTML = '<div class="empty error">Supabase keys not set.</div>';
     return;
   }
-  const [eRes, rRes, iRes] = await Promise.all([
+  const [eRes, rRes, iRes, tRes] = await Promise.all([
     window.db.from('projects').select('*').order('created_at', { ascending: false }),
     window.db.from('reviews').select('*').order('week_of', { ascending: false }),
     window.db.from('invoices').select('*').order('month', { ascending: false }),
+    window.db.from('tasks').select('*').order('created_at', { ascending: true }),
   ]);
   if (eRes.error) {
     list.innerHTML = `<div class="empty error">Load failed: ${esc(eRes.error.message)}</div>`;
@@ -210,6 +226,7 @@ async function loadAll() {
   }));
   reviews = (rRes && !rRes.error) ? (rRes.data || []) : [];
   invoices = (iRes && !iRes.error) ? (iRes.data || []) : [];
+  tasks = (tRes && !tRes.error) ? (tRes.data || []) : [];
   rebuildMonthSelect();
   rebuildSecondaryFilter();
   render();
@@ -226,7 +243,7 @@ function rebuildMonthSelect() {
 }
 
 function rebuildSecondaryFilter() {
-  if (activeTab === 'review' || activeTab === 'invoice' || activeTab === 'drive') {
+  if (activeTab === 'review' || activeTab === 'invoice' || activeTab === 'drive' || activeTab === 'today') {
     filterBar.style.display = 'none';
     return;
   }
@@ -318,10 +335,16 @@ function render() {
   $('#tc-review').textContent = String(reviews.length);
   $('#tc-invoice').textContent = String(invoices.length);
 
-  // Hide/show totals based on tab
+  // Hide/show header bits based on tab
   const totalsEl = document.querySelector('.totals');
-  if (totalsEl) totalsEl.style.display = activeTab === 'drive' ? 'none' : '';
+  const monthSelEl = $('#month-select');
+  const addBtnEl = $('#add-btn');
+  const hideContext = activeTab === 'drive' || activeTab === 'today';
+  if (totalsEl) totalsEl.style.display = hideContext ? 'none' : '';
+  if (monthSelEl) monthSelEl.style.display = hideContext ? 'none' : '';
+  if (addBtnEl) addBtnEl.style.display = activeTab === 'today' ? 'none' : '';
 
+  if (activeTab === 'today') return renderToday();
   if (activeTab === 'drive') return renderDrive();
   if (activeTab === 'review') return renderReviews();
   if (activeTab === 'invoice') return renderInvoices();
@@ -487,6 +510,197 @@ function renderDrive() {
       <div class="drive-prompt">What does this look like in your day today?</div>
     </div>`;
 }
+
+function taskSort(a, b) {
+  if (a.done !== b.done) return a.done ? 1 : -1;
+  const at = a.time || '99:99';
+  const bt = b.time || '99:99';
+  if (at !== bt) return at.localeCompare(bt);
+  return (a.created_at || '').localeCompare(b.created_at || '');
+}
+
+function formatDayLabel(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  const t = todayISO();
+  let prefix = '';
+  if (iso === t) prefix = 'Today · ';
+  else if (iso === shiftISO(t, -1)) prefix = 'Yesterday · ';
+  else if (iso === shiftISO(t, 1)) prefix = 'Tomorrow · ';
+  return prefix + d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+function renderToday() {
+  const dayTasks = tasks.filter((t) => t.day === selectedDay).sort(taskSort);
+  const done = dayTasks.filter((t) => t.done).length;
+  const total = dayTasks.length;
+  const isToday = selectedDay === todayISO();
+  const dateLabel = formatDayLabel(selectedDay);
+
+  list.innerHTML = `
+    <div class="today-page">
+      <div class="today-header">
+        <h2 class="today-date">${esc(dateLabel)}</h2>
+        <div class="today-progress">${total > 0 ? `${done} of ${total} done` : 'No tasks yet'}</div>
+        <div class="today-nav">
+          <button type="button" class="day-nav" id="day-prev" aria-label="Previous day">←</button>
+          <button type="button" class="day-nav today-btn" id="day-today">${isToday ? 'Today' : 'Jump to today'}</button>
+          <button type="button" class="day-nav" id="day-next" aria-label="Next day">→</button>
+        </div>
+      </div>
+      <div class="today-list">
+        ${dayTasks.length === 0 ? '<div class="today-empty">Empty list. Add your first task below or copy yesterday\\'s.</div>' : ''}
+        ${dayTasks.map(renderTask).join('')}
+      </div>
+      <div class="task-add-bar">
+        <input id="task-quick-input" type="text" placeholder="Add task…" autocomplete="off" />
+        <input id="task-quick-time" type="time" />
+        <button id="task-quick-btn" type="button">Add</button>
+      </div>
+      <div class="today-actions">
+        <button type="button" class="ghost" id="copy-yesterday-btn">Copy yesterday's tasks</button>
+      </div>
+    </div>`;
+
+  $('#day-prev').addEventListener('click', () => { selectedDay = shiftISO(selectedDay, -1); render(); });
+  $('#day-next').addEventListener('click', () => { selectedDay = shiftISO(selectedDay, 1); render(); });
+  $('#day-today').addEventListener('click', () => { selectedDay = todayISO(); render(); });
+
+  list.querySelectorAll('.task-check').forEach((el) => {
+    el.addEventListener('click', (e) => { e.stopPropagation(); toggleTask(el.dataset.id); });
+  });
+  list.querySelectorAll('.task-row').forEach((el) => {
+    el.addEventListener('click', () => openTaskEditor(el.dataset.id));
+  });
+
+  $('#task-quick-btn').addEventListener('click', quickAddTask);
+  const quickInput = $('#task-quick-input');
+  quickInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); quickAddTask(); }
+  });
+  $('#copy-yesterday-btn').addEventListener('click', copyYesterdayTasks);
+}
+
+function renderTask(t) {
+  const timeHtml = t.time ? esc(t.time) : '';
+  return `
+    <div class="task-row ${t.done ? 'done' : ''}" data-id="${esc(t.id)}">
+      <button type="button" class="task-check" data-id="${esc(t.id)}" aria-label="Toggle done">${t.done ? '✓' : ''}</button>
+      <div class="task-time">${timeHtml}</div>
+      <div class="task-title">${esc(t.title)}</div>
+    </div>`;
+}
+
+async function toggleTask(id) {
+  const t = tasks.find((x) => x.id === id);
+  if (!t) return;
+  const newDone = !t.done;
+  t.done = newDone;
+  const row = list.querySelector(`.task-row[data-id="${CSS.escape(id)}"]`);
+  if (row) {
+    row.classList.toggle('done', newDone);
+    const check = row.querySelector('.task-check');
+    if (check) check.textContent = newDone ? '✓' : '';
+  }
+  const dayTasks = tasks.filter((x) => x.day === selectedDay);
+  const done = dayTasks.filter((x) => x.done).length;
+  const progressEl = list.querySelector('.today-progress');
+  if (progressEl) progressEl.textContent = dayTasks.length > 0 ? `${done} of ${dayTasks.length} done` : 'No tasks yet';
+
+  const { error } = await window.db.from('tasks').update({ done: newDone }).eq('id', id);
+  if (error) { t.done = !newDone; alert('Update failed: ' + error.message); render(); }
+}
+
+async function quickAddTask() {
+  const titleInput = $('#task-quick-input');
+  const timeInput = $('#task-quick-time');
+  const title = titleInput.value.trim();
+  if (!title) return;
+  const time = timeInput.value || '';
+  const id = (crypto.randomUUID && crypto.randomUUID()) || Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const newTask = { id, day: selectedDay, title, time, icon: '', notes: '', done: false };
+  tasks.push({ ...newTask, created_at: new Date().toISOString() });
+  titleInput.value = '';
+  timeInput.value = '';
+  render();
+  setTimeout(() => $('#task-quick-input')?.focus(), 30);
+
+  const { error } = await window.db.from('tasks').insert(newTask);
+  if (error) {
+    tasks = tasks.filter((t) => t.id !== id);
+    render();
+    alert('Add failed: ' + error.message);
+  }
+}
+
+async function copyYesterdayTasks() {
+  const yesterday = shiftISO(selectedDay, -1);
+  const yesterdayTasks = tasks.filter((t) => t.day === yesterday);
+  if (yesterdayTasks.length === 0) {
+    alert("Nothing to copy from " + formatDayLabel(yesterday).replace(/ ·.*/, '') + ".");
+    return;
+  }
+  const copies = yesterdayTasks.map((t) => ({
+    id: (crypto.randomUUID && crypto.randomUUID()) || Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    day: selectedDay,
+    title: t.title,
+    time: t.time || '',
+    icon: t.icon || '',
+    notes: t.notes || '',
+    done: false,
+  }));
+  const { data, error } = await window.db.from('tasks').insert(copies).select();
+  if (error) return alert('Copy failed: ' + error.message);
+  for (const t of (data || copies)) tasks.push({ ...t, created_at: t.created_at || new Date().toISOString() });
+  render();
+}
+
+function openTaskEditor(id) {
+  editingTaskId = id || null;
+  const t = id ? tasks.find((x) => x.id === id) : null;
+  taskForm.reset();
+  $('#task-editor-title').textContent = t ? 'Edit task' : 'New task';
+  $('#task-delete-btn').style.display = t ? '' : 'none';
+  if (t) {
+    taskForm.title.value = t.title || '';
+    taskForm.time.value = t.time || '';
+    taskForm.notes.value = t.notes || '';
+  }
+  taskEditor.showModal();
+  setTimeout(() => taskForm.title?.focus(), 50);
+}
+
+taskForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!editingTaskId) { taskEditor.close(); return; }
+  const fd = new FormData(taskForm);
+  const payload = Object.fromEntries(fd.entries());
+  if (!payload.title.trim()) return;
+  const t = tasks.find((x) => x.id === editingTaskId);
+  if (t) Object.assign(t, payload);
+  render();
+  const { error } = await window.db.from('tasks').update(payload).eq('id', editingTaskId);
+  if (error) alert('Save failed: ' + error.message);
+  taskEditor.close();
+});
+
+$('#task-cancel-btn').addEventListener('click', () => taskEditor.close());
+
+$('#task-delete-btn').addEventListener('click', async () => {
+  if (!editingTaskId) return;
+  if (!confirm('Delete this task?')) return;
+  const id = editingTaskId;
+  tasks = tasks.filter((t) => t.id !== id);
+  render();
+  const { error } = await window.db.from('tasks').delete().eq('id', id);
+  if (error) { alert('Delete failed: ' + error.message); loadAll(); }
+  taskEditor.close();
+});
+
+taskEditor.addEventListener('click', (e) => {
+  const rect = taskEditor.getBoundingClientRect();
+  const inside = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+  if (!inside) taskEditor.close();
+});
 
 function renderReviews() {
   if (reviews.length === 0) {
