@@ -26,7 +26,8 @@
       <div class="totals-item"><label>Entries</label><span id="t-count">0</span></div>
     </div>
     <div class="tabs">
-      <button class="tab active" data-tab="project" type="button">Projects <span class="tab-count" id="tc-project">0</span></button>
+      <button class="tab active" data-tab="today" type="button">Today</button>
+      <button class="tab" data-tab="project" type="button">Projects <span class="tab-count" id="tc-project">0</span></button>
       <button class="tab" data-tab="potential" type="button">Chop list <span class="tab-count" id="tc-potential">0</span></button>
       <button class="tab" data-tab="expense" type="button">Expenses <span class="tab-count" id="tc-expense">0</span></button>
       <button class="tab" data-tab="invoice" type="button">Invoices <span class="tab-count" id="tc-invoice">0</span></button>
@@ -198,6 +199,21 @@
         <button type="button" id="invoice-delete-btn" class="danger">Delete</button>
         <button type="button" id="invoice-copy-btn" class="secondary">Copy for WhatsApp</button>
         <button type="button" id="invoice-cancel-btn">Cancel</button>
+        <button type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Today task editor -->
+  <dialog id="task-editor">
+    <form id="task-form">
+      <h2 id="task-editor-title">Task</h2>
+      <label>Title<input name="title" required autocomplete="off" /></label>
+      <label>Time (optional)<input name="time" type="time" /></label>
+      <label>Notes<textarea name="notes" rows="2"></textarea></label>
+      <div class="actions">
+        <button type="button" id="task-delete-btn" class="danger">Delete</button>
+        <button type="button" id="task-cancel-btn">Cancel</button>
         <button type="submit">Save</button>
       </div>
     </form>
