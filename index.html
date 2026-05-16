@@ -31,6 +31,7 @@
       <button class="tab" data-tab="expense" type="button">Expenses <span class="tab-count" id="tc-expense">0</span></button>
       <button class="tab" data-tab="invoice" type="button">Invoices <span class="tab-count" id="tc-invoice">0</span></button>
       <button class="tab" data-tab="review" type="button">Reviews <span class="tab-count" id="tc-review">0</span></button>
+      <button class="tab" data-tab="drive" type="button">Drive</button>
     </div>
   </header>
 
@@ -85,7 +86,10 @@
 
       <label data-field="expense-amount" style="display:none">Amount<input name="expenses" autocomplete="off" placeholder="£" inputmode="decimal" /></label>
 
-      <label data-field="potential-value" style="display:none">Estimated value<input name="revenue" autocomplete="off" placeholder="£" inputmode="decimal" /></label>
+      <div data-field="potential-money" class="row" style="display:none">
+        <label>Estimated value<input name="revenue" autocomplete="off" placeholder="£" inputmode="decimal" /></label>
+        <label>Expenses<input name="expenses" autocomplete="off" placeholder="£" inputmode="decimal" /></label>
+      </div>
 
       <div data-field="potential-dates" class="row" style="display:none">
         <label>Last contact<input name="last_contact" type="date" /></label>
@@ -106,7 +110,6 @@
 
       <div class="actions">
         <button type="button" id="delete-btn" class="danger">Delete</button>
-        <button type="button" id="convert-btn" class="secondary" style="display:none">Convert to Project →</button>
         <button type="button" id="cancel-btn">Cancel</button>
         <button type="submit">Save</button>
       </div>
