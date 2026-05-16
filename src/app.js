@@ -107,9 +107,11 @@ function currentMonth() {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 }
 
-function lastSundayISO() {
+function lastFridayISO() {
+  // Returns the most recent Friday (today if today is Friday).
   const d = new Date();
-  d.setDate(d.getDate() - d.getDay());
+  const diff = (d.getDay() - 5 + 7) % 7;
+  d.setDate(d.getDate() - diff);
   return d.toISOString().slice(0, 10);
 }
 
@@ -134,7 +136,7 @@ function shortMonthLabel(ym) {
 function weekLabel(iso) {
   if (!iso) return '—';
   const d = new Date(iso + 'T00:00:00');
-  return 'Week of ' + d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  return 'Week ending ' + d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 function shortDate(iso) {
@@ -431,7 +433,7 @@ function renderPotentials(potentials) {
 
   if (filtered.length === 0) {
     list.innerHTML = potentials.length === 0
-      ? '<div class="empty">No potentials yet. Hit <strong>+ New</strong> to log a lead you want to follow up on.</div>'
+      ? '<div class="empty">Chop list is empty. Hit <strong>+ New</strong> to log a deal you want to chase.</div>'
       : '<div class="empty">No matches.</div>';
     return;
   }
@@ -488,7 +490,7 @@ function renderDrive() {
 
 function renderReviews() {
   if (reviews.length === 0) {
-    list.innerHTML = '<div class="empty">No reviews yet. Hit <strong>+ New</strong> to write your first Sunday review.</div>';
+    list.innerHTML = '<div class="empty">No recaps yet. Hit <strong>+ New</strong> to write your first weekly recap.</div>';
     return;
   }
   list.innerHTML = reviews.map(renderReview).join('');
@@ -635,7 +637,7 @@ function openEditor(id, defaultType) {
   form.type.value = type;
   applyTypeMode(type);
 
-  const nouns = { project: 'project', expense: 'expense', potential: 'potential' };
+  const nouns = { project: 'project', expense: 'expense', potential: 'chop' };
   const noun = nouns[type] || 'entry';
   $('#editor-title').textContent = (existing ? 'Edit ' : 'New ') + noun;
   $('#delete-btn').style.display = existing ? '' : 'none';
@@ -774,7 +776,7 @@ function openReviewEditor(id) {
   const existing = id ? reviews.find((r) => r.id === id) : null;
 
   reviewForm.reset();
-  $('#review-title').textContent = existing ? 'Edit Sunday Review' : 'New Sunday Review';
+  $('#review-title').textContent = existing ? 'Edit Weekly Recap' : 'New Weekly Recap';
   $('#review-delete-btn').style.display = existing ? '' : 'none';
 
   if (existing) {
@@ -782,7 +784,7 @@ function openReviewEditor(id) {
       if (reviewForm[k]) reviewForm[k].value = existing[k] ?? '';
     }
   } else {
-    reviewForm.week_of.value = lastSundayISO();
+    reviewForm.week_of.value = lastFridayISO();
     SCORE_FIELDS.forEach((f) => { if (reviewForm[f]) reviewForm[f].value = ''; });
   }
 
@@ -820,7 +822,7 @@ $('#review-cancel-btn').addEventListener('click', () => reviewEditor.close());
 
 $('#review-delete-btn').addEventListener('click', async () => {
   if (!editingReviewId) return;
-  if (!confirm('Delete this review? This cannot be undone.')) return;
+  if (!confirm('Delete this recap? This cannot be undone.')) return;
   const { error } = await window.db.from('reviews').delete().eq('id', editingReviewId);
   if (error) return alert('Delete failed: ' + error.message);
   reviewEditor.close();
