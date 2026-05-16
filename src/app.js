@@ -33,6 +33,75 @@ const DEFAULT_INVOICE_SECTIONS = [
   { title: 'Directorship', body: '', total: '' },
 ];
 
+const QUOTES = [
+  { q: "Discipline equals freedom.", a: "Jocko Willink" },
+  { q: "The pain you feel today will be the strength you feel tomorrow.", a: "Arnold Schwarzenegger" },
+  { q: "We are what we repeatedly do. Excellence, then, is not an act, but a habit.", a: "Aristotle" },
+  { q: "Discipline is choosing between what you want now and what you want most.", a: "Abraham Lincoln" },
+  { q: "Don't count the days. Make the days count.", a: "Muhammad Ali" },
+  { q: "It does not matter how slowly you go as long as you do not stop.", a: "Confucius" },
+  { q: "First we make our habits, then our habits make us.", a: "John Dryden" },
+  { q: "Every action you take is a vote for the type of person you wish to become.", a: "James Clear" },
+  { q: "The successful warrior is the average man, with laser-like focus.", a: "Bruce Lee" },
+  { q: "What you do every day matters more than what you do once in a while.", a: "Gretchen Rubin" },
+  { q: "Don't watch the clock; do what it does. Keep going.", a: "Sam Levenson" },
+  { q: "Verily, with hardship comes ease.", a: "Quran 94:6" },
+  { q: "Do not lose hope, nor be sad.", a: "Quran 3:139" },
+  { q: "Tie your camel first, then trust in Allah.", a: "Prophet Muhammad ﷺ" },
+  { q: "Whoever fears Allah, He will make a way out for them.", a: "Quran 65:2" },
+  { q: "Allah does not burden a soul beyond that it can bear.", a: "Quran 2:286" },
+  { q: "The strongest among you is the one who controls himself when angry.", a: "Prophet Muhammad ﷺ" },
+  { q: "Whoever is patient will be granted patience.", a: "Prophet Muhammad ﷺ" },
+  { q: "The best among you are those who have the best character.", a: "Prophet Muhammad ﷺ" },
+  { q: "Whoever does not show mercy to people, Allah will not show mercy to him.", a: "Prophet Muhammad ﷺ" },
+  { q: "Speak good or remain silent.", a: "Prophet Muhammad ﷺ" },
+  { q: "Take account of yourselves before you are taken to account.", a: "Umar ibn al-Khattab (RA)" },
+  { q: "Sell or be sold.", a: "Grant Cardone" },
+  { q: "Be so good they can't ignore you.", a: "Steve Martin" },
+  { q: "Stay hungry. Stay foolish.", a: "Steve Jobs" },
+  { q: "The way to get started is to quit talking and begin doing.", a: "Walt Disney" },
+  { q: "You will get all you want in life if you help enough other people get what they want.", a: "Zig Ziglar" },
+  { q: "Comparison is the thief of joy.", a: "Theodore Roosevelt" },
+  { q: "Don't be afraid to give up the good to go for the great.", a: "John D. Rockefeller" },
+  { q: "Quality is never an accident. It is the result of intelligent effort.", a: "John Ruskin" },
+  { q: "What gets measured gets managed.", a: "Peter Drucker" },
+  { q: "Diligence is the mother of good fortune.", a: "Benjamin Franklin" },
+  { q: "The reward for work well done is the opportunity to do more.", a: "Jonas Salk" },
+  { q: "An ounce of action is worth a ton of theory.", a: "Friedrich Engels" },
+  { q: "A goal without a plan is just a wish.", a: "Antoine de Saint-Exupéry" },
+  { q: "Whether you think you can or you think you can't, you're right.", a: "Henry Ford" },
+  { q: "Doubt kills more dreams than failure ever will.", a: "Suzy Kassem" },
+  { q: "He who has a why to live can bear almost any how.", a: "Friedrich Nietzsche" },
+  { q: "The cave you fear to enter holds the treasure you seek.", a: "Joseph Campbell" },
+  { q: "If it is to be, it is up to me.", a: "William H. Johnsen" },
+  { q: "We suffer more in imagination than in reality.", a: "Seneca" },
+  { q: "You have power over your mind — not outside events. Realize this, and you will find strength.", a: "Marcus Aurelius" },
+  { q: "What we do in life echoes in eternity.", a: "Marcus Aurelius" },
+  { q: "It always seems impossible until it's done.", a: "Nelson Mandela" },
+  { q: "Hard times create strong men. Strong men create good times.", a: "G. Michael Hopf" },
+  { q: "The world breaks everyone, and afterward, many are strong at the broken places.", a: "Ernest Hemingway" },
+  { q: "The best time to plant a tree was 20 years ago. The second best time is now.", a: "Chinese proverb" },
+  { q: "Don't let yesterday take up too much of today.", a: "Will Rogers" },
+  { q: "You miss 100% of the shots you don't take.", a: "Wayne Gretzky" },
+  { q: "The expert in anything was once a beginner.", a: "Helen Hayes" },
+  { q: "The man who moves a mountain begins by carrying away small stones.", a: "Confucius" },
+  { q: "Success is the sum of small efforts, repeated day in and day out.", a: "Robert Collier" },
+  { q: "Begin with the end in mind.", a: "Stephen Covey" },
+  { q: "Talent is cheaper than table salt. What separates the talented from the successful is a lot of hard work.", a: "Stephen King" },
+  { q: "When you have a choice and don't make it, that is in itself a choice.", a: "William James" },
+  { q: "Make peace with the fact that saying no often requires trading popularity for respect.", a: "Greg McKeown" },
+  { q: "Do what you can, with what you have, where you are.", a: "Theodore Roosevelt" },
+  { q: "The only person you are destined to become is the person you decide to be.", a: "Ralph Waldo Emerson" },
+  { q: "I have not failed. I've just found 10,000 ways that won't work.", a: "Thomas Edison" },
+  { q: "Pressure is a privilege.", a: "Billie Jean King" },
+  { q: "Eat the frog first thing in the morning.", a: "Mark Twain" },
+  { q: "If you cannot do great things, do small things in a great way.", a: "Napoleon Hill" },
+  { q: "Don't compare your beginning to someone else's middle.", a: "Tim Hiller" },
+  { q: "Action is the antidote to despair.", a: "Joan Baez" },
+  { q: "The only way to do great work is to love what you do.", a: "Steve Jobs" },
+  { q: "Live as if you were to die tomorrow. Learn as if you were to live forever.", a: "Mahatma Gandhi" },
+];
+
 function currentMonth() {
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -155,7 +224,7 @@ function rebuildMonthSelect() {
 }
 
 function rebuildSecondaryFilter() {
-  if (activeTab === 'review' || activeTab === 'invoice') {
+  if (activeTab === 'review' || activeTab === 'invoice' || activeTab === 'drive') {
     filterBar.style.display = 'none';
     return;
   }
@@ -247,6 +316,11 @@ function render() {
   $('#tc-review').textContent = String(reviews.length);
   $('#tc-invoice').textContent = String(invoices.length);
 
+  // Hide/show totals based on tab
+  const totalsEl = document.querySelector('.totals');
+  if (totalsEl) totalsEl.style.display = activeTab === 'drive' ? 'none' : '';
+
+  if (activeTab === 'drive') return renderDrive();
   if (activeTab === 'review') return renderReviews();
   if (activeTab === 'invoice') return renderInvoices();
   if (activeTab === 'potential') return renderPotentials(potentials);
@@ -372,10 +446,13 @@ function renderPotential(p) {
   const value = parseNum(p.revenue);
   const stale = isStalePotential(p);
   const statusClass = (p.status || 'Lead').toLowerCase().replace(/\s+/g, '-');
+  const tags = [];
+  if (stale) tags.push('<span class="stale-tag">⚠ Stale</span>');
+  if (p.converted) tags.push('<span class="converted-tag">✓ In Projects</span>');
   return `
     <div class="card potential ${stale ? 'stale' : ''}" data-id="${esc(p.id)}">
       <div class="card-head">
-        <h3>${esc(p.name)} ${stale ? '<span class="stale-tag">⚠ Stale</span>' : ''}</h3>
+        <h3>${esc(p.name)} ${tags.join(' ')}</h3>
         <span class="status potential-status ${statusClass}">${esc(p.status || 'Lead')}</span>
       </div>
       <div class="card-grid">
@@ -385,6 +462,27 @@ function renderPotential(p) {
       </div>
       ${p.people ? `<div class="block"><label>Source / contacts</label><p>${esc(p.people)}</p></div>` : ''}
       ${p.notes ? `<div class="block"><label>Notes</label><p>${esc(p.notes)}</p></div>` : ''}
+    </div>`;
+}
+
+function dayOfYear() {
+  const d = new Date();
+  const start = new Date(d.getFullYear(), 0, 0);
+  const diff = (d - start) + ((start.getTimezoneOffset() - d.getTimezoneOffset()) * 60 * 1000);
+  return Math.floor(diff / (1000 * 60 * 60 * 24));
+}
+
+function renderDrive() {
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const idx = ((dayOfYear() % QUOTES.length) + QUOTES.length) % QUOTES.length;
+  const q = QUOTES[idx];
+  list.innerHTML = `
+    <div class="drive-page">
+      <div class="drive-date">${esc(dateStr)}</div>
+      <blockquote class="drive-quote">${esc(q.q)}</blockquote>
+      <div class="drive-author">— ${esc(q.a)}</div>
+      <div class="drive-prompt">What does this look like in your day today?</div>
     </div>`;
 }
 
@@ -481,7 +579,7 @@ function applyTypeMode(type) {
     'category': isExpense,
     'project-money': isProject,
     'expense-amount': isExpense,
-    'potential-value': isPotential,
+    'potential-money': isPotential,
     'potential-dates': isPotential,
     'recurring-block': !isPotential,
     'people': !isExpense,
@@ -517,10 +615,9 @@ function applyTypeMode(type) {
 }
 
 function updateConvertVisibility() {
-  const type = form.type.value;
-  const status = form.status?.value;
+  // Convert button removed — auto-conversion handled on save
   const btn = $('#convert-btn');
-  if (btn) btn.style.display = (type === 'potential' && status === 'Won' && editingId) ? '' : 'none';
+  if (btn) btn.style.display = 'none';
 }
 
 function applyRecurringMode(isRecurring) {
@@ -588,7 +685,6 @@ form.addEventListener('submit', async (e) => {
     payload.last_contact = null;
     payload.next_followup = null;
   } else if (payload.type === 'potential') {
-    payload.expenses = '';
     payload.category = '';
     payload.tasks = '';
     payload.recurring = false;
@@ -597,6 +693,36 @@ form.addEventListener('submit', async (e) => {
     payload.category = '';
     payload.last_contact = null;
     payload.next_followup = null;
+  }
+
+  // Auto-create linked project when a potential is marked Won (only once)
+  let autoCreatedProject = false;
+  if (payload.type === 'potential' && payload.status === 'Won') {
+    const existing = editingId ? entries.find((x) => x.id === editingId) : null;
+    const alreadyConverted = existing && existing.converted;
+    if (!alreadyConverted) {
+      const projectPayload = {
+        id: (crypto.randomUUID && crypto.randomUUID()) ||
+          Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+        type: 'project',
+        name: payload.name,
+        status: 'Active',
+        revenue: payload.revenue || '',
+        expenses: payload.expenses || '',
+        people: payload.people || '',
+        notes: payload.notes || '',
+        month: currentMonth(),
+        recurring: false,
+        converted: false,
+      };
+      const projRes = await window.db.from('projects').insert(projectPayload);
+      if (projRes.error) {
+        alert("Saved potential, but couldn't auto-create project: " + projRes.error.message);
+      } else {
+        payload.converted = true;
+        autoCreatedProject = true;
+      }
+    }
   }
 
   const op = editingId
@@ -609,6 +735,10 @@ form.addEventListener('submit', async (e) => {
 
   const { error } = await op;
   if (error) return alert('Save failed: ' + error.message);
+
+  if (autoCreatedProject) {
+    setTimeout(() => alert('Won → also added to Projects tab.'), 100);
+  }
 
   if (payload.type !== 'potential' && !payload.recurring) selectedMonth = payload.month;
   if (activeTab !== payload.type) {
@@ -635,23 +765,7 @@ $('#delete-btn').addEventListener('click', async () => {
   loadAll();
 });
 
-$('#convert-btn').addEventListener('click', async () => {
-  if (!editingId) return;
-  if (!confirm('Convert this potential to an Active Project? It will move to the Projects tab and start fresh as a project entry.')) return;
-  const { error } = await window.db.from('projects').update({
-    type: 'project',
-    status: 'Active',
-    last_contact: null,
-    next_followup: null,
-    month: currentMonth(),
-  }).eq('id', editingId);
-  if (error) return alert('Convert failed: ' + error.message);
-  editor.close();
-  activeTab = 'project';
-  document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === 'project'));
-  rebuildSecondaryFilter();
-  loadAll();
-});
+// Convert button removed in favour of auto-conversion on save when status='Won'
 
 // ─── Review editor ──────────────────────────────────────────
 
