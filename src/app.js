@@ -17,11 +17,15 @@ let reviews = [];
 let invoices = [];
 let tasks = [];
 let tickets = [];
+let debts = [];
+let debtPayments = [];
 let editingId = null;
 let editingReviewId = null;
 let editingInvoiceId = null;
 let editingTaskId = null;
 let editingTicketId = null;
+let editingDebtId = null;
+let selectedDebtForPayment = null;
 let currentInvoiceSections = [];
 let currentRecurrenceDays = new Set();
 let selectedMonth = currentMonth();
@@ -34,6 +38,10 @@ const taskEditor = $('#task-editor');
 const taskForm = $('#task-form');
 const ticketEditor = $('#ticket-editor');
 const ticketForm = $('#ticket-form');
+const debtEditor = $('#debt-editor');
+const debtForm = $('#debt-form');
+const paymentEditor = $('#payment-editor');
+const paymentForm = $('#payment-form');
 
 function todayISO() {
   // Local date only — avoids UTC drift (e.g. BST pushing the date back).
@@ -227,12 +235,14 @@ async function loadAll() {
     list.innerHTML = '<div class="empty error">Supabase keys not set.</div>';
     return;
   }
-  const [eRes, rRes, iRes, tRes, kRes] = await Promise.all([
+  const [eRes, rRes, iRes, tRes, kRes, dRes, pRes] = await Promise.all([
     window.db.from('projects').select('*').order('created_at', { ascending: false }),
     window.db.from('reviews').select('*').order('week_of', { ascending: false }),
     window.db.from('invoices').select('*').order('month', { ascending: false }),
     window.db.from('tasks').select('*').order('created_at', { ascending: true }),
     window.db.from('tickets').select('*').order('date', { ascending: false }),
+    window.db.from('debts').select('*').order('created_at', { ascending: false }),
+    window.db.from('debt_payments').select('*').order('date', { ascending: false }),
   ]);
   if (eRes.error) {
     list.innerHTML = `<div class="empty error">Load failed: ${esc(eRes.error.message)}</div>`;
@@ -248,6 +258,8 @@ async function loadAll() {
   invoices = (iRes && !iRes.error) ? (iRes.data || []) : [];
   tasks = (tRes && !tRes.error) ? (tRes.data || []) : [];
   tickets = (kRes && !kRes.error) ? (kRes.data || []) : [];
+  debts = (dRes && !dRes.error) ? (dRes.data || []) : [];
+  debtPayments = (pRes && !pRes.error) ? (pRes.data || []) : [];
   rebuildMonthSelect();
   rebuildSecondaryFilter();
   render();
@@ -264,7 +276,7 @@ function rebuildMonthSelect() {
 }
 
 function rebuildSecondaryFilter() {
-  if (activeTab === 'review' || activeTab === 'invoice' || activeTab === 'drive' || activeTab === 'today' || activeTab === 'ticket') {
+  if (activeTab === 'review' || activeTab === 'invoice' || activeTab === 'drive' || activeTab === 'today' || activeTab === 'ticket' || activeTab === 'debt') {
     filterBar.style.display = 'none';
     return;
   }
@@ -357,6 +369,8 @@ function render() {
   $('#tc-invoice').textContent = String(invoices.length);
   const ticketCountEl = $('#tc-ticket');
   if (ticketCountEl) ticketCountEl.textContent = String(tickets.length);
+  const debtCountEl = $('#tc-debt');
+  if (debtCountEl) debtCountEl.textContent = String(debts.filter(d => d.status !== 'paid').length);
 
   // Hide/show header bits based on tab
   const totalsEl = document.querySelector('.totals');
@@ -364,16 +378,18 @@ function render() {
   const addBtnEl = $('#add-btn');
   const hideContext = activeTab === 'drive' || activeTab === 'today';
   if (totalsEl) totalsEl.style.display = hideContext ? 'none' : '';
-  if (monthSelEl) monthSelEl.style.display = (hideContext || activeTab === 'ticket') ? 'none' : '';
+  if (monthSelEl) monthSelEl.style.display = (hideContext || activeTab === 'ticket' || activeTab === 'debt') ? 'none' : '';
   if (addBtnEl) addBtnEl.style.display = activeTab === 'today' ? 'none' : '';
 
   if (activeTab === 'ticket') renderTicketTotals();
+  if (activeTab === 'debt') renderDebtTotals();
 
   if (activeTab === 'today') return renderToday();
   if (activeTab === 'drive') return renderDrive();
   if (activeTab === 'review') return renderReviews();
   if (activeTab === 'invoice') return renderInvoices();
   if (activeTab === 'ticket') return renderTickets();
+  if (activeTab === 'debt') return renderDebts();
   if (activeTab === 'potential') return renderPotentials(potentials);
 
   const q = $('#search').value.trim().toLowerCase();
@@ -1104,6 +1120,292 @@ ticketEditor.addEventListener('click', (e) => {
   if (!inside) ticketEditor.close();
 });
 
+// ─── Debts ──────────────────────────────────────────────────
+
+const DEBT_TYPE_LABELS = {
+  personal: 'Personal',
+  bank: 'Bank',
+  tax: 'Tax',
+  family: 'Family',
+  business: 'Business',
+  other: 'Other',
+};
+
+function debtSort(a, b) {
+  const aPaid = a.status === 'paid';
+  const bPaid = b.status === 'paid';
+  if (aPaid !== bPaid) return aPaid ? 1 : -1;
+  const aFocus = a.priority === 'focus';
+  const bFocus = b.priority === 'focus';
+  if (aFocus !== bFocus) return aFocus ? -1 : 1;
+  return parseNum(b.current_balance) - parseNum(a.current_balance);
+}
+
+function renderDebtTotals() {
+  setTotalsLabels(['Total owed', 'Monthly out', 'Paid lifetime', 'Active']);
+  clearTotalSpanClasses();
+  const active = debts.filter((d) => d.status !== 'paid');
+  const owed = active.reduce((s, d) => s + parseNum(d.current_balance), 0);
+  const monthly = active.reduce((s, d) => s + parseNum(d.monthly_payment), 0);
+  const paidLifetime = debts.reduce((s, d) => s + Math.max(0, parseNum(d.original_amount) - parseNum(d.current_balance)), 0);
+
+  const owedEl = $('#t-rev');
+  owedEl.textContent = fmt(owed);
+  if (owed > 0) owedEl.classList.add('neg');
+
+  $('#t-exp').textContent = fmt(monthly);
+
+  const lifetime = $('#t-net');
+  lifetime.textContent = fmt(paidLifetime);
+  if (paidLifetime > 0) lifetime.classList.add('pos');
+
+  $('#t-count').textContent = String(active.length);
+}
+
+function renderDebts() {
+  const sorted = [...debts].sort(debtSort);
+  const active = sorted.filter((d) => d.status !== 'paid');
+  const paid = sorted.filter((d) => d.status === 'paid');
+  const totalOwed = active.reduce((s, d) => s + parseNum(d.current_balance), 0);
+  const totalMonthly = active.reduce((s, d) => s + parseNum(d.monthly_payment), 0);
+  const monthsToFreedom = totalMonthly > 0 ? Math.ceil(totalOwed / totalMonthly) : null;
+
+  list.innerHTML = `
+    <div class="debts-page">
+      ${active.length > 0 ? `
+        <div class="debt-strategy">
+          <div class="debt-strategy-line"><strong>${fmt(totalOwed)}</strong> across ${active.length} active debt${active.length !== 1 ? 's' : ''}</div>
+          ${totalMonthly > 0 ? `<div class="debt-strategy-line">At ${fmt(totalMonthly)}/mo current pace → debt-free in <strong>~${monthsToFreedom} month${monthsToFreedom !== 1 ? 's' : ''}</strong> (${Math.ceil(monthsToFreedom / 12)} year${monthsToFreedom > 12 ? 's' : ''})</div>` : '<div class="debt-strategy-line muted">Set monthly payments on each debt to see projected payoff.</div>'}
+        </div>
+      ` : ''}
+      <div class="debt-list">
+        ${sorted.length === 0
+          ? '<div class="empty">No debts logged. Hit <strong>+ New</strong> to add one. Track to kill.</div>'
+          : sorted.map(renderDebt).join('')}
+      </div>
+      ${paid.length > 0 ? `<div class="debt-paid-celebration">${paid.length} debt${paid.length !== 1 ? 's' : ''} killed ✓</div>` : ''}
+    </div>
+  `;
+
+  list.querySelectorAll('.card.debt').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.debt-pay-btn')) return;
+      openDebtEditor(el.dataset.id);
+    });
+  });
+  list.querySelectorAll('.debt-pay-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); openPaymentEditor(btn.dataset.id); });
+  });
+}
+
+function renderDebt(d) {
+  const original = parseNum(d.original_amount);
+  const current = parseNum(d.current_balance);
+  const paid = Math.max(0, original - current);
+  const progress = original > 0 ? Math.min(100, (paid / original) * 100) : 0;
+  const monthly = parseNum(d.monthly_payment);
+  const rate = parseNum(d.interest_rate);
+  const isPaid = d.status === 'paid' || current <= 0;
+  const isFocus = d.priority === 'focus' && !isPaid;
+  const paymentCount = debtPayments.filter((p) => p.debt_id === d.id).length;
+  const typeLabel = DEBT_TYPE_LABELS[d.type] || 'Other';
+  const monthsLeft = monthly > 0 && current > 0 ? Math.ceil(current / monthly) : null;
+
+  return `
+    <div class="card debt ${isPaid ? 'paid' : ''} ${isFocus ? 'focus' : ''}" data-id="${esc(d.id)}">
+      <div class="card-head">
+        <h3>${isFocus ? '🎯 ' : ''}${esc(d.creditor)}${isPaid ? ' ✓' : ''}</h3>
+        <span class="status debt-type-${d.type || 'other'}">${esc(typeLabel)}</span>
+      </div>
+      <div class="debt-balance">
+        <div class="debt-balance-numbers">
+          <span class="debt-current ${isPaid ? 'paid' : 'neg'}">${fmt(current)}</span>
+          <span class="debt-of">of ${fmt(original)} ${original > 0 ? `· ${fmt(paid)} paid` : ''}</span>
+        </div>
+        <div class="debt-progress-bar"><div class="debt-progress-fill" style="width: ${progress.toFixed(1)}%"></div></div>
+        <div class="debt-progress-text">${progress.toFixed(0)}% killed</div>
+      </div>
+      <div class="debt-meta">
+        ${monthly ? `<span>£${monthly}/mo</span>` : ''}
+        ${rate ? `<span>${rate}% APR</span>` : ''}
+        ${monthsLeft ? `<span>~${monthsLeft} months left</span>` : ''}
+        ${paymentCount > 0 ? `<span>${paymentCount} payment${paymentCount !== 1 ? 's' : ''}</span>` : ''}
+      </div>
+      ${!isPaid ? `<button type="button" class="debt-pay-btn" data-id="${esc(d.id)}">+ Log payment</button>` : ''}
+    </div>
+  `;
+}
+
+function openDebtEditor(id) {
+  editingDebtId = id || null;
+  const d = id ? debts.find((x) => x.id === id) : null;
+  debtForm.reset();
+  $('#debt-editor-title').textContent = d ? 'Edit debt' : 'New debt';
+  $('#debt-delete-btn').style.display = d ? '' : 'none';
+  if (d) {
+    debtForm.creditor.value = d.creditor || '';
+    debtForm.type.value = d.type || 'other';
+    debtForm.status.value = d.status || 'active';
+    debtForm.original_amount.value = d.original_amount || '';
+    debtForm.current_balance.value = d.current_balance || '';
+    debtForm.monthly_payment.value = d.monthly_payment || '';
+    debtForm.interest_rate.value = d.interest_rate || '';
+    debtForm.start_date.value = d.start_date || '';
+    debtForm.due_date.value = d.due_date || '';
+    debtForm.notes.value = d.notes || '';
+    $('#debt-priority-check').checked = d.priority === 'focus';
+    renderPaymentHistory(d.id);
+  } else {
+    debtForm.start_date.value = todayISO();
+    $('#debt-priority-check').checked = false;
+    $('#debt-payment-history').innerHTML = '';
+  }
+  debtEditor.showModal();
+  setTimeout(() => debtForm.creditor?.focus(), 50);
+}
+
+function renderPaymentHistory(debtId) {
+  const payments = debtPayments
+    .filter((p) => p.debt_id === debtId)
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const container = $('#debt-payment-history');
+  if (!container) return;
+  if (payments.length === 0) {
+    container.innerHTML = '<div class="debt-history-empty">No payments logged yet.</div>';
+    return;
+  }
+  container.innerHTML = `
+    <div class="debt-history">
+      <div class="debt-history-label">Payment history (${payments.length})</div>
+      ${payments.slice(0, 10).map((p) => `
+        <div class="debt-history-row">
+          <span>${esc(p.date || '—')}</span>
+          <span>${fmt(parseNum(p.amount))}</span>
+          ${p.notes ? `<span class="debt-history-notes">${esc(p.notes)}</span>` : ''}
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+debtForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(debtForm);
+  const payload = Object.fromEntries(fd.entries());
+  payload.priority = fd.has('priority_focus') ? 'focus' : 'normal';
+  delete payload.priority_focus;
+  if (!payload.creditor || !payload.creditor.trim()) return;
+  if (!payload.start_date) payload.start_date = null;
+  if (!payload.due_date) payload.due_date = null;
+  if (parseNum(payload.current_balance) <= 0) payload.status = 'paid';
+
+  if (editingDebtId) {
+    const d = debts.find((x) => x.id === editingDebtId);
+    if (d) Object.assign(d, payload);
+    render();
+    const { error } = await window.db.from('debts').update(payload).eq('id', editingDebtId);
+    if (error) alert('Save failed: ' + error.message);
+  } else {
+    const newId = (crypto.randomUUID && crypto.randomUUID()) || Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const newDebt = { id: newId, ...payload };
+    debts.unshift({ ...newDebt, created_at: new Date().toISOString() });
+    render();
+    const { error } = await window.db.from('debts').insert(newDebt);
+    if (error) {
+      debts = debts.filter((x) => x.id !== newId);
+      render();
+      alert('Save failed: ' + error.message);
+    }
+  }
+  debtEditor.close();
+});
+
+$('#debt-cancel-btn').addEventListener('click', () => debtEditor.close());
+
+$('#debt-delete-btn').addEventListener('click', async () => {
+  if (!editingDebtId) return;
+  if (!confirm('Delete this debt? Payment history will also be deleted.')) return;
+  const id = editingDebtId;
+  debts = debts.filter((x) => x.id !== id);
+  debtPayments = debtPayments.filter((p) => p.debt_id !== id);
+  render();
+  const { error } = await window.db.from('debts').delete().eq('id', id);
+  if (error) { alert('Delete failed: ' + error.message); loadAll(); }
+  debtEditor.close();
+});
+
+debtEditor.addEventListener('click', (e) => {
+  const rect = debtEditor.getBoundingClientRect();
+  const inside = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+  if (!inside) debtEditor.close();
+});
+
+// ─── Payment logging ────────────────────────────────────────
+
+function openPaymentEditor(debtId) {
+  selectedDebtForPayment = debtId;
+  const d = debts.find((x) => x.id === debtId);
+  if (!d) return;
+  paymentForm.reset();
+  paymentForm.date.value = todayISO();
+  const current = parseNum(d.current_balance);
+  $('#payment-debt-info').innerHTML = `
+    <div class="payment-debt-context">
+      <strong>${esc(d.creditor)}</strong><br>
+      Current balance: <strong class="neg">${fmt(current)}</strong>${d.monthly_payment ? ` · Usual: £${esc(d.monthly_payment)}/mo` : ''}
+    </div>
+  `;
+  paymentEditor.showModal();
+  setTimeout(() => paymentForm.amount?.focus(), 50);
+}
+
+paymentForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(paymentForm);
+  const payload = Object.fromEntries(fd.entries());
+  if (!selectedDebtForPayment) return;
+  const d = debts.find((x) => x.id === selectedDebtForPayment);
+  if (!d) return;
+
+  const amt = parseNum(payload.amount);
+  if (amt <= 0) { alert('Enter a payment amount.'); return; }
+  const newBalance = Math.max(0, parseNum(d.current_balance) - amt);
+  const newStatus = newBalance <= 0 ? 'paid' : 'active';
+
+  const paymentId = (crypto.randomUUID && crypto.randomUUID()) || Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const newPayment = {
+    id: paymentId,
+    debt_id: d.id,
+    amount: payload.amount,
+    date: payload.date || todayISO(),
+    notes: payload.notes || '',
+  };
+  debtPayments.unshift({ ...newPayment, created_at: new Date().toISOString() });
+  d.current_balance = String(newBalance);
+  d.status = newStatus;
+  render();
+
+  const [insRes, updRes] = await Promise.all([
+    window.db.from('debt_payments').insert(newPayment),
+    window.db.from('debts').update({ current_balance: d.current_balance, status: d.status }).eq('id', d.id),
+  ]);
+  if (insRes.error || updRes.error) {
+    alert('Payment save partial failure. Reloading.');
+    loadAll();
+  } else if (newStatus === 'paid') {
+    setTimeout(() => alert(`🎉 ${d.creditor} paid off. One less anchor.`), 100);
+  }
+  paymentEditor.close();
+});
+
+$('#payment-cancel-btn').addEventListener('click', () => paymentEditor.close());
+
+paymentEditor.addEventListener('click', (e) => {
+  const rect = paymentEditor.getBoundingClientRect();
+  const inside = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+  if (!inside) paymentEditor.close();
+});
+
 function renderReviews() {
   if (reviews.length === 0) {
     list.innerHTML = '<div class="empty">No recaps yet. Hit <strong>+ New</strong> to write your first weekly recap.</div>';
@@ -1643,6 +1945,7 @@ $('#add-btn').addEventListener('click', () => {
   if (activeTab === 'review') openReviewEditor(null);
   else if (activeTab === 'invoice') openInvoiceEditor(null);
   else if (activeTab === 'ticket') openTicketEditor(null);
+  else if (activeTab === 'debt') openDebtEditor(null);
   else openEditor(null, activeTab);
 });
 
