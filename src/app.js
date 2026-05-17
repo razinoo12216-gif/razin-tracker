@@ -29,12 +29,21 @@ const taskEditor = $('#task-editor');
 const taskForm = $('#task-form');
 
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  // Local date only — avoids UTC drift (e.g. BST pushing the date back).
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 function shiftISO(iso, days) {
-  const d = new Date(iso + 'T00:00:00');
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  const [y, m, d] = iso.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() + days);
+  const ny = date.getFullYear();
+  const nm = String(date.getMonth() + 1).padStart(2, '0');
+  const nd = String(date.getDate()).padStart(2, '0');
+  return `${ny}-${nm}-${nd}`;
 }
 
 const EXPENSE_CATEGORIES = ['Operations','Marketing','Subscriptions','Transport','Food','Stock','Wages','Rent / Bills','Tax','Personal','Other'];
@@ -123,11 +132,14 @@ function currentMonth() {
 }
 
 function lastFridayISO() {
-  // Returns the most recent Friday (today if today is Friday).
+  // Returns the most recent Friday (today if today is Friday). Local date.
   const d = new Date();
   const diff = (d.getDay() - 5 + 7) % 7;
   d.setDate(d.getDate() - diff);
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function todayISO() {
