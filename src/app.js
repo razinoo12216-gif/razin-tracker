@@ -16,17 +16,24 @@ let entries = [];
 let reviews = [];
 let invoices = [];
 let tasks = [];
+let tickets = [];
 let editingId = null;
 let editingReviewId = null;
 let editingInvoiceId = null;
 let editingTaskId = null;
+let editingTicketId = null;
 let currentInvoiceSections = [];
+let currentRecurrenceDays = new Set();
 let selectedMonth = currentMonth();
 let selectedDay = todayISO();
+let selectedYear = new Date().getFullYear();
 let activeTab = 'today';
+let ticketTypeFilter = 'all';
 
 const taskEditor = $('#task-editor');
 const taskForm = $('#task-form');
+const ticketEditor = $('#ticket-editor');
+const ticketForm = $('#ticket-form');
 
 function todayISO() {
   // Local date only — avoids UTC drift (e.g. BST pushing the date back).
@@ -220,11 +227,12 @@ async function loadAll() {
     list.innerHTML = '<div class="empty error">Supabase keys not set.</div>';
     return;
   }
-  const [eRes, rRes, iRes, tRes] = await Promise.all([
+  const [eRes, rRes, iRes, tRes, kRes] = await Promise.all([
     window.db.from('projects').select('*').order('created_at', { ascending: false }),
     window.db.from('reviews').select('*').order('week_of', { ascending: false }),
     window.db.from('invoices').select('*').order('month', { ascending: false }),
     window.db.from('tasks').select('*').order('created_at', { ascending: true }),
+    window.db.from('tickets').select('*').order('date', { ascending: false }),
   ]);
   if (eRes.error) {
     list.innerHTML = `<div class="empty error">Load failed: ${esc(eRes.error.message)}</div>`;
@@ -239,6 +247,7 @@ async function loadAll() {
   reviews = (rRes && !rRes.error) ? (rRes.data || []) : [];
   invoices = (iRes && !iRes.error) ? (iRes.data || []) : [];
   tasks = (tRes && !tRes.error) ? (tRes.data || []) : [];
+  tickets = (kRes && !kRes.error) ? (kRes.data || []) : [];
   rebuildMonthSelect();
   rebuildSecondaryFilter();
   render();
@@ -255,7 +264,7 @@ function rebuildMonthSelect() {
 }
 
 function rebuildSecondaryFilter() {
-  if (activeTab === 'review' || activeTab === 'invoice' || activeTab === 'drive' || activeTab === 'today') {
+  if (activeTab === 'review' || activeTab === 'invoice' || activeTab === 'drive' || activeTab === 'today' || activeTab === 'ticket') {
     filterBar.style.display = 'none';
     return;
   }
@@ -346,6 +355,8 @@ function render() {
   $('#tc-potential').textContent = String(potentials.filter(p => p.status !== 'Won' && p.status !== 'Lost').length);
   $('#tc-review').textContent = String(reviews.length);
   $('#tc-invoice').textContent = String(invoices.length);
+  const ticketCountEl = $('#tc-ticket');
+  if (ticketCountEl) ticketCountEl.textContent = String(tickets.length);
 
   // Hide/show header bits based on tab
   const totalsEl = document.querySelector('.totals');
@@ -353,13 +364,16 @@ function render() {
   const addBtnEl = $('#add-btn');
   const hideContext = activeTab === 'drive' || activeTab === 'today';
   if (totalsEl) totalsEl.style.display = hideContext ? 'none' : '';
-  if (monthSelEl) monthSelEl.style.display = hideContext ? 'none' : '';
+  if (monthSelEl) monthSelEl.style.display = (hideContext || activeTab === 'ticket') ? 'none' : '';
   if (addBtnEl) addBtnEl.style.display = activeTab === 'today' ? 'none' : '';
+
+  if (activeTab === 'ticket') renderTicketTotals();
 
   if (activeTab === 'today') return renderToday();
   if (activeTab === 'drive') return renderDrive();
   if (activeTab === 'review') return renderReviews();
   if (activeTab === 'invoice') return renderInvoices();
+  if (activeTab === 'ticket') return renderTickets();
   if (activeTab === 'potential') return renderPotentials(potentials);
 
   const q = $('#search').value.trim().toLowerCase();
@@ -541,8 +555,39 @@ function formatDayLabel(iso) {
   return prefix + d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
+function recurrenceMatches(recurrence, dayISO) {
+  if (!recurrence || recurrence === 'none') return false;
+  const [y, m, d] = dayISO.split('-').map(Number);
+  const dow = new Date(y, m - 1, d).getDay();
+  return recurrence.split(',').map(Number).includes(dow);
+}
+
+function buildDayTasks(dayISO) {
+  const realTasks = tasks.filter((t) => t.day === dayISO);
+  // Recurring templates that started on or before this day
+  const templates = tasks.filter((t) =>
+    t.recurrence && t.recurrence !== 'none' && t.day && t.day < dayISO
+  );
+  const virtualTasks = templates
+    .filter((tpl) => recurrenceMatches(tpl.recurrence, dayISO))
+    .filter((tpl) => !realTasks.some((r) => r.template_id === tpl.id))
+    .map((tpl) => ({
+      id: 'virtual:' + tpl.id + ':' + dayISO,
+      day: dayISO,
+      title: tpl.title,
+      time: tpl.time || '',
+      notes: tpl.notes || '',
+      done: false,
+      recurrence: tpl.recurrence,
+      template_id: tpl.id,
+      _virtual: true,
+      created_at: tpl.created_at,
+    }));
+  return [...realTasks, ...virtualTasks];
+}
+
 function renderToday() {
-  const dayTasks = tasks.filter((t) => t.day === selectedDay).sort(taskSort);
+  const dayTasks = buildDayTasks(selectedDay).sort(taskSort);
   const done = dayTasks.filter((t) => t.done).length;
   const total = dayTasks.length;
   const isToday = selectedDay === todayISO();
@@ -594,15 +639,47 @@ function renderToday() {
 
 function renderTask(t) {
   const timeHtml = t.time ? esc(t.time) : '';
+  const isRecurring = (t.recurrence && t.recurrence !== 'none') || t.template_id;
+  const recurringIcon = isRecurring ? '<span class="task-recurring" title="Recurring">↻</span>' : '';
   return `
     <div class="task-row ${t.done ? 'done' : ''}" data-id="${esc(t.id)}">
       <button type="button" class="task-check" data-id="${esc(t.id)}" aria-label="Toggle done">${t.done ? '✓' : ''}</button>
       <div class="task-time">${timeHtml}</div>
-      <div class="task-title">${esc(t.title)}</div>
+      <div class="task-title">${esc(t.title)}${recurringIcon}</div>
     </div>`;
 }
 
 async function toggleTask(id) {
+  // Virtual task: materialize as a real row with done=true
+  if (id.startsWith('virtual:')) {
+    const parts = id.split(':');
+    const templateId = parts[1];
+    const day = parts.slice(2).join(':');
+    const tpl = tasks.find((x) => x.id === templateId);
+    if (!tpl) return;
+    const newId = (crypto.randomUUID && crypto.randomUUID()) || Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const newTask = {
+      id: newId,
+      day,
+      title: tpl.title,
+      time: tpl.time || '',
+      icon: tpl.icon || '',
+      notes: tpl.notes || '',
+      done: true,
+      recurrence: 'none',
+      template_id: tpl.id,
+    };
+    tasks.push({ ...newTask, created_at: new Date().toISOString() });
+    render();
+    const { error } = await window.db.from('tasks').insert(newTask);
+    if (error) {
+      tasks = tasks.filter((t) => t.id !== newId);
+      render();
+      alert('Update failed: ' + error.message);
+    }
+    return;
+  }
+
   const t = tasks.find((x) => x.id === id);
   if (!t) return;
   const newDone = !t.done;
@@ -613,7 +690,7 @@ async function toggleTask(id) {
     const check = row.querySelector('.task-check');
     if (check) check.textContent = newDone ? '✓' : '';
   }
-  const dayTasks = tasks.filter((x) => x.day === selectedDay);
+  const dayTasks = buildDayTasks(selectedDay);
   const done = dayTasks.filter((x) => x.done).length;
   const progressEl = list.querySelector('.today-progress');
   if (progressEl) progressEl.textContent = dayTasks.length > 0 ? `${done} of ${dayTasks.length} done` : 'No tasks yet';
@@ -666,9 +743,32 @@ async function copyYesterdayTasks() {
   render();
 }
 
+function setRecurrenceUI(str) {
+  currentRecurrenceDays = new Set();
+  if (str && str !== 'none') {
+    str.split(',').map((s) => parseInt(s, 10)).filter((n) => !isNaN(n)).forEach((n) => currentRecurrenceDays.add(n));
+  }
+  document.querySelectorAll('#task-form .day-toggle').forEach((btn) => {
+    const d = parseInt(btn.dataset.day, 10);
+    btn.classList.toggle('active', currentRecurrenceDays.has(d));
+  });
+}
+function getRecurrenceStr() {
+  if (currentRecurrenceDays.size === 0) return 'none';
+  return [...currentRecurrenceDays].sort((a, b) => a - b).join(',');
+}
+
 function openTaskEditor(id) {
   editingTaskId = id || null;
-  const t = id ? tasks.find((x) => x.id === id) : null;
+  let t = null;
+  if (id) {
+    if (id.startsWith('virtual:')) {
+      const tpl = tasks.find((x) => x.id === id.split(':')[1]);
+      t = tpl ? { ...tpl, _virtualEdit: true, originalDay: selectedDay } : null;
+    } else {
+      t = tasks.find((x) => x.id === id);
+    }
+  }
   taskForm.reset();
   $('#task-editor-title').textContent = t ? 'Edit task' : 'New task';
   $('#task-delete-btn').style.display = t ? '' : 'none';
@@ -676,22 +776,99 @@ function openTaskEditor(id) {
     taskForm.title.value = t.title || '';
     taskForm.time.value = t.time || '';
     taskForm.notes.value = t.notes || '';
+    setRecurrenceUI(t.recurrence || 'none');
+  } else {
+    setRecurrenceUI('none');
   }
   taskEditor.showModal();
   setTimeout(() => taskForm.title?.focus(), 50);
 }
 
+// Wire up day toggle buttons (idempotent — outside event handlers)
+document.querySelectorAll('#task-form .day-toggle').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const d = parseInt(btn.dataset.day, 10);
+    if (currentRecurrenceDays.has(d)) currentRecurrenceDays.delete(d);
+    else currentRecurrenceDays.add(d);
+    btn.classList.toggle('active', currentRecurrenceDays.has(d));
+  });
+});
+
+document.querySelectorAll('#task-form .recurrence-quick-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const preset = btn.dataset.preset;
+    if (preset === 'off') currentRecurrenceDays = new Set();
+    else if (preset === 'daily') currentRecurrenceDays = new Set([0, 1, 2, 3, 4, 5, 6]);
+    else if (preset === 'weekdays') currentRecurrenceDays = new Set([1, 2, 3, 4, 5]);
+    document.querySelectorAll('#task-form .day-toggle').forEach((b) => {
+      const d = parseInt(b.dataset.day, 10);
+      b.classList.toggle('active', currentRecurrenceDays.has(d));
+    });
+  });
+});
+
 taskForm.addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!editingTaskId) { taskEditor.close(); return; }
   const fd = new FormData(taskForm);
   const payload = Object.fromEntries(fd.entries());
-  if (!payload.title.trim()) return;
-  const t = tasks.find((x) => x.id === editingTaskId);
-  if (t) Object.assign(t, payload);
-  render();
-  const { error } = await window.db.from('tasks').update(payload).eq('id', editingTaskId);
-  if (error) alert('Save failed: ' + error.message);
+  if (!payload.title || !payload.title.trim()) return;
+  payload.recurrence = getRecurrenceStr();
+
+  // Virtual task save: materialize as a new row (only this day's occurrence)
+  if (editingTaskId && editingTaskId.startsWith('virtual:')) {
+    const parts = editingTaskId.split(':');
+    const templateId = parts[1];
+    const day = parts.slice(2).join(':');
+    const newId = (crypto.randomUUID && crypto.randomUUID()) || Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const newTask = {
+      id: newId,
+      day,
+      title: payload.title,
+      time: payload.time || '',
+      notes: payload.notes || '',
+      done: false,
+      recurrence: 'none',
+      template_id: templateId,
+    };
+    tasks.push({ ...newTask, created_at: new Date().toISOString() });
+    render();
+    const { error } = await window.db.from('tasks').insert(newTask);
+    if (error) {
+      tasks = tasks.filter((t) => t.id !== newId);
+      render();
+      alert('Save failed: ' + error.message);
+    }
+    taskEditor.close();
+    return;
+  }
+
+  if (editingTaskId) {
+    const t = tasks.find((x) => x.id === editingTaskId);
+    if (t) Object.assign(t, payload);
+    render();
+    const { error } = await window.db.from('tasks').update(payload).eq('id', editingTaskId);
+    if (error) alert('Save failed: ' + error.message);
+  } else {
+    // New task created via the editor (rare path; quickAddTask handles most)
+    const newId = (crypto.randomUUID && crypto.randomUUID()) || Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const newTask = {
+      id: newId,
+      day: selectedDay,
+      title: payload.title,
+      time: payload.time || '',
+      notes: payload.notes || '',
+      done: false,
+      recurrence: payload.recurrence,
+    };
+    tasks.push({ ...newTask, created_at: new Date().toISOString() });
+    render();
+    const { error } = await window.db.from('tasks').insert(newTask);
+    if (error) {
+      tasks = tasks.filter((t) => t.id !== newId);
+      render();
+      alert('Save failed: ' + error.message);
+    }
+  }
   taskEditor.close();
 });
 
@@ -699,7 +876,23 @@ $('#task-cancel-btn').addEventListener('click', () => taskEditor.close());
 
 $('#task-delete-btn').addEventListener('click', async () => {
   if (!editingTaskId) return;
-  if (!confirm('Delete this task?')) return;
+  // Virtual: deleting means "stop this recurring task entirely"
+  if (editingTaskId.startsWith('virtual:')) {
+    const templateId = editingTaskId.split(':')[1];
+    if (!confirm('This is a recurring task. Delete will stop it from showing on future days. Past completed instances stay. Proceed?')) return;
+    tasks = tasks.filter((t) => t.id !== templateId);
+    render();
+    const { error } = await window.db.from('tasks').delete().eq('id', templateId);
+    if (error) { alert('Delete failed: ' + error.message); loadAll(); }
+    taskEditor.close();
+    return;
+  }
+  const t = tasks.find((x) => x.id === editingTaskId);
+  const isRecurringTemplate = t && t.recurrence && t.recurrence !== 'none';
+  const msg = isRecurringTemplate
+    ? 'This is a recurring task. Delete will stop it from showing on future days. Past completed instances stay. Proceed?'
+    : 'Delete this task?';
+  if (!confirm(msg)) return;
   const id = editingTaskId;
   tasks = tasks.filter((t) => t.id !== id);
   render();
@@ -712,6 +905,203 @@ taskEditor.addEventListener('click', (e) => {
   const rect = taskEditor.getBoundingClientRect();
   const inside = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
   if (!inside) taskEditor.close();
+});
+
+// ─── Tickets ────────────────────────────────────────────────
+
+function ticketsInYear(year) {
+  return tickets.filter((t) => t.date && t.date.startsWith(String(year)));
+}
+
+function renderTicketTotals() {
+  setTotalsLabels(['Tickets', 'Face value', 'Paid', 'Saved']);
+  clearTotalSpanClasses();
+  const inYear = ticketsInYear(selectedYear);
+  let face = 0, paid = 0;
+  for (const t of inYear) { face += parseNum(t.amount); paid += parseNum(t.paid); }
+  const saved = face - paid;
+  $('#t-rev').textContent = String(inYear.length);
+  $('#t-exp').textContent = fmt(face);
+  const net = $('#t-net');
+  net.textContent = fmt(paid);
+  if (paid > 0) net.classList.add('neg');
+  const savedEl = $('#t-count');
+  savedEl.textContent = fmt(saved);
+  if (saved > 0) savedEl.classList.add('pos');
+}
+
+function renderTickets() {
+  const inYear = ticketsInYear(selectedYear);
+  let filtered = inYear;
+  if (ticketTypeFilter !== 'all') filtered = filtered.filter((t) => t.type === ticketTypeFilter);
+
+  // Borough/Force tally grouped
+  const tally = {};
+  for (const t of filtered) {
+    const key = (t.borough || 'Unknown').trim() || 'Unknown';
+    if (!tally[key]) tally[key] = { count: 0, paid: 0 };
+    tally[key].count += 1;
+    tally[key].paid += parseNum(t.paid);
+  }
+  const tallyEntries = Object.entries(tally)
+    .sort((a, b) => b[1].count - a[1].count);
+
+  const isParkingFilter = ticketTypeFilter === 'parking';
+  const isSpeedingFilter = ticketTypeFilter === 'speeding';
+  const boroughLabel = isSpeedingFilter ? 'Police Force' : 'Borough';
+
+  list.innerHTML = `
+    <div class="tickets-page">
+      <div class="ticket-year-nav">
+        <button type="button" class="day-nav" id="year-prev" aria-label="Previous year">←</button>
+        <span class="ticket-year">${selectedYear}</span>
+        <button type="button" class="day-nav" id="year-next" aria-label="Next year">→</button>
+      </div>
+      <div class="ticket-type-filter">
+        <button type="button" class="ticket-filter ${ticketTypeFilter === 'all' ? 'active' : ''}" data-type="all">All <span class="tf-count">${inYear.length}</span></button>
+        <button type="button" class="ticket-filter ${ticketTypeFilter === 'parking' ? 'active' : ''}" data-type="parking">Parking <span class="tf-count">${inYear.filter((t) => t.type === 'parking').length}</span></button>
+        <button type="button" class="ticket-filter ${ticketTypeFilter === 'speeding' ? 'active' : ''}" data-type="speeding">Speeding <span class="tf-count">${inYear.filter((t) => t.type === 'speeding').length}</span></button>
+      </div>
+      ${tallyEntries.length > 0 ? `
+        <div class="borough-tally">
+          <div class="borough-tally-label">${esc(boroughLabel)} tally</div>
+          <div class="borough-chips">
+            ${tallyEntries.map(([name, info]) => `
+              <div class="borough-chip">
+                <span class="bc-name">${esc(name)}</span>
+                <span class="bc-count">${info.count}</span>
+                <span class="bc-paid">${fmt(info.paid)}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+      <div class="ticket-list">
+        ${filtered.length === 0
+          ? `<div class="empty">No ${ticketTypeFilter === 'all' ? '' : esc(ticketTypeFilter) + ' '}tickets in ${selectedYear}.</div>`
+          : filtered.map(renderTicket).join('')}
+      </div>
+    </div>`;
+
+  $('#year-prev').addEventListener('click', () => { selectedYear -= 1; render(); });
+  $('#year-next').addEventListener('click', () => { selectedYear += 1; render(); });
+  list.querySelectorAll('.ticket-filter').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      ticketTypeFilter = btn.dataset.type;
+      render();
+    });
+  });
+  list.querySelectorAll('.card.ticket').forEach((el) => {
+    el.addEventListener('click', () => openTicketEditor(el.dataset.id));
+  });
+}
+
+function renderTicket(t) {
+  const amount = parseNum(t.amount);
+  const paid = parseNum(t.paid);
+  const saved = amount - paid;
+  const typeLabel = t.type === 'speeding' ? 'Speeding' : 'Parking';
+  const placeLabel = t.type === 'speeding' ? 'Force' : 'Borough';
+  const dateLabel = t.date ? new Date(t.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+  return `
+    <div class="card ticket" data-id="${esc(t.id)}">
+      <div class="card-head">
+        <h3>${esc(t.borough || '—')}</h3>
+        <span class="status ticket-${t.type || 'parking'}">${esc(typeLabel)}</span>
+      </div>
+      <div class="card-grid">
+        <div><label>${esc(placeLabel)}</label><span>${esc(t.borough || '—')}</span></div>
+        <div><label>Date</label><span>${esc(dateLabel)}</span></div>
+        <div><label>PCN</label><span>${esc(t.pcn || '—')}</span></div>
+      </div>
+      <div class="card-grid">
+        <div><label>Amount</label><span>${amount ? fmt(amount) : '—'}</span></div>
+        <div><label>Paid</label><span class="${paid && paid < amount ? 'pos' : ''}">${paid ? fmt(paid) : '—'}</span></div>
+        <div><label>Saved</label><span class="${saved > 0 ? 'pos' : ''}">${saved > 0 ? fmt(saved) : '—'}</span></div>
+      </div>
+      ${t.notes ? `<div class="block"><label>Notes</label><p>${esc(t.notes)}</p></div>` : ''}
+    </div>`;
+}
+
+function openTicketEditor(id) {
+  editingTicketId = id || null;
+  const t = id ? tickets.find((x) => x.id === id) : null;
+  ticketForm.reset();
+  $('#ticket-editor-title').textContent = t ? 'Edit ticket' : 'New ticket';
+  $('#ticket-delete-btn').style.display = t ? '' : 'none';
+  if (t) {
+    ticketForm.type.value = t.type || 'parking';
+    ticketForm.date.value = t.date || todayISO();
+    ticketForm.amount.value = t.amount || '';
+    ticketForm.paid.value = t.paid || '';
+    ticketForm.borough.value = t.borough || '';
+    ticketForm.pcn.value = t.pcn || '';
+    ticketForm.notes.value = t.notes || '';
+  } else {
+    ticketForm.type.value = ticketTypeFilter === 'speeding' ? 'speeding' : 'parking';
+    ticketForm.date.value = todayISO();
+  }
+  applyTicketBoroughLabel();
+  ticketEditor.showModal();
+  setTimeout(() => ticketForm.amount?.focus(), 50);
+}
+
+function applyTicketBoroughLabel() {
+  const isSpeeding = ticketForm.type.value === 'speeding';
+  const label = $('#ticket-borough-label');
+  if (label && label.firstChild && label.firstChild.nodeType === 3) {
+    label.firstChild.textContent = isSpeeding ? 'Police Force' : 'Borough';
+  }
+  const input = label?.querySelector('input');
+  if (input) input.placeholder = isSpeeding ? 'Met Police, Essex Police, etc.' : 'Enfield, Islington, etc.';
+}
+
+$('#ticket-type-select')?.addEventListener('change', applyTicketBoroughLabel);
+
+ticketForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(ticketForm);
+  const payload = Object.fromEntries(fd.entries());
+  if (!payload.date) payload.date = todayISO();
+
+  if (editingTicketId) {
+    const t = tickets.find((x) => x.id === editingTicketId);
+    if (t) Object.assign(t, payload);
+    render();
+    const { error } = await window.db.from('tickets').update(payload).eq('id', editingTicketId);
+    if (error) alert('Save failed: ' + error.message);
+  } else {
+    const newId = (crypto.randomUUID && crypto.randomUUID()) || Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const newTicket = { id: newId, ...payload };
+    tickets.unshift({ ...newTicket, created_at: new Date().toISOString() });
+    render();
+    const { error } = await window.db.from('tickets').insert(newTicket);
+    if (error) {
+      tickets = tickets.filter((x) => x.id !== newId);
+      render();
+      alert('Save failed: ' + error.message);
+    }
+  }
+  ticketEditor.close();
+});
+
+$('#ticket-cancel-btn').addEventListener('click', () => ticketEditor.close());
+
+$('#ticket-delete-btn').addEventListener('click', async () => {
+  if (!editingTicketId) return;
+  if (!confirm('Delete this ticket?')) return;
+  const id = editingTicketId;
+  tickets = tickets.filter((x) => x.id !== id);
+  render();
+  const { error } = await window.db.from('tickets').delete().eq('id', id);
+  if (error) { alert('Delete failed: ' + error.message); loadAll(); }
+  ticketEditor.close();
+});
+
+ticketEditor.addEventListener('click', (e) => {
+  const rect = ticketEditor.getBoundingClientRect();
+  const inside = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+  if (!inside) ticketEditor.close();
 });
 
 function renderReviews() {
@@ -1252,6 +1642,7 @@ async function copyInvoiceText(text, btn) {
 $('#add-btn').addEventListener('click', () => {
   if (activeTab === 'review') openReviewEditor(null);
   else if (activeTab === 'invoice') openInvoiceEditor(null);
+  else if (activeTab === 'ticket') openTicketEditor(null);
   else openEditor(null, activeTab);
 });
 
