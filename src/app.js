@@ -739,7 +739,7 @@ async function quickAddTask() {
 
 async function copyYesterdayTasks() {
   const yesterday = shiftISO(selectedDay, -1);
-  const yesterdayTasks = tasks.filter((t) => t.day === yesterday);
+  const yesterdayTasks = tasks.filter((t) => t.day === yesterday && !t.done);
   if (yesterdayTasks.length === 0) {
     alert("Nothing to copy from " + formatDayLabel(yesterday).replace(/ ·.*/, '') + ".");
     return;
@@ -1563,7 +1563,9 @@ function openEditor(id, defaultType) {
   const recurringCheck = $('#recurring-check');
   if (existing) {
     for (const k of ['name', 'status', 'category', 'revenue', 'expenses', 'tasks', 'people', 'notes', 'month', 'end_month', 'last_contact', 'next_followup']) {
-      if (form[k]) form[k].value = existing[k] || '';
+      const _inputEls = form.querySelectorAll('[name="' + k + '"]');
+        const _inputEl = Array.from(_inputEls).find(e => e.offsetParent !== null) || _inputEls[0];
+        if (_inputEl) _inputEl.value = (existing[k] == null ? '' : existing[k]);
     }
     recurringCheck.checked = !!existing.recurring;
     if (!form.month.value) form.month.value = currentMonth();
