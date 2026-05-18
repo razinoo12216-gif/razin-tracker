@@ -1564,7 +1564,10 @@ function openEditor(id, defaultType) {
   if (existing) {
     for (const k of ['name', 'status', 'category', 'revenue', 'expenses', 'tasks', 'people', 'notes', 'month', 'end_month', 'last_contact', 'next_followup']) {
       const _inputEls = form.querySelectorAll('[name="' + k + '"]');
-        const _inputEl = Array.from(_inputEls).find(e => e.offsetParent !== null) || _inputEls[0];
+        const _inputEl = Array.from(_inputEls).find(e => {
+          const sec = e.closest('[data-field]');
+          return !sec || sec.style.display !== 'none';
+        }) || _inputEls[0];
         if (_inputEl) _inputEl.value = (existing[k] == null ? '' : existing[k]);
     }
     recurringCheck.checked = !!existing.recurring;
