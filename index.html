@@ -242,17 +242,39 @@
     <form id="ticket-form">
       <h2 id="ticket-editor-title">Ticket</h2>
       <div class="row">
+        <label>For
+          <select name="ticket_kind" id="ticket-kind-select">
+            <option value="personal">Personal (mine)</option>
+            <option value="client">Client (business)</option>
+          </select>
+        </label>
         <label>Type
           <select name="type" id="ticket-type-select">
             <option value="parking">Parking</option>
             <option value="speeding">Speeding</option>
+            <option value="redlight">Red light</option>
           </select>
         </label>
-        <label>Date<input name="date" type="date" required /></label>
       </div>
       <div class="row">
+        <label>Date<input name="date" type="date" required /></label>
         <label>Amount £<input name="amount" autocomplete="off" placeholder="60" inputmode="decimal" /></label>
+      </div>
+      <div id="personal-ticket-fields">
         <label>Actually paid £<input name="paid" autocomplete="off" placeholder="30 if half-price" inputmode="decimal" /></label>
+        <label class="check-row"><input type="checkbox" name="personal_paid" value="true"> Mark as paid — adds to monthly expenses</label>
+      </div>
+      <div id="client-ticket-fields" style="display:none">
+        <label>Client name<input name="client_name" autocomplete="off" placeholder="John Smith" /></label>
+        <div class="row">
+          <label>Revenue (client paid me) £<input name="client_revenue" autocomplete="off" inputmode="decimal" placeholder="0" /></label>
+          <label>Cost (paid my guy) £<input name="guy_cost" autocomplete="off" inputmode="decimal" placeholder="0" /></label>
+        </div>
+        <div class="status-checks">
+          <label class="check-row"><input type="checkbox" name="client_paid" value="true"> Client has paid me</label>
+          <label class="check-row"><input type="checkbox" name="guy_paid" value="true"> I've paid my guy</label>
+          <label class="check-row"><input type="checkbox" name="work_done" value="true"> Work completed</label>
+        </div>
       </div>
       <label id="ticket-borough-label">Borough<input name="borough" autocomplete="off" placeholder="Enfield, Islington, etc." /></label>
       <label>PCN / Reference number<input name="pcn" autocomplete="off" /></label>
