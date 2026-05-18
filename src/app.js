@@ -24,6 +24,7 @@ let editingReviewId = null;
 let editingInvoiceId = null;
 let editingTaskId = null;
 let editingTicketId = null;
+let ticketKindView = 'personal';
 let editingDebtId = null;
 let selectedDebtForPayment = null;
 let currentInvoiceSections = [];
@@ -946,10 +947,59 @@ function renderTicketTotals() {
   if (saved > 0) savedEl.classList.add('pos');
 }
 
+
+function onTicketKindChange(kind) {
+  const cf = $('#client-ticket-fields');
+  const pf = $('#personal-ticket-fields');
+  if (cf) cf.style.display = kind === 'client' ? '' : 'none';
+  if (pf) pf.style.display = kind === 'personal' ? '' : 'none';
+}
+
+async function upsertTicketExpense(ticket) {
+  if ((ticket.ticket_kind || 'personal') !== 'personal') return;
+  if (!ticket.personal_paid) return;
+  const month = (ticket.date || todayISO()).substring(0, 7);
+  const label = 'Ticket – ' + (ticket.type || 'fine') + (ticket.pcn ? ' (' + ticket.pcn + ')' : '') + (ticket.borough ? ', ' + ticket.borough : '');
+  const amount = parseNum(ticket.paid) || parseNum(ticket.amount) || 0;
+  const existing = projects.find((p) => p.source_ticket_id === ticket.id && p.type === 'expense');
+  if (existing) {
+    Object.assign(existing, { name: label, expenses: amount, month });
+    render();
+    await window.db.from('projects').update({ name: label, expenses: amount, month }).eq('id', existing.id);
+  } else {
+    const nid = (crypto.randomUUID && crypto.randomUUID()) || Date.now().toString(36) + Math.random().toString(36).slice(2);
+    const ne = { id: nid, type: 'expense', name: label, expenses: amount, month, source_ticket_id: ticket.id };
+    projects.unshift({ ...ne, created_at: new Date().toISOString() });
+    render();
+    await window.db.from('projects').insert(ne);
+  }
+}
+
+async function upsertTicketProject(ticket) {
+  if (ticket.ticket_kind !== 'client') return;
+  if (!ticket.client_paid || !ticket.work_done) return;
+  const month = (ticket.date || todayISO()).substring(0, 7);
+  const label = 'Client ticket – ' + (ticket.client_name || 'client') + ' (' + (ticket.type || 'fine') + ')';
+  const existing = projects.find((p) => p.source_ticket_id === ticket.id && p.type === 'project');
+  const data = { name: label, revenue: parseNum(ticket.client_revenue) || 0, expenses: parseNum(ticket.guy_cost) || 0, status: 'done', month, source_ticket_id: ticket.id };
+  if (existing) {
+    Object.assign(existing, data);
+    render();
+    await window.db.from('projects').update(data).eq('id', existing.id);
+  } else {
+    const nid = (crypto.randomUUID && crypto.randomUUID()) || Date.now().toString(36) + Math.random().toString(36).slice(2);
+    const np = { id: nid, type: 'project', ...data };
+    projects.unshift({ ...np, created_at: new Date().toISOString() });
+    render();
+    await window.db.from('projects').insert(np);
+  }
+}
+
 function renderTickets() {
   const inYear = ticketsInYear(selectedYear);
   let filtered = inYear;
   if (ticketTypeFilter !== 'all') filtered = filtered.filter((t) => t.type === ticketTypeFilter);
+  filtered = filtered.filter((t) => (t.ticket_kind || 'personal') === ticketKindView);
 
   // Borough/Force tally grouped
   const tally = {};
@@ -968,6 +1018,10 @@ function renderTickets() {
 
   list.innerHTML = `
     <div class="tickets-page">
+      <div class="ticket-kind-toggle" style="display:flex;gap:6px;margin-bottom:10px">
+        <button type="button" class="ticket-kind-btn${ticketKindView==='personal'?' active':''}" data-kind="personal" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);cursor:pointer;font-weight:600;background:${ticketKindView==='personal'?'var(--accent)':''};color:${ticketKindView==='personal'?'#fff':'inherit'}">My Tickets</button>
+        <button type="button" class="ticket-kind-btn${ticketKindView==='client'?' active':''}" data-kind="client" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);cursor:pointer;font-weight:600;background:${ticketKindView==='client'?'var(--accent)':''};color:${ticketKindView==='client'?'#fff':'inherit'}">Client Tickets</button>
+      </div>
       <div class="ticket-year-nav">
         <button type="button" class="day-nav" id="year-prev" aria-label="Previous year">←</button>
         <span class="ticket-year">${selectedYear}</span>
@@ -999,6 +1053,9 @@ function renderTickets() {
       </div>
     </div>`;
 
+  list.querySelectorAll('.ticket-kind-btn').forEach((btn) => {
+    btn.addEventListener('click', () => { ticketKindView = btn.dataset.kind; render(); });
+  });
   $('#year-prev').addEventListener('click', () => { selectedYear -= 1; render(); });
   $('#year-next').addEventListener('click', () => { selectedYear += 1; render(); });
   list.querySelectorAll('.ticket-filter').forEach((btn) => {
@@ -1022,7 +1079,7 @@ function renderTicket(t) {
   return `
     <div class="card ticket" data-id="${esc(t.id)}">
       <div class="card-head">
-        <h3>${esc(t.borough || '—')}</h3>
+        <h3>${esc(t.ticket_kind === 'client' ? (t.client_name || 'Client') : (t.borough || '—'))}</h3>
         <span class="status ticket-${t.type || 'parking'}">${esc(typeLabel)}</span>
       </div>
       <div class="card-grid">
@@ -1036,6 +1093,9 @@ function renderTicket(t) {
         <div><label>Saved</label><span class="${saved > 0 ? 'pos' : ''}">${saved > 0 ? fmt(saved) : '—'}</span></div>
       </div>
       ${t.notes ? `<div class="block"><label>Notes</label><p>${esc(t.notes)}</p></div>` : ''}
+      ${t.ticket_kind === 'client'
+        ? `<div style='display:flex;gap:5px;padding:5px 10px;flex-wrap:wrap'><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${t.client_paid?'#22c55e':'#d1d5db'};color:${t.client_paid?'#fff':'#555'}'>Client paid</span><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${t.guy_paid?'#22c55e':'#d1d5db'};color:${t.guy_paid?'#fff':'#555'}'>Guy paid</span><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${t.work_done?'#22c55e':'#d1d5db'};color:${t.work_done?'#fff':'#555'}'>Done</span></div>`
+        : t.personal_paid ? `<div style='padding:4px 10px'><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:#22c55e;color:#fff'>Paid</span></div>` : ''}
     </div>`;
 }
 
@@ -1049,13 +1109,28 @@ function openTicketEditor(id) {
     ticketForm.type.value = t.type || 'parking';
     ticketForm.date.value = t.date || todayISO();
     ticketForm.amount.value = t.amount || '';
-    ticketForm.paid.value = t.paid || '';
     ticketForm.borough.value = t.borough || '';
     ticketForm.pcn.value = t.pcn || '';
     ticketForm.notes.value = t.notes || '';
+    const kv = t.ticket_kind || 'personal';
+    ticketForm.ticket_kind.value = kv;
+    if (kv === 'personal') {
+      ticketForm.paid.value = t.paid || '';
+      ticketForm.personal_paid.checked = !!t.personal_paid;
+    } else {
+      ticketForm.client_name.value = t.client_name || '';
+      ticketForm.client_revenue.value = t.client_revenue == null ? '' : t.client_revenue;
+      ticketForm.guy_cost.value = t.guy_cost == null ? '' : t.guy_cost;
+      ticketForm.client_paid.checked = !!t.client_paid;
+      ticketForm.guy_paid.checked = !!t.guy_paid;
+      ticketForm.work_done.checked = !!t.work_done;
+    }
+    onTicketKindChange(kv);
   } else {
     ticketForm.type.value = ticketTypeFilter === 'speeding' ? 'speeding' : 'parking';
     ticketForm.date.value = todayISO();
+    ticketForm.ticket_kind.value = 'personal';
+    onTicketKindChange('personal');
   }
   applyTicketBoroughLabel();
   ticketEditor.showModal();
@@ -1073,12 +1148,14 @@ function applyTicketBoroughLabel() {
 }
 
 $('#ticket-type-select')?.addEventListener('change', applyTicketBoroughLabel);
+$('#ticket-kind-select')?.addEventListener('change', (e) => onTicketKindChange(e.target.value));
 
 ticketForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const fd = new FormData(ticketForm);
   const payload = Object.fromEntries(fd.entries());
   if (!payload.date) payload.date = todayISO();
+  for (const k of ['personal_paid','client_paid','guy_paid','work_done']) payload[k] = payload[k] === 'true';
 
   if (editingTicketId) {
     const t = tickets.find((x) => x.id === editingTicketId);
@@ -1086,6 +1163,7 @@ ticketForm.addEventListener('submit', async (e) => {
     render();
     const { error } = await window.db.from('tickets').update(payload).eq('id', editingTicketId);
     if (error) alert('Save failed: ' + error.message);
+    else { await upsertTicketExpense({ ...(t||{}), ...payload }); await upsertTicketProject({ ...(t||{}), ...payload }); }
   } else {
     const newId = (crypto.randomUUID && crypto.randomUUID()) || Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     const newTicket = { id: newId, ...payload };
@@ -1096,7 +1174,7 @@ ticketForm.addEventListener('submit', async (e) => {
       tickets = tickets.filter((x) => x.id !== newId);
       render();
       alert('Save failed: ' + error.message);
-    }
+    } else { await upsertTicketExpense(newTicket); await upsertTicketProject(newTicket); }
   }
   ticketEditor.close();
 });
