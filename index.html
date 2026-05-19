@@ -35,6 +35,7 @@
       <button class="tab" data-tab="debt" type="button">Debts <span class="tab-count" id="tc-debt">0</span></button>
       <button class="tab" data-tab="review" type="button">Weekly Recap <span class="tab-count" id="tc-review">0</span></button>
       <button class="tab" data-tab="drive" type="button">Drive</button>
+      <button class="tab" data-tab="gym" type="button">Gym <span class="tab-count" id="tc-gym"></span></button>
     </div>
   </header>
 
@@ -356,5 +357,39 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="src/supabase.js"></script>
   <script src="src/app.js"></script>
+
+  <!-- Gym session editor -->
+  <dialog id="gym-editor">
+    <form id="gym-form">
+      <h2>Log Session</h2>
+      <div class="row">
+        <label>Date<input name="date" type="date" required /></label>
+        <label>Type
+          <select name="type">
+            <option value="weights">Weights</option>
+            <option value="cardio">Cardio</option>
+            <option value="hiit">HIIT</option>
+            <option value="sport">Sport</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+      </div>
+      <label>Duration
+        <div class="duration-btns">
+          <button type="button" class="dur-btn" data-mins="30">30m</button>
+          <button type="button" class="dur-btn" data-mins="45">45m</button>
+          <button type="button" class="dur-btn" data-mins="60">60m</button>
+          <button type="button" class="dur-btn" data-mins="90">90m</button>
+        </div>
+        <input name="duration" type="number" placeholder="or enter mins" inputmode="numeric" />
+      </label>
+      <label>Notes (optional)<textarea name="notes" placeholder="What did you work on?" rows="2"></textarea></label>
+      <input type="hidden" name="id" />
+      <div class="row">
+        <button type="button" id="gym-cancel-btn">Cancel</button>
+        <button type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
 </body>
 </html>
