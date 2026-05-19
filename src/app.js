@@ -1160,6 +1160,7 @@ ticketForm.addEventListener('submit', async (e) => {
   const payload = Object.fromEntries(fd.entries());
   if (!payload.date) payload.date = todayISO();
   for (const k of ['personal_paid','client_paid','guy_paid','work_done']) payload[k] = payload[k] === 'true';
+  for (const k of ['amount','paid','client_revenue','guy_cost']) { if (payload[k] === '' || payload[k] === undefined) payload[k] = null; else { const n = parseFloat(payload[k]); payload[k] = isNaN(n) ? null : n; } }
 
   if (editingTicketId) {
     const t = tickets.find((x) => x.id === editingTicketId);
