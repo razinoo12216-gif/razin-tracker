@@ -6,7 +6,7 @@ const editor = $('#editor');
 const form = $('#editor-form');
 const reviewEditor = $('#review-editor');
 const reviewForm = $('#review-form');
-const invoiceEditor = $('#invoice-editor');
+const invoiceEditor = $('#invoice-editor')
 const invoiceForm = $('#invoice-form');
 const monthSelect = $('#month-select');
 const secondaryFilter = $('#secondary-filter');
@@ -1623,8 +1623,8 @@ async function lookupCH(num) {
   const key = localStorage.getItem('ch_api_key') || '';
   if (!key) { alert('Add your Companies House API key first (visible in the Companies view).'); return null; }
   try {
-    const res = await fetch('https://api.company-information.service.gov.uk/company/' + encodeURIComponent(num.trim()), {
-      headers: { Authorization: 'Basic ' + btoa(key + ':') }
+    const res = await fetch('/api/ch?n=' + encodeURIComponent(num.trim()), {
+      headers: { 'x-ch-key': key }
     });
     if (!res.ok) { alert('Company not found (HTTP ' + res.status + ')'); return null; }
     return await res.json();
