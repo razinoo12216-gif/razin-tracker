@@ -1,4 +1,4 @@
-// 12 World Ã¢ÂÂ projects, potentials, expenses, invoices, reviews.
+// 12 World — projects, potentials, expenses, invoices, reviews.
 
 const $ = (s) => document.querySelector(s);
 const list = $('#list');
@@ -45,7 +45,7 @@ const paymentEditor = $('#payment-editor');
 const paymentForm = $('#payment-form');
 
 function todayISO() {
-  // Local date only Ã¢ÂÂ avoids UTC drift (e.g. BST pushing the date back).
+  // Local date only — avoids UTC drift (e.g. BST pushing the date back).
   const d = new Date();
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -87,14 +87,14 @@ const QUOTES = [
   { q: "Don't watch the clock; do what it does. Keep going.", a: "Sam Levenson" },
   { q: "Verily, with hardship comes ease.", a: "Quran 94:6" },
   { q: "Do not lose hope, nor be sad.", a: "Quran 3:139" },
-  { q: "Tie your camel first, then trust in Allah.", a: "Prophet Muhammad Ã¯Â·Âº" },
+  { q: "Tie your camel first, then trust in Allah.", a: "Prophet Muhammad ﷺ" },
   { q: "Whoever fears Allah, He will make a way out for them.", a: "Quran 65:2" },
   { q: "Allah does not burden a soul beyond that it can bear.", a: "Quran 2:286" },
-  { q: "The strongest among you is the one who controls himself when angry.", a: "Prophet Muhammad Ã¯Â·Âº" },
-  { q: "Whoever is patient will be granted patience.", a: "Prophet Muhammad Ã¯Â·Âº" },
-  { q: "The best among you are those who have the best character.", a: "Prophet Muhammad Ã¯Â·Âº" },
-  { q: "Whoever does not show mercy to people, Allah will not show mercy to him.", a: "Prophet Muhammad Ã¯Â·Âº" },
-  { q: "Speak good or remain silent.", a: "Prophet Muhammad Ã¯Â·Âº" },
+  { q: "The strongest among you is the one who controls himself when angry.", a: "Prophet Muhammad ﷺ" },
+  { q: "Whoever is patient will be granted patience.", a: "Prophet Muhammad ﷺ" },
+  { q: "The best among you are those who have the best character.", a: "Prophet Muhammad ﷺ" },
+  { q: "Whoever does not show mercy to people, Allah will not show mercy to him.", a: "Prophet Muhammad ﷺ" },
+  { q: "Speak good or remain silent.", a: "Prophet Muhammad ﷺ" },
   { q: "Take account of yourselves before you are taken to account.", a: "Umar ibn al-Khattab (RA)" },
   { q: "Sell or be sold.", a: "Grant Cardone" },
   { q: "Be so good they can't ignore you.", a: "Steve Martin" },
@@ -108,14 +108,14 @@ const QUOTES = [
   { q: "Diligence is the mother of good fortune.", a: "Benjamin Franklin" },
   { q: "The reward for work well done is the opportunity to do more.", a: "Jonas Salk" },
   { q: "An ounce of action is worth a ton of theory.", a: "Friedrich Engels" },
-  { q: "A goal without a plan is just a wish.", a: "Antoine de Saint-ExupÃÂ©ry" },
+  { q: "A goal without a plan is just a wish.", a: "Antoine de Saint-Exupéry" },
   { q: "Whether you think you can or you think you can't, you're right.", a: "Henry Ford" },
   { q: "Doubt kills more dreams than failure ever will.", a: "Suzy Kassem" },
   { q: "He who has a why to live can bear almost any how.", a: "Friedrich Nietzsche" },
   { q: "The cave you fear to enter holds the treasure you seek.", a: "Joseph Campbell" },
   { q: "If it is to be, it is up to me.", a: "William H. Johnsen" },
   { q: "We suffer more in imagination than in reality.", a: "Seneca" },
-  { q: "You have power over your mind Ã¢ÂÂ not outside events. Realize this, and you will find strength.", a: "Marcus Aurelius" },
+  { q: "You have power over your mind — not outside events. Realize this, and you will find strength.", a: "Marcus Aurelius" },
   { q: "What we do in life echoes in eternity.", a: "Marcus Aurelius" },
   { q: "It always seems impossible until it's done.", a: "Nelson Mandela" },
   { q: "Hard times create strong men. Strong men create good times.", a: "G. Michael Hopf" },
@@ -163,7 +163,7 @@ function todayISO() {
 }
 
 function monthLabel(ym) {
-  if (!ym) return 'Ã¢ÂÂ';
+  if (!ym) return '—';
   const [y, m] = ym.split('-').map(Number);
   if (!y || !m) return ym;
   return new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
@@ -177,7 +177,7 @@ function shortMonthLabel(ym) {
 }
 
 function weekLabel(iso) {
-  if (!iso) return 'Ã¢ÂÂ';
+  if (!iso) return '—';
   const d = new Date(iso + 'T00:00:00');
   return 'Week ending ' + d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
@@ -203,7 +203,7 @@ function parseNum(s) {
 function fmt(n) {
   const v = Number(n) || 0;
   const sign = v < 0 ? '-' : '';
-  return sign + 'ÃÂ£' + Math.abs(v).toLocaleString('en-GB', { maximumFractionDigits: 2 });
+  return sign + '£' + Math.abs(v).toLocaleString('en-GB', { maximumFractionDigits: 2 });
 }
 
 const esc = (s) =>
@@ -432,8 +432,8 @@ function render() {
 function recurringTag(e) {
   if (!e.recurring) return '';
   const range = e.end_month
-    ? `Ã¢ÂÂ» Monthly through ${esc(shortMonthLabel(e.end_month))}`
-    : 'Ã¢ÂÂ» Monthly';
+    ? `↻ Monthly through ${esc(shortMonthLabel(e.end_month))}`
+    : '↻ Monthly';
   return `<span class="recurring-tag">${range}</span>`;
 }
 
@@ -450,9 +450,9 @@ function renderProject(p) {
         <span class="status ${esc((p.status || '').toLowerCase())}">${esc(p.status || '')}</span>
       </div>
       <div class="card-grid">
-        <div><label>Revenue</label><span>${rev ? fmt(rev) : 'Ã¢ÂÂ'}</span></div>
-        <div><label>Expenses</label><span>${exp ? fmt(exp) : 'Ã¢ÂÂ'}</span></div>
-        <div><label>Net</label><span class="${netClass}">${hasMoney ? fmt(pnet) : 'Ã¢ÂÂ'}</span></div>
+        <div><label>Revenue</label><span>${rev ? fmt(rev) : '—'}</span></div>
+        <div><label>Expenses</label><span>${exp ? fmt(exp) : '—'}</span></div>
+        <div><label>Net</label><span class="${netClass}">${hasMoney ? fmt(pnet) : '—'}</span></div>
       </div>
       ${p.people ? `<div class="block"><label>People</label><p>${esc(p.people)}</p></div>` : ''}
       ${p.tasks ? `<div class="block"><label>Tasks</label><p>${esc(p.tasks)}</p></div>` : ''}
@@ -515,8 +515,8 @@ function renderPotential(p) {
   const stale = isStalePotential(p);
   const statusClass = (p.status || 'Lead').toLowerCase().replace(/\s+/g, '-');
   const tags = [];
-  if (stale) tags.push('<span class="stale-tag">Ã¢ÂÂ  Stale</span>');
-  if (p.converted) tags.push('<span class="converted-tag">Ã¢ÂÂ In Projects</span>');
+  if (stale) tags.push('<span class="stale-tag">⚠ Stale</span>');
+  if (p.converted) tags.push('<span class="converted-tag">✓ In Projects</span>');
   return `
     <div class="card potential ${stale ? 'stale' : ''}" data-id="${esc(p.id)}">
       <div class="card-head">
@@ -524,9 +524,9 @@ function renderPotential(p) {
         <span class="status potential-status ${statusClass}">${esc(p.status || 'Lead')}</span>
       </div>
       <div class="card-grid">
-        <div><label>Est. value</label><span>${value ? fmt(value) : 'Ã¢ÂÂ'}</span></div>
-        <div><label>Last contact</label><span>${p.last_contact ? esc(shortDate(p.last_contact)) : 'Ã¢ÂÂ'}</span></div>
-        <div><label>Next follow-up</label><span class="${stale && p.next_followup ? 'neg' : ''}">${p.next_followup ? esc(shortDate(p.next_followup)) : 'Ã¢ÂÂ'}</span></div>
+        <div><label>Est. value</label><span>${value ? fmt(value) : '—'}</span></div>
+        <div><label>Last contact</label><span>${p.last_contact ? esc(shortDate(p.last_contact)) : '—'}</span></div>
+        <div><label>Next follow-up</label><span class="${stale && p.next_followup ? 'neg' : ''}">${p.next_followup ? esc(shortDate(p.next_followup)) : '—'}</span></div>
       </div>
       ${p.people ? `<div class="block"><label>Source / contacts</label><p>${esc(p.people)}</p></div>` : ''}
       ${p.notes ? `<div class="block"><label>Notes</label><p>${esc(p.notes)}</p></div>` : ''}
@@ -549,7 +549,7 @@ function renderDrive() {
     <div class="drive-page">
       <div class="drive-date">${esc(dateStr)}</div>
       <blockquote class="drive-quote">${esc(q.q)}</blockquote>
-      <div class="drive-author">Ã¢ÂÂ ${esc(q.a)}</div>
+      <div class="drive-author">— ${esc(q.a)}</div>
       <div class="drive-prompt">What does this look like in your day today?</div>
     </div>`;
 }
@@ -566,9 +566,9 @@ function formatDayLabel(iso) {
   const d = new Date(iso + 'T00:00:00');
   const t = todayISO();
   let prefix = '';
-  if (iso === t) prefix = 'Today ÃÂ· ';
-  else if (iso === shiftISO(t, -1)) prefix = 'Yesterday ÃÂ· ';
-  else if (iso === shiftISO(t, 1)) prefix = 'Tomorrow ÃÂ· ';
+  if (iso === t) prefix = 'Today · ';
+  else if (iso === shiftISO(t, -1)) prefix = 'Yesterday · ';
+  else if (iso === shiftISO(t, 1)) prefix = 'Tomorrow · ';
   return prefix + d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
@@ -616,9 +616,9 @@ function renderToday() {
         <h2 class="today-date">${esc(dateLabel)}</h2>
         <div class="today-progress">${total > 0 ? `${done} of ${total} done` : 'No tasks yet'}</div>
         <div class="today-nav">
-          <button type="button" class="day-nav" id="day-prev" aria-label="Previous day">Ã¢ÂÂ</button>
+          <button type="button" class="day-nav" id="day-prev" aria-label="Previous day">←</button>
           <button type="button" class="day-nav today-btn" id="day-today">${isToday ? 'Today' : 'Jump to today'}</button>
-          <button type="button" class="day-nav" id="day-next" aria-label="Next day">Ã¢ÂÂ</button>
+          <button type="button" class="day-nav" id="day-next" aria-label="Next day">→</button>
         </div>
       </div>
       <div class="today-list">
@@ -626,7 +626,7 @@ function renderToday() {
         ${dayTasks.map(renderTask).join('')}
       </div>
       <div class="task-add-bar">
-        <input id="task-quick-input" type="text" placeholder="Add taskÃ¢ÂÂ¦" autocomplete="off" />
+        <input id="task-quick-input" type="text" placeholder="Add task…" autocomplete="off" />
         <input id="task-quick-time" type="time" />
         <button id="task-quick-btn" type="button">Add</button>
       </div>
@@ -657,10 +657,10 @@ function renderToday() {
 function renderTask(t) {
   const timeHtml = t.time ? esc(t.time) : '';
   const isRecurring = (t.recurrence && t.recurrence !== 'none') || t.template_id;
-  const recurringIcon = isRecurring ? '<span class="task-recurring" title="Recurring">Ã¢ÂÂ»</span>' : '';
+  const recurringIcon = isRecurring ? '<span class="task-recurring" title="Recurring">↻</span>' : '';
   return `
     <div class="task-row ${t.done ? 'done' : ''}" data-id="${esc(t.id)}">
-      <button type="button" class="task-check" data-id="${esc(t.id)}" aria-label="Toggle done">${t.done ? 'Ã¢ÂÂ' : ''}</button>
+      <button type="button" class="task-check" data-id="${esc(t.id)}" aria-label="Toggle done">${t.done ? '✓' : ''}</button>
       <div class="task-time">${timeHtml}</div>
       <div class="task-title">${esc(t.title)}${recurringIcon}</div>
     </div>`;
@@ -705,7 +705,7 @@ async function toggleTask(id) {
   if (row) {
     row.classList.toggle('done', newDone);
     const check = row.querySelector('.task-check');
-    if (check) check.textContent = newDone ? 'Ã¢ÂÂ' : '';
+    if (check) check.textContent = newDone ? '✓' : '';
   }
   const dayTasks = buildDayTasks(selectedDay);
   const done = dayTasks.filter((x) => x.done).length;
@@ -742,7 +742,7 @@ async function copyYesterdayTasks() {
   const yesterday = shiftISO(selectedDay, -1);
   const yesterdayTasks = tasks.filter((t) => t.day === yesterday && !t.done);
   if (yesterdayTasks.length === 0) {
-    alert("Nothing to copy from " + formatDayLabel(yesterday).replace(/ ÃÂ·.*/, '') + ".");
+    alert("Nothing to copy from " + formatDayLabel(yesterday).replace(/ ·.*/, '') + ".");
     return;
   }
   const copies = yesterdayTasks.map((t) => ({
@@ -801,7 +801,7 @@ function openTaskEditor(id) {
   setTimeout(() => taskForm.title?.focus(), 50);
 }
 
-// Wire up day toggle buttons (idempotent Ã¢ÂÂ outside event handlers)
+// Wire up day toggle buttons (idempotent — outside event handlers)
 document.querySelectorAll('#task-form .day-toggle').forEach((btn) => {
   btn.addEventListener('click', () => {
     const d = parseInt(btn.dataset.day, 10);
@@ -924,7 +924,7 @@ taskEditor.addEventListener('click', (e) => {
   if (!inside) taskEditor.close();
 });
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Tickets Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ─── Tickets ────────────────────────────────────────────────
 
 function ticketsInYear(year) {
   return tickets.filter((t) => t.date && t.date.startsWith(String(year)));
@@ -959,7 +959,7 @@ async function upsertTicketExpense(ticket) {
   if ((ticket.ticket_kind || 'personal') !== 'personal') return;
   if (!ticket.personal_paid) return;
   const month = (ticket.date || todayISO()).substring(0, 7);
-  const label = 'Ticket Ã¢ÂÂ ' + (ticket.type || 'fine') + (ticket.pcn ? ' (' + ticket.pcn + ')' : '') + (ticket.borough ? ', ' + ticket.borough : '');
+  const label = 'Ticket – ' + (ticket.type || 'fine') + (ticket.pcn ? ' (' + ticket.pcn + ')' : '') + (ticket.borough ? ', ' + ticket.borough : '');
   const amount = parseNum(ticket.paid) || parseNum(ticket.amount) || 0;
   const existing = projects.find((p) => p.source_ticket_id === ticket.id && p.type === 'expense');
   if (existing) {
@@ -979,7 +979,7 @@ async function upsertTicketProject(ticket) {
   if (ticket.ticket_kind !== 'client') return;
   if (!ticket.client_paid || !ticket.work_done) return;
   const month = (ticket.date || todayISO()).substring(0, 7);
-  const label = 'Client ticket Ã¢ÂÂ ' + (ticket.client_name || 'client') + ' (' + (ticket.type || 'fine') + ')';
+  const label = 'Client ticket – ' + (ticket.client_name || 'client') + ' (' + (ticket.type || 'fine') + ')';
   const existing = projects.find((p) => p.source_ticket_id === ticket.id && p.type === 'project');
   const data = { name: label, revenue: parseNum(ticket.client_revenue) || 0, expenses: parseNum(ticket.guy_cost) || 0, status: 'done', month, source_ticket_id: ticket.id };
   if (existing) {
@@ -1023,9 +1023,9 @@ function renderTickets() {
         <button type="button" class="ticket-filter ticket-kind-btn${ticketKindView==='client'?' active':''}" data-kind="client" style="flex:1">Client Tickets</button>
       </div>
       <div class="ticket-year-nav">
-        <button type="button" class="day-nav" id="year-prev" aria-label="Previous year">Ã¢ÂÂ</button>
+        <button type="button" class="day-nav" id="year-prev" aria-label="Previous year">←</button>
         <span class="ticket-year">${selectedYear}</span>
-        <button type="button" class="day-nav" id="year-next" aria-label="Next year">Ã¢ÂÂ</button>
+        <button type="button" class="day-nav" id="year-next" aria-label="Next year">→</button>
       </div>
       <div class="ticket-type-filter">
         <button type="button" class="ticket-filter ${ticketTypeFilter === 'all' ? 'active' : ''}" data-type="all">All <span class="tf-count">${inYear.length}</span></button>
@@ -1075,22 +1075,22 @@ function renderTicket(t) {
   const saved = amount - paid;
   const typeLabel = t.type === 'speeding' ? 'Speeding' : 'Parking';
   const placeLabel = t.type === 'speeding' ? 'Force' : 'Borough';
-  const dateLabel = t.date ? new Date(t.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Ã¢ÂÂ';
+  const dateLabel = t.date ? new Date(t.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
   return `
     <div class="card ticket" data-id="${esc(t.id)}">
       <div class="card-head">
-        <h3>${esc(t.ticket_kind === 'client' ? (t.client_name || 'Client') : (t.borough || 'Ã¢ÂÂ'))}</h3>
+        <h3>${esc(t.ticket_kind === 'client' ? (t.client_name || 'Client') : (t.borough || '—'))}</h3>
         <span class="status ticket-${t.type || 'parking'}">${esc(typeLabel)}</span>
       </div>
       <div class="card-grid">
-        <div><label>${esc(placeLabel)}</label><span>${esc(t.borough || 'Ã¢ÂÂ')}</span></div>
+        <div><label>${esc(placeLabel)}</label><span>${esc(t.borough || '—')}</span></div>
         <div><label>Date</label><span>${esc(dateLabel)}</span></div>
-        <div><label>PCN</label><span>${esc(t.pcn || 'Ã¢ÂÂ')}</span></div>
+        <div><label>PCN</label><span>${esc(t.pcn || '—')}</span></div>
       </div>
       <div class="card-grid">
-        <div><label>Amount</label><span>${amount ? fmt(amount) : 'Ã¢ÂÂ'}</span></div>
-        <div><label>Paid</label><span class="${paid && paid < amount ? 'pos' : ''}">${paid ? fmt(paid) : 'Ã¢ÂÂ'}</span></div>
-        <div><label>Saved</label><span class="${saved > 0 ? 'pos' : ''}">${saved > 0 ? fmt(saved) : 'Ã¢ÂÂ'}</span></div>
+        <div><label>Amount</label><span>${amount ? fmt(amount) : '—'}</span></div>
+        <div><label>Paid</label><span class="${paid && paid < amount ? 'pos' : ''}">${paid ? fmt(paid) : '—'}</span></div>
+        <div><label>Saved</label><span class="${saved > 0 ? 'pos' : ''}">${saved > 0 ? fmt(saved) : '—'}</span></div>
       </div>
       ${t.notes ? `<div class="block"><label>Notes</label><p>${esc(t.notes)}</p></div>` : ''}
       ${t.ticket_kind === 'client'
@@ -1198,7 +1198,7 @@ ticketEditor.addEventListener('click', (e) => {
   if (!inside) ticketEditor.close();
 });
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Debts Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ─── Debts ──────────────────────────────────────────────────
 
 const DEBT_TYPE_LABELS = {
   personal: 'Personal',
@@ -1253,7 +1253,7 @@ function renderDebts() {
       ${active.length > 0 ? `
         <div class="debt-strategy">
           <div class="debt-strategy-line"><strong>${fmt(totalOwed)}</strong> across ${active.length} active debt${active.length !== 1 ? 's' : ''}</div>
-          ${totalMonthly > 0 ? `<div class="debt-strategy-line">At ${fmt(totalMonthly)}/mo current pace Ã¢ÂÂ debt-free in <strong>~${monthsToFreedom} month${monthsToFreedom !== 1 ? 's' : ''}</strong> (${Math.ceil(monthsToFreedom / 12)} year${monthsToFreedom > 12 ? 's' : ''})</div>` : '<div class="debt-strategy-line muted">Set monthly payments on each debt to see projected payoff.</div>'}
+          ${totalMonthly > 0 ? `<div class="debt-strategy-line">At ${fmt(totalMonthly)}/mo current pace → debt-free in <strong>~${monthsToFreedom} month${monthsToFreedom !== 1 ? 's' : ''}</strong> (${Math.ceil(monthsToFreedom / 12)} year${monthsToFreedom > 12 ? 's' : ''})</div>` : '<div class="debt-strategy-line muted">Set monthly payments on each debt to see projected payoff.</div>'}
         </div>
       ` : ''}
       <div class="debt-list">
@@ -1261,7 +1261,7 @@ function renderDebts() {
           ? '<div class="empty">No debts logged. Hit <strong>+ New</strong> to add one. Track to kill.</div>'
           : sorted.map(renderDebt).join('')}
       </div>
-      ${paid.length > 0 ? `<div class="debt-paid-celebration">${paid.length} debt${paid.length !== 1 ? 's' : ''} killed Ã¢ÂÂ</div>` : ''}
+      ${paid.length > 0 ? `<div class="debt-paid-celebration">${paid.length} debt${paid.length !== 1 ? 's' : ''} killed ✓</div>` : ''}
     </div>
   `;
 
@@ -1292,19 +1292,19 @@ function renderDebt(d) {
   return `
     <div class="card debt ${isPaid ? 'paid' : ''} ${isFocus ? 'focus' : ''}" data-id="${esc(d.id)}">
       <div class="card-head">
-        <h3>${isFocus ? 'Ã°ÂÂÂ¯ ' : ''}${esc(d.creditor)}${isPaid ? ' Ã¢ÂÂ' : ''}</h3>
+        <h3>${isFocus ? '🎯 ' : ''}${esc(d.creditor)}${isPaid ? ' ✓' : ''}</h3>
         <span class="status debt-type-${d.type || 'other'}">${esc(typeLabel)}</span>
       </div>
       <div class="debt-balance">
         <div class="debt-balance-numbers">
           <span class="debt-current ${isPaid ? 'paid' : 'neg'}">${fmt(current)}</span>
-          <span class="debt-of">of ${fmt(original)} ${original > 0 ? `ÃÂ· ${fmt(paid)} paid` : ''}</span>
+          <span class="debt-of">of ${fmt(original)} ${original > 0 ? `· ${fmt(paid)} paid` : ''}</span>
         </div>
         <div class="debt-progress-bar"><div class="debt-progress-fill" style="width: ${progress.toFixed(1)}%"></div></div>
         <div class="debt-progress-text">${progress.toFixed(0)}% killed</div>
       </div>
       <div class="debt-meta">
-        ${monthly ? `<span>ÃÂ£${monthly}/mo</span>` : ''}
+        ${monthly ? `<span>£${monthly}/mo</span>` : ''}
         ${rate ? `<span>${rate}% APR</span>` : ''}
         ${monthsLeft ? `<span>~${monthsLeft} months left</span>` : ''}
         ${paymentCount > 0 ? `<span>${paymentCount} payment${paymentCount !== 1 ? 's' : ''}</span>` : ''}
@@ -1357,7 +1357,7 @@ function renderPaymentHistory(debtId) {
       <div class="debt-history-label">Payment history (${payments.length})</div>
       ${payments.slice(0, 10).map((p) => `
         <div class="debt-history-row">
-          <span>${esc(p.date || 'Ã¢ÂÂ')}</span>
+          <span>${esc(p.date || '—')}</span>
           <span>${fmt(parseNum(p.amount))}</span>
           ${p.notes ? `<span class="debt-history-notes">${esc(p.notes)}</span>` : ''}
         </div>
@@ -1418,7 +1418,7 @@ debtEditor.addEventListener('click', (e) => {
   if (!inside) debtEditor.close();
 });
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Payment logging Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ─── Payment logging ────────────────────────────────────────
 
 function openPaymentEditor(debtId) {
   selectedDebtForPayment = debtId;
@@ -1430,7 +1430,7 @@ function openPaymentEditor(debtId) {
   $('#payment-debt-info').innerHTML = `
     <div class="payment-debt-context">
       <strong>${esc(d.creditor)}</strong><br>
-      Current balance: <strong class="neg">${fmt(current)}</strong>${d.monthly_payment ? ` ÃÂ· Usual: ÃÂ£${esc(d.monthly_payment)}/mo` : ''}
+      Current balance: <strong class="neg">${fmt(current)}</strong>${d.monthly_payment ? ` · Usual: £${esc(d.monthly_payment)}/mo` : ''}
     </div>
   `;
   paymentEditor.showModal();
@@ -1471,7 +1471,7 @@ paymentForm.addEventListener('submit', async (e) => {
     alert('Payment save partial failure. Reloading.');
     loadAll();
   } else if (newStatus === 'paid') {
-    setTimeout(() => alert(`Ã°ÂÂÂ ${d.creditor} paid off. One less anchor.`), 100);
+    setTimeout(() => alert(`🎉 ${d.creditor} paid off. One less anchor.`), 100);
   }
   paymentEditor.close();
 });
@@ -1500,7 +1500,7 @@ function renderReview(r) {
   const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
   const avgClass = avg >= 7 ? 'pos' : avg <= 4 ? 'neg' : 'mid';
   const winsLine = (r.wins || '').split('\n')[0].trim();
-  const winsPreview = winsLine.length > 90 ? winsLine.slice(0, 90) + 'Ã¢ÂÂ¦' : winsLine;
+  const winsPreview = winsLine.length > 90 ? winsLine.slice(0, 90) + '…' : winsLine;
   return `
     <div class="card review" data-id="${esc(r.id)}">
       <div class="card-head">
@@ -1557,7 +1557,7 @@ function renderInvoice(inv) {
       <div class="invoice-sections-preview">
         ${sections.filter((s) => s.title || s.total).map((s) => `
           <div class="invoice-line">
-            <span>${esc(s.title || 'Ã¢ÂÂ')}</span>
+            <span>${esc(s.title || '—')}</span>
             <span>${fmt(parseNum(s.total))}</span>
           </div>
         `).join('')}
@@ -1565,7 +1565,7 @@ function renderInvoice(inv) {
     </div>`;
 }
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Entry editor Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ─── Entry editor ───────────────────────────────────────────
 
 function applyTypeMode(type) {
   const isProject = type === 'project';
@@ -1603,7 +1603,7 @@ function applyTypeMode(type) {
     if (current && [...statusSel.options].some((o) => o.value === current)) statusSel.value = current;
   }
 
-  // Rename "People" Ã¢ÂÂ "Source / contacts" for potentials
+  // Rename "People" → "Source / contacts" for potentials
   const peopleLabel = document.querySelector('#editor-form [data-field="people"]');
   if (peopleLabel && peopleLabel.firstChild && peopleLabel.firstChild.nodeType === 3) {
     peopleLabel.firstChild.textContent = isPotential ? 'Source / contacts' : 'People';
@@ -1613,7 +1613,7 @@ function applyTypeMode(type) {
 }
 
 function updateConvertVisibility() {
-  // Convert button removed Ã¢ÂÂ auto-conversion handled on save
+  // Convert button removed — auto-conversion handled on save
   const btn = $('#convert-btn');
   if (btn) btn.style.display = 'none';
 }
@@ -1740,7 +1740,7 @@ form.addEventListener('submit', async (e) => {
   if (error) return alert('Save failed: ' + error.message);
 
   if (autoCreatedProject) {
-    setTimeout(() => alert('Won Ã¢ÂÂ also added to Projects tab.'), 100);
+    setTimeout(() => alert('Won → also added to Projects tab.'), 100);
   }
 
   if (payload.type !== 'potential' && !payload.recurring) selectedMonth = payload.month;
@@ -1770,7 +1770,7 @@ $('#delete-btn').addEventListener('click', async () => {
 
 // Convert button removed in favour of auto-conversion on save when status='Won'
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Review editor Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ─── Review editor ──────────────────────────────────────────
 
 function openReviewEditor(id) {
   editingReviewId = id || null;
@@ -1830,7 +1830,7 @@ $('#review-delete-btn').addEventListener('click', async () => {
   loadAll();
 });
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Invoice editor Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ─── Invoice editor ─────────────────────────────────────────
 
 function renderInvoiceSections() {
   const container = $('#invoice-sections');
@@ -1839,9 +1839,9 @@ function renderInvoiceSections() {
       <div class="invoice-section-head">
         <input class="section-title" placeholder="Section name" value="${esc(s.title || '')}" autocomplete="off" />
         <input class="section-total" type="number" step="0.01" placeholder="0" inputmode="decimal" value="${esc(s.total ?? '')}" />
-        <button type="button" class="remove-section" aria-label="Remove section">ÃÂ</button>
+        <button type="button" class="remove-section" aria-label="Remove section">×</button>
       </div>
-      <textarea class="section-body" rows="4" placeholder="One line per item Ã¢ÂÂ type freely">${esc(s.body || '')}</textarea>
+      <textarea class="section-body" rows="4" placeholder="One line per item — type freely">${esc(s.body || '')}</textarea>
     </div>
   `).join('');
 
@@ -2001,7 +2001,7 @@ async function copyInvoiceText(text, btn) {
   try {
     await navigator.clipboard.writeText(text);
     const original = btn.textContent;
-    btn.textContent = 'Copied Ã¢ÂÂ';
+    btn.textContent = 'Copied ✓';
     btn.classList.add('copied');
     setTimeout(() => {
       btn.textContent = original;
@@ -2017,12 +2017,12 @@ async function copyInvoiceText(text, btn) {
     try { document.execCommand('copy'); } catch (_) {}
     document.body.removeChild(ta);
     const original = btn.textContent;
-    btn.textContent = 'Copied Ã¢ÂÂ';
+    btn.textContent = 'Copied ✓';
     setTimeout(() => { btn.textContent = original; }, 1500);
   }
 }
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Wiring Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ─── Wiring ─────────────────────────────────────────────────
 
 $('#add-btn').addEventListener('click', () => {
   if (activeTab === 'review') openReviewEditor(null);
