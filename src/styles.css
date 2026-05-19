@@ -1343,3 +1343,16 @@ dialog .actions {
 .work-btn-ghost:hover { background:var(--panel); }
 .work-btn-danger { background:rgba(239,68,68,.1); color:#ef4444; border:1px solid rgba(239,68,68,.3); border-radius:8px; padding:9px 16px; font-size:14px; cursor:pointer; }
 .work-btn-danger:hover { background:rgba(239,68,68,.2); }
+
+/* Invoice cards in Work tab */
+.inv-card { cursor:pointer; margin-bottom:10px; }
+.inv-card-head { display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:10px; }
+.inv-card-title { font-size:16px; font-weight:600; color:var(--text); }
+.inv-card-month { font-size:12px; color:var(--muted); }
+.inv-section-row { display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid var(--border); font-size:13px; }
+.inv-section-name { color:var(--muted); }
+.inv-section-total { color:var(--text); font-weight:500; }
+.inv-card-total { display:flex; justify-content:space-between; align-items:center; margin-top:10px; font-size:14px; font-weight:600; color:var(--text); }
+.inv-total-num { color:var(--gold); font-size:16px; }
+.inv-card-actions { margin-top:10px; display:flex; justify-content:flex-end; }
+.inv-copy-btn { font-size:12px; padding:5px 12px; }
