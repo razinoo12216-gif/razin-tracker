@@ -357,7 +357,7 @@
   <!-- Gym session editor -->
   <dialog id="gym-editor">
     <form id="gym-form">
-      <h2>Log Session</h2>
+      <h2 id="gym-editor-title">Log Session</h2>
       <div class="row">
         <label>Date<input name="date" type="date" required /></label>
         <label>Type
@@ -377,12 +377,13 @@
           <button type="button" class="dur-btn" data-mins="60">60m</button>
           <button type="button" class="dur-btn" data-mins="90">90m</button>
         </div>
-        <input name="duration" type="number" placeholder="or enter mins" inputmode="numeric" />
+        <input name="duration" type="number" id="gym-duration" placeholder="or enter mins" inputmode="numeric" />
       </label>
       <label>Notes (optional)<textarea name="notes" placeholder="What did you work on?" rows="2"></textarea></label>
       <label class="gym-completed-row"><input type="checkbox" name="completed" checked /> Completed this session</label>
-      <input type="hidden" name="id" />
+      <input type="hidden" name="id" id="gym-session-id" />
       <div class="row">
+        <button type="button" id="gym-delete-btn" style="display:none">Delete</button>
         <button type="button" id="gym-cancel-btn">Cancel</button>
         <button type="submit">Save</button>
       </div>
@@ -395,14 +396,14 @@
   <dialog id="body-metric-editor">
     <form id="body-metric-form">
       <h2>Log Body Metric</h2>
-      <label>Date<input name="date" type="date" required /></label>
+      <label>Date<input id="bm-date" name="date" type="date" required /></label>
       <div class="row">
         <label>Weight (kg)<input name="weight" type="number" step="0.1" placeholder="e.g. 82.5" inputmode="decimal" /></label>
         <label>Body fat %<input name="body_fat" type="number" step="0.1" placeholder="e.g. 18.5" inputmode="decimal" /></label>
       </div>
       <label>Notes (optional)<textarea name="notes" placeholder="How you're feeling, conditions..." rows="2"></textarea></label>
       <div class="row">
-        <button type="button" id="body-metric-cancel-btn">Cancel</button>
+        <button type="button" id="bm-cancel-btn">Cancel</button>
         <button type="submit">Save</button>
       </div>
     </form>
