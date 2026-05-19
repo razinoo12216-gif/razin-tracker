@@ -19,6 +19,7 @@ let tasks = [];
 let tickets = [];
 let debts = [];
 let gymSessions = [];
+let bodyMetrics = [];
 let debtPayments = [];
 let editingId = null;
 let editingReviewId = null;
@@ -240,7 +241,7 @@ async function loadAll() {
     list.innerHTML = '<div class="empty error">Supabase keys not set.</div>';
     return;
   }
-  const [eRes, rRes, iRes, tRes, kRes, dRes, pRes, gRes] = await Promise.all([
+  const [eRes, rRes, iRes, tRes, kRes, dRes, pRes, gRes], mRes]= await Promise.all([
     window.db.from('projects').select('*').order('created_at', { ascending: false }),
     window.db.from('reviews').select('*').order('week_of', { ascending: false }),
     window.db.from('invoices').select('*').order('month', { ascending: false }),
@@ -249,6 +250,7 @@ async function loadAll() {
     window.db.from('debts').select('*').order('created_at', { ascending: false }),
     window.db.from('debt_payments').select('*').order('date', { ascending: false }),
     window.db.from('gym_sessions').select('*').order('date', { ascending: false }),
+    window.db.from('body_metrics').select('*').order('date', { ascending: false }),
   ]);
   if (eRes.error) {
     list.innerHTML = `<div class="empty error">Load failed: ${esc(eRes.error.message)}</div>`;
@@ -267,6 +269,7 @@ async function loadAll() {
   debts = (dRes && !dRes.error) ? (dRes.data || []) : [];
   debtPayments = (pRes && !pRes.error) ? (pRes.data || []) : [];
   gymSessions = (gRes && !gRes.error) ? (gRes.data || []) : [];
+  bodyMetrics = (mRes && !mRes.error) ? (mRes.data || []) : [];
   rebuildMonthSelect();
   rebuildSecondaryFilter();
   render();
@@ -2243,82 +2246,127 @@ loadAll();
 
 
 // ─── GYM ──────────────────────────────────────────────────────────────────────
-function gymStreak() {
-  if (!gymSessions.length) return 0;
-  const trained = new Set(gymSessions.map(s => s.date));
-  let streak = 0;
-  let d = new Date();
+function gymStreaks() {
+  const trained = new Set(gymSessions.filter(s => s.completed !== false).map(s => s.date));
+  if (!trained.size) return { current: 0, longest: 0 };
   const todayStr = todayISO();
+  let cur = 0, d = new Date();
   if (!trained.has(todayStr)) d.setDate(d.getDate() - 1);
   while (true) {
-    const dateStr = d.toISOString().slice(0, 10);
-    if (trained.has(dateStr)) { streak++; d.setDate(d.getDate() - 1); }
-    else break;
+    const ds = d.toISOString().slice(0, 10);
+    if (trained.has(ds)) { cur++; d.setDate(d.getDate() - 1); } else break;
   }
-  return streak;
+  const sorted = [...trained].sort();
+  let longest = 0, run = 0, prev = null;
+  for (const ds of sorted) {
+    if (prev) {
+      const pd = new Date(prev); pd.setDate(pd.getDate() + 1);
+      run = pd.toISOString().slice(0, 10) === ds ? run + 1 : 1;
+    } else { run = 1; }
+    if (run > longest) longest = run;
+    prev = ds;
+  }
+  return { current: cur, longest: Math.max(longest, cur) };
 }
 
 function renderGym() {
   const list = document.getElementById('list');
   const todayStr = todayISO();
   const now = new Date();
-  const thisMonth = gymSessions.filter(s => s.date && s.date.slice(0, 7) === todayStr.slice(0, 7));
-  const streak = gymStreak();
+  const yr = now.getFullYear(), mo = now.getMonth();
+  const moStr = yr + '-' + String(mo + 1).padStart(2, '0');
+
+  const completedDates = new Set(gymSessions.filter(s => s.completed !== false).map(s => s.date));
+  const thisMonthSessions = gymSessions.filter(s => s.date && s.date.slice(0, 7) === moStr);
+  const thisMonthCompleted = thisMonthSessions.filter(s => s.completed !== false).length;
+  const { current: streak, longest } = gymStreaks();
+
+  // Completion rate: completed vs target (5/week)
+  const weeksInMonth = Math.ceil((new Date(yr, mo + 1, 0).getDate()) / 7);
+  const target = weeksInMonth * 5;
+  const rate = target > 0 ? Math.round((thisMonthCompleted / target) * 100) : 0;
+
+  // Weekly dots (Mon–Sun)
   const weekStart = new Date(now);
-  const day = weekStart.getDay();
-  weekStart.setDate(weekStart.getDate() - (day === 0 ? 6 : day - 1));
+  const dow = weekStart.getDay();
+  weekStart.setDate(weekStart.getDate() - (dow === 0 ? 6 : dow - 1));
   const weekDays = [];
   for (let i = 0; i < 7; i++) {
-    const d = new Date(weekStart);
-    d.setDate(weekStart.getDate() + i);
-    weekDays.push(d.toISOString().slice(0, 10));
-  }
-  const trainedDates = new Set(gymSessions.map(s => s.date));
-  const weekCount = weekDays.slice(0, 5).filter(d => trainedDates.has(d)).length;
-  const heatDays = [];
-  for (let i = 34; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(now.getDate() - i);
-    heatDays.push(d.toISOString().slice(0, 10));
+    const wd = new Date(weekStart); wd.setDate(weekStart.getDate() + i);
+    weekDays.push(wd.toISOString().slice(0, 10));
   }
   const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
   const weekDotsHtml = weekDays.map((d, i) => {
-    const done = trainedDates.has(d);
-    const isFuture = d > todayStr;
-    return '<div class="gym-week-dot' + (done ? ' done' : '') + (isFuture ? ' future' : '') + '">' + dayLabels[i] + '</div>';
+    const done = completedDates.has(d);
+    const future = d > todayStr;
+    return '<div class="gym-week-dot' + (done ? ' done' : '') + (future ? ' future' : '') + '">' + dayLabels[i] + '</div>';
   }).join('');
-  const heatHtml = heatDays.map(d => {
-    const isTrained = trainedDates.has(d);
-    const isToday = d === todayStr;
-    return '<div class="gym-heat-cell' + (isTrained ? ' trained' : '') + (isToday ? ' today' : '') + '"></div>';
-  }).join('');
-  const recent = [...gymSessions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
+
+  // Monthly calendar heatmap
+  const firstDay = new Date(yr, mo, 1);
+  const daysInMonth = new Date(yr, mo + 1, 0).getDate();
+  const offset = (firstDay.getDay() + 6) % 7;
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  let calHtml = '<div class="gym-cal-header-row">' + dayLabels.map(l => '<div class="gym-cal-lbl">' + l + '</div>').join('') + '</div>';
+  calHtml += '<div class="gym-heatmap">';
+  for (let i = 0; i < offset; i++) calHtml += '<div class="gym-heat-cell empty"></div>';
+  for (let day = 1; day <= daysInMonth; day++) {
+    const ds = yr + '-' + String(mo + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+    const trained = completedDates.has(ds);
+    const isToday = ds === todayStr;
+    const future = ds > todayStr;
+    calHtml += '<div class="gym-heat-cell' + (trained ? ' trained' : '') + (isToday ? ' today' : '') + (future ? ' future' : '') + '">'
+      + '<span class="gym-cal-num">' + day + '</span></div>';
+  }
+  calHtml += '</div>';
+
+  // Recent sessions (last 8)
+  const recent = [...gymSessions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8);
   const typeColors = { weights: '#3b82f6', cardio: '#f97316', hiit: '#ef4444', sport: '#a855f7', other: '#6b7280' };
   const sessionCardsHtml = recent.map(s => {
     const col = typeColors[s.type] || typeColors.other;
     const dur = s.duration ? s.duration + 'm' : '';
-    return '<div class="gym-session-card" onclick="openGymEditor(\'' + s.id + '\')">'
+    const done = s.completed !== false;
+    return '<div class="gym-session-card" onclick="openGymEditor('' + s.id + '')">'
+      + '<div class="gym-session-tick' + (done ? ' done' : '') + '">' + (done ? '✓' : '○') + '</div>'
       + '<div class="gym-session-type" style="background:' + col + '22;color:' + col + '">' + (s.type || 'session') + '</div>'
       + '<div class="gym-session-info">'
       + '<div class="gym-session-date">' + shortDate(s.date) + (dur ? ' · ' + dur : '') + '</div>'
       + (s.notes ? '<div class="gym-session-notes">' + esc(s.notes) + '</div>' : '')
       + '</div></div>';
   }).join('');
+
+  // Body metrics - last entry + log button
+  const lastMetric = bodyMetrics.length ? bodyMetrics[0] : null;
+  const metricsHtml = '<div class="gym-metrics-row">'
+    + '<div class="gym-metric-card">'
+    + '<span class="gym-metric-val">' + (lastMetric && lastMetric.weight ? lastMetric.weight + ' kg' : '—') + '</span>'
+    + '<span class="gym-metric-label">Weight</span>'
+    + (lastMetric ? '<span class="gym-metric-date">' + shortDate(lastMetric.date) + '</span>' : '')
+    + '</div>'
+    + '<div class="gym-metric-card">'
+    + '<span class="gym-metric-val">' + (lastMetric && lastMetric.body_fat ? lastMetric.body_fat + '%' : '—') + '</span>'
+    + '<span class="gym-metric-label">Body fat</span>'
+    + '</div>'
+    + '<button class="gym-metric-btn" onclick="openBodyMetricEditor()">+ Log</button>'
+    + '</div>';
+
   const badge = document.getElementById('tc-gym');
-  if (badge) badge.textContent = streak > 0 ? streak + '🔥' : (trainedDates.has(todayStr) ? '✓' : '');
+  if (badge) badge.textContent = streak > 0 ? streak + '🔥' : (completedDates.has(todayStr) ? '✓' : '');
+
   list.innerHTML = '<div class="gym-header">'
-    + '<div class="gym-stat"><span class="gym-stat-val">' + thisMonth.length + '</span><span class="gym-stat-label">This month</span></div>'
+    + '<div class="gym-stat"><span class="gym-stat-val">' + thisMonthCompleted + '</span><span class="gym-stat-label">This month</span></div>'
     + '<div class="gym-stat"><span class="gym-stat-val">' + (streak > 0 ? streak + ' 🔥' : streak) + '</span><span class="gym-stat-label">Streak</span></div>'
-    + '<div class="gym-stat"><span class="gym-stat-val">' + weekCount + '/5</span><span class="gym-stat-label">This week</span></div>'
-    + '<div class="gym-stat"><span class="gym-stat-val">' + gymSessions.length + '</span><span class="gym-stat-label">All time</span></div>'
+    + '<div class="gym-stat"><span class="gym-stat-val">' + longest + '</span><span class="gym-stat-label">Best streak</span></div>'
+    + '<div class="gym-stat"><span class="gym-stat-val">' + rate + '%</span><span class="gym-stat-label">Completion</span></div>'
     + '</div>'
     + '<button class="gym-log-btn" onclick="openGymEditor()">+ Log Session</button>'
     + '<div class="gym-week">' + weekDotsHtml + '</div>'
-    + '<p class="gym-section-title">Last 35 days</p>'
-    + '<div class="gym-heatmap">' + heatHtml + '</div>'
-    + (recent.length
-      ? '<p class="gym-section-title">Recent sessions</p>' + sessionCardsHtml
-      : '<p class="gym-empty">No sessions yet — hit Log Session to start.</p>');
+    + '<p class="gym-section-title">' + monthNames[mo] + ' ' + yr + '</p>'
+    + calHtml
+    + '<p class="gym-section-title">Body</p>'
+    + metricsHtml
+    + (recent.length ? '<p class="gym-section-title">Recent sessions</p>' + sessionCardsHtml : '<p class="gym-empty">No sessions yet — hit Log Session to start.</p>');
 }
 
 function openGymEditor(id) {
@@ -2326,6 +2374,7 @@ function openGymEditor(id) {
   const form = document.getElementById('gym-form');
   form.reset();
   dlg.querySelectorAll('.dur-btn').forEach(b => b.classList.remove('selected'));
+  form.elements.completed.checked = true;
   if (id) {
     const s = gymSessions.find(x => x.id === id);
     if (!s) return;
@@ -2334,6 +2383,7 @@ function openGymEditor(id) {
     form.elements.type.value = s.type || 'weights';
     form.elements.duration.value = s.duration || '';
     form.elements.notes.value = s.notes || '';
+    form.elements.completed.checked = s.completed !== false;
     if (s.duration) {
       const btn = dlg.querySelector('.dur-btn[data-mins="' + s.duration + '"]');
       if (btn) btn.classList.add('selected');
@@ -2342,6 +2392,14 @@ function openGymEditor(id) {
     form.elements.date.value = todayISO();
     form.elements.type.value = 'weights';
   }
+  dlg.showModal();
+}
+
+function openBodyMetricEditor() {
+  const dlg = document.getElementById('body-metric-editor');
+  const form = document.getElementById('body-metric-form');
+  form.reset();
+  form.elements.date.value = todayISO();
   dlg.showModal();
 }
 
@@ -2354,6 +2412,7 @@ document.getElementById('gym-form').addEventListener('submit', async e => {
     type: f.elements.type.value,
     duration: f.elements.duration.value ? parseInt(f.elements.duration.value, 10) : null,
     notes: f.elements.notes.value.trim() || null,
+    completed: f.elements.completed.checked,
   };
   if (id) payload.id = id;
   const { error } = id
@@ -2370,6 +2429,29 @@ document.getElementById('gym-cancel-btn').addEventListener('click', () => {
 
 document.getElementById('gym-editor').addEventListener('click', e => {
   if (e.target === document.getElementById('gym-editor')) document.getElementById('gym-editor').close();
+});
+
+document.getElementById('body-metric-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target;
+  const payload = {
+    date: f.elements.date.value,
+    weight: f.elements.weight.value ? parseFloat(f.elements.weight.value) : null,
+    body_fat: f.elements.body_fat.value ? parseFloat(f.elements.body_fat.value) : null,
+    notes: f.elements.notes.value.trim() || null,
+  };
+  const { error } = await window.db.from('body_metrics').insert(payload);
+  if (error) { alert('Save failed: ' + error.message); return; }
+  document.getElementById('body-metric-editor').close();
+  await loadAll();
+});
+
+document.getElementById('body-metric-cancel-btn').addEventListener('click', () => {
+  document.getElementById('body-metric-editor').close();
+});
+
+document.getElementById('body-metric-editor').addEventListener('click', e => {
+  if (e.target === document.getElementById('body-metric-editor')) document.getElementById('body-metric-editor').close();
 });
 
 document.querySelectorAll('.dur-btn').forEach(btn => {
