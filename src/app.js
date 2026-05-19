@@ -25,6 +25,9 @@ let editingInvoiceId = null;
 let editingTaskId = null;
 let editingTicketId = null;
 let ticketKindView = 'personal';
+let workView = 'tasks';
+let editingWorkTaskId = null;
+let editingWorkCompanyId = null;
 let editingDebtId = null;
 let selectedDebtForPayment = null;
 let currentInvoiceSections = [];
@@ -388,7 +391,7 @@ function render() {
   if (activeTab === 'today') return renderToday();
   if (activeTab === 'drive') return renderDrive();
   if (activeTab === 'review') return renderReviews();
-  if (activeTab === 'invoice') return renderInvoices();
+  if (activeTab === 'invoice') return renderWork();
   if (activeTab === 'ticket') return renderTickets();
   if (activeTab === 'debt') return renderDebts();
   if (activeTab === 'potential') return renderPotentials(potentials);
@@ -1519,54 +1522,170 @@ function renderReview(r) {
     </div>`;
 }
 
-function renderInvoices() {
-  if (invoices.length === 0) {
-    list.innerHTML = '<div class="empty">No invoices yet. Hit <strong>+ New</strong> to draft this month.</div>';
+function renderWork() {
+  const companies = entries.filter(e => e.type === 'work-company');
+  const tasks     = entries.filter(e => e.type === 'work-task');
+  if (workView === 'tasks') renderWorkTasksView(tasks, companies);
+  else renderWorkCompaniesView(companies);
+}
+
+function renderWorkTasksView(tasks, companies) {
+  const pending = tasks.filter(t => t.status !== 'done');
+  const done    = tasks.filter(t => t.status === 'done');
+  const toggle  = `<div class="ticket-type-filter"><button class="ticket-filter active" onclick="workView='tasks';renderWork()">Tasks</button><button class="ticket-filter" onclick="workView='companies';renderWork()">Companies</button></div>`;
+  if (tasks.length === 0) {
+    list.innerHTML = `<div class="work-header-bar">${toggle}<button class="work-fab" onclick="openWorkTaskEditor()">+ Task</button></div><div class="empty">No tasks yet. Hit <strong>+ Task</strong> to add one.</div>`;
     return;
   }
-  list.innerHTML = invoices.map(renderInvoice).join('');
-  list.querySelectorAll('.card.invoice').forEach((el) => {
-    el.addEventListener('click', (e) => {
-      if (e.target.closest('.copy-btn')) return;
-      openInvoiceEditor(el.dataset.id);
+  list.innerHTML = `<div class="work-header-bar">${toggle}<button class="work-fab" onclick="openWorkTaskEditor()">+ Task</button></div>${pending.map(t => renderWorkTaskCard(t, companies)).join('')}${done.length ? `<div class="work-section-divider">Completed (${done.length})</div>${done.map(t => renderWorkTaskCard(t, companies)).join('')}` : ''}`;
+}
+
+function renderWorkCompaniesView(companies) {
+  const toggle = `<div class="ticket-type-filter"><button class="ticket-filter" onclick="workView='tasks';renderWork()">Tasks</button><button class="ticket-filter active" onclick="workView='companies';renderWork()">Companies</button></div>`;
+  const chKey  = localStorage.getItem('ch_api_key') || '';
+  list.innerHTML = `<div class="work-header-bar">${toggle}<button class="work-fab" onclick="openWorkCompanyEditor()">+ Company</button></div><div class="work-ch-bar"><span class="work-ch-label">CH API Key</span><input type="password" id="ch-key-input" value="${esc(chKey)}" placeholder="Your Companies House API key"/><button class="work-ch-save" onclick="saveCHKey()">Save</button></div>${companies.length === 0 ? '<div class="empty">No companies yet. Hit <strong>+ Company</strong> to add one.</div>' : ''}<div class="work-companies-grid">${companies.map(c => renderWorkCompanyCard(c)).join('')}</div>`;
+}
+
+function renderWorkTaskCard(t, companies) {
+  let meta = {};
+  try { meta = JSON.parse(t.notes || '{}'); } catch (_) {}
+  const company  = companies.find(c => c.id === meta.company_id);
+  const co       = company ? esc(company.name) : '';
+  const isDone   = t.status === 'done';
+  const dueBadge = meta.due ? workDaysBadge(meta.due) : '';
+  const priCls   = {high:'work-pri-high',medium:'work-pri-med',low:'work-pri-low'}[meta.priority] || 'work-pri-med';
+  return `<div class="card work-task-card${isDone?' work-task-done':''}" onclick="openWorkTaskEditor('${t.id}')"><div class="work-task-row"><button class="work-check${isDone?' checked':''}" onclick="event.stopPropagation();toggleWorkTaskDone('${t.id}',${isDone})">${isDone?'&#10003;':''}</button><span class="work-task-name">${esc(t.name)}</span>${dueBadge}</div>${(co||meta.category||meta.priority)?`<div class="work-task-tags">${co?`<span class="work-tag">${co}</span>`:''} ${meta.category?`<span class="work-tag">${esc(meta.category)}</span>`:''} ${meta.priority?`<span class="work-tag ${priCls}">${esc(meta.priority)}</span>`:''}</div>`:''}</div>`;
+}
+
+function renderWorkCompanyCard(c) {
+  let meta = {};
+  try { meta = JSON.parse(c.notes || '{}'); } catch (_) {}
+  const status = c.status || 'other';
+  const col    = status === 'raz' ? 'var(--gold)' : status === 'partial' ? '#4A9EF5' : 'var(--border)';
+  const owner  = {raz:'Raz',partial:'Partial',other:'Other'}[status] || 'Other';
+  const accBdg = meta.accounts_due     ? workDaysBadge(meta.accounts_due)     : '<span class="work-na">—</span>';
+  const conBdg = meta.confirmation_due ? workDaysBadge(meta.confirmation_due) : '<span class="work-na">—</span>';
+  return `<div class="card work-company-card" style="border-left:3px solid ${col}" onclick="openWorkCompanyEditor('${c.id}')"><div class="work-co-head"><span class="work-co-name">${esc(c.name)}</span><span class="work-owner-badge" style="color:${col};border-color:${col}">${owner}</span></div>${meta.company_number?`<div class="work-ch-ref">CH: ${esc(meta.company_number)}</div>`:''}<div class="work-due-row"><span class="work-due-lbl">Accounts due</span>${accBdg}</div><div class="work-due-row"><span class="work-due-lbl">Conf. statement</span>${conBdg}</div></div>`;
+}
+
+function workDaysBadge(dateStr) {
+  if (!dateStr) return '';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const due   = new Date(dateStr); due.setHours(0,0,0,0);
+  const diff  = Math.round((due - today) / 86400000);
+  const lbl   = diff < 0 ? Math.abs(diff)+'d overdue' : diff === 0 ? 'Today' : diff+'d';
+  const cls   = diff < 0 ? 'work-badge-overdue' : diff <= 7 ? 'work-badge-urgent' : diff <= 30 ? 'work-badge-soon' : 'work-badge-ok';
+  return `<span class="work-days-badge ${cls}">${lbl}</span>`;
+}
+
+function saveCHKey() {
+  const val = (document.getElementById('ch-key-input') || {}).value || '';
+  localStorage.setItem('ch_api_key', val.trim());
+  const btn = document.querySelector('.work-ch-save');
+  if (btn) { btn.textContent = 'Saved!'; setTimeout(() => { btn.textContent = 'Save'; }, 1500); }
+}
+
+async function lookupCH(num) {
+  const key = localStorage.getItem('ch_api_key') || '';
+  if (!key) { alert('Add your Companies House API key first (visible in the Companies view).'); return null; }
+  try {
+    const res = await fetch('https://api.company-information.service.gov.uk/company/' + encodeURIComponent(num.trim()), {
+      headers: { Authorization: 'Basic ' + btoa(key + ':') }
     });
-  });
-  list.querySelectorAll('.card.invoice .copy-btn').forEach((btn) => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const inv = invoices.find((x) => x.id === btn.dataset.id);
-      if (!inv) return;
-      await copyInvoiceText(formatInvoiceForCopy(inv), btn);
-    });
+    if (!res.ok) { alert('Company not found (HTTP ' + res.status + ')'); return null; }
+    return await res.json();
+  } catch (err) { alert('CH lookup failed: ' + err.message); return null; }
+}
+
+function openWorkTaskEditor(id) {
+  editingWorkTaskId = id || null;
+  const companies = entries.filter(e => e.type === 'work-company');
+  const t = id ? entries.find(e => e.id === id) : null;
+  let meta = {};
+  try { meta = JSON.parse((t && t.notes) || '{}'); } catch (_) {}
+  const coOpts = companies.map(c => `<option value="${c.id}"${meta.company_id===c.id?' selected':''}>${esc(c.name)}</option>`).join('');
+  showWorkModal(`<h3 class="work-modal-title">${t ? 'Edit Task' : 'New Task'}</h3><form id="work-task-form"><label class="work-lbl">Description</label><textarea class="work-input" name="name" required rows="3" placeholder="What needs to be done?">${t ? esc(t.name) : ''}</textarea><label class="work-lbl">Company</label><select class="work-input" name="company_id"><option value="">— None —</option>${coOpts}</select><div class="work-row-2"><div><label class="work-lbl">Category</label><input class="work-input" name="category" value="${esc(meta.category||'')}" placeholder="e.g. Accounts, Legal"/></div><div><label class="work-lbl">Priority</label><select class="work-input" name="priority"><option value="high"${meta.priority==='high'?' selected':''}>High</option><option value="medium"${meta.priority==='medium'||!meta.priority?' selected':''}>Medium</option><option value="low"${meta.priority==='low'?' selected':''}>Low</option></select></div></div><label class="work-lbl">Due Date</label><input class="work-input" type="date" name="due" value="${meta.due||''}"/><label class="work-lbl">Notes</label><textarea class="work-input" name="task_notes" rows="2" placeholder="Additional notes...">${esc(meta.notes||'')}</textarea><div class="work-modal-actions">${t?`<button type="button" class="work-btn-danger" onclick="deleteWorkItem('${t.id}','task')">Delete</button>`:'<span></span>'}<div class="work-modal-right"><button type="button" class="work-btn-ghost" onclick="closeWorkModal()">Cancel</button><button type="submit" class="work-btn-primary" id="work-task-submit">Save</button></div></div></form>`);
+  document.getElementById('work-task-form').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const fd = new FormData(ev.target);
+    const name = (fd.get('name')||'').trim(); if (!name) return;
+    const notes = JSON.stringify({ company_id: fd.get('company_id')||null, category: (fd.get('category')||'').trim(), priority: fd.get('priority'), due: fd.get('due')||null, notes: (fd.get('task_notes')||'').trim() });
+    const payload = { name, type: 'work-task', status: (t && t.status) || 'pending', notes };
+    document.getElementById('work-task-submit').disabled = true;
+    if (editingWorkTaskId) { await window.db.from('projects').update(payload).eq('id', editingWorkTaskId); }
+    else { await window.db.from('projects').insert(payload); }
+    closeWorkModal(); await loadAll();
   });
 }
 
-function renderInvoice(inv) {
-  const sections = inv.sections || [];
-  const grand = sections.reduce((sum, s) => sum + parseNum(s.total), 0);
-  const monthLbl = monthLabel(inv.month);
-  const title = inv.title || monthLbl;
-  return `
-    <div class="card invoice" data-id="${esc(inv.id)}">
-      <div class="card-head">
-        <h3>${esc(title)}</h3>
-        <div class="invoice-head-right">
-          <span class="invoice-total">${fmt(grand)}</span>
-          <button type="button" class="copy-btn" data-id="${esc(inv.id)}">Copy</button>
-        </div>
-      </div>
-      <div class="invoice-sections-preview">
-        ${sections.filter((s) => s.title || s.total).map((s) => `
-          <div class="invoice-line">
-            <span>${esc(s.title || '—')}</span>
-            <span>${fmt(parseNum(s.total))}</span>
-          </div>
-        `).join('')}
-      </div>
-    </div>`;
+function openWorkCompanyEditor(id) {
+  editingWorkCompanyId = id || null;
+  const c = id ? entries.find(e => e.id === id) : null;
+  let meta = {};
+  try { meta = JSON.parse((c && c.notes) || '{}'); } catch (_) {}
+  showWorkModal(`<h3 class="work-modal-title">${c ? 'Edit Company' : 'New Company'}</h3><form id="work-company-form"><label class="work-lbl">Company Name</label><input class="work-input" name="name" required value="${c?esc(c.name):''}" placeholder="Company Ltd"/><label class="work-lbl">Ownership</label><select class="work-input" name="status"><option value="raz"${(c&&c.status)==='raz'?' selected':''}>Raz (Mine)</option><option value="partial"${(c&&c.status)==='partial'?' selected':''}>Partial</option><option value="other"${!c||(c&&c.status)==='other'?' selected':''}>Other</option></select><label class="work-lbl">Companies House Number</label><div class="work-ch-lookup-row"><input class="work-input" name="company_number" id="work-ch-num" value="${esc(meta.company_number||'')}" placeholder="e.g. 12345678"/><button type="button" class="work-btn-ghost" onclick="doWorkCHLookup()">Look up</button></div><div class="work-row-2"><div><label class="work-lbl">Accounts Due</label><input class="work-input" type="date" name="accounts_due" id="work-accounts-due" value="${meta.accounts_due||''}"/></div><div><label class="work-lbl">Conf. Statement Due</label><input class="work-input" type="date" name="confirmation_due" id="work-confirm-due" value="${meta.confirmation_due||''}"/></div></div><label class="work-lbl">Notes</label><textarea class="work-input" name="company_notes" rows="2">${esc(meta.notes||'')}</textarea><div class="work-modal-actions">${c?`<button type="button" class="work-btn-danger" onclick="deleteWorkItem('${c.id}','company')">Delete</button>`:'<span></span>'}<div class="work-modal-right"><button type="button" class="work-btn-ghost" onclick="closeWorkModal()">Cancel</button><button type="submit" class="work-btn-primary" id="work-co-submit">Save</button></div></div></form>`);
+  document.getElementById('work-company-form').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const fd = new FormData(ev.target);
+    const name = (fd.get('name')||'').trim(); if (!name) return;
+    const notes = JSON.stringify({ company_number: (fd.get('company_number')||'').trim(), accounts_due: fd.get('accounts_due')||null, confirmation_due: fd.get('confirmation_due')||null, notes: (fd.get('company_notes')||'').trim() });
+    const payload = { name, type: 'work-company', status: fd.get('status'), notes };
+    document.getElementById('work-co-submit').disabled = true;
+    if (editingWorkCompanyId) { await window.db.from('projects').update(payload).eq('id', editingWorkCompanyId); }
+    else { await window.db.from('projects').insert(payload); }
+    closeWorkModal(); await loadAll();
+  });
 }
 
-// ─── Entry editor ───────────────────────────────────────────
+async function doWorkCHLookup() {
+  const num = (document.getElementById('work-ch-num').value||'').trim();
+  if (!num) { alert('Enter a company number first.'); return; }
+  const btn = document.querySelector('.work-ch-lookup-row .work-btn-ghost');
+  if (btn) btn.textContent = 'Looking up…';
+  const data = await lookupCH(num);
+  if (btn) btn.textContent = 'Look up';
+  if (!data) return;
+  const accDue = data.accounts && data.accounts.next_due;
+  const conDue = data.confirmation_statement && data.confirmation_statement.next_due;
+  if (accDue) document.getElementById('work-accounts-due').value = accDue;
+  if (conDue) document.getElementById('work-confirm-due').value = conDue;
+  const ni = document.querySelector('#work-company-form input[name="name"]');
+  if (ni && !ni.value && data.company_name) ni.value = data.company_name;
+  alert('Filled from Companies House' + (data.company_name ? ': ' + data.company_name : '') + '.');
+}
+
+function showWorkModal(html) {
+  let ov = document.getElementById('work-modal-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'work-modal-overlay';
+    ov.className = 'work-modal-overlay';
+    ov.addEventListener('click', e => { if (e.target === ov) closeWorkModal(); });
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML = '<div id="work-modal" class="work-modal">' + html + '</div>';
+  ov.style.display = 'flex';
+}
+
+function closeWorkModal() {
+  const ov = document.getElementById('work-modal-overlay');
+  if (ov) ov.style.display = 'none';
+}
+
+async function toggleWorkTaskDone(id, isDone) {
+  const ns = isDone ? 'pending' : 'done';
+  entries.forEach(e => { if (e.id === id) e.status = ns; });
+  render();
+  await window.db.from('projects').update({ status: ns }).eq('id', id);
+}
+
+async function deleteWorkItem(id, type) {
+  if (!confirm('Delete this ' + type + '?')) return;
+  closeWorkModal();
+  entries = entries.filter(e => e.id !== id);
+  render();
+  await window.db.from('projects').delete().eq('id', id);
+}
 
 function applyTypeMode(type) {
   const isProject = type === 'project';
