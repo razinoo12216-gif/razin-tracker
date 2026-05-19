@@ -380,6 +380,7 @@
         <input name="duration" type="number" placeholder="or enter mins" inputmode="numeric" />
       </label>
       <label>Notes (optional)<textarea name="notes" placeholder="What did you work on?" rows="2"></textarea></label>
+      <label class="gym-completed-row"><input type="checkbox" name="completed" checked /> Completed this session</label>
       <input type="hidden" name="id" />
       <div class="row">
         <button type="button" id="gym-cancel-btn">Cancel</button>
@@ -389,7 +390,24 @@
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="src/supabase.js"></script>
+  <script src="src/supabase.js"></script
+  <!-- Body metric editor -->
+  <dialog id="body-metric-editor">
+    <form id="body-metric-form">
+      <h2>Log Body Metric</h2>
+      <label>Date<input name="date" type="date" required /></label>
+      <div class="row">
+        <label>Weight (kg)<input name="weight" type="number" step="0.1" placeholder="e.g. 82.5" inputmode="decimal" /></label>
+        <label>Body fat %<input name="body_fat" type="number" step="0.1" placeholder="e.g. 18.5" inputmode="decimal" /></label>
+      </div>
+      <label>Notes (optional)<textarea name="notes" placeholder="How you're feeling, conditions..." rows="2"></textarea></label>
+      <div class="row">
+        <button type="button" id="body-metric-cancel-btn">Cancel</button>
+        <button type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
+>
   <script src="src/app.js"></script>
 </body>
 </html>
