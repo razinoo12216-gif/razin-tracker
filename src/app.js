@@ -1174,7 +1174,7 @@ ticketForm.addEventListener('submit', async (e) => {
     const newTicket = { id: newId, ...payload };
     tickets.unshift({ ...newTicket, created_at: new Date().toISOString() });
     render();
-    const { error } = await window.db.from('tickets').insert(newTicket);
+    const { error } = await window.db.from('tickets').upsert(newTicket, { onConflict: 'id' });
     if (error) {
       tickets = tickets.filter((x) => x.id !== newId);
       render();
