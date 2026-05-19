@@ -2245,219 +2245,232 @@ document.querySelectorAll('.tab').forEach((btn) => {
 loadAll();
 
 
-// ─── GYM ──────────────────────────────────────────────────────────────────────
+// ─── GYM ────────────────────────────────────────────────────────────────────
+
 function gymStreaks() {
-  const trained = new Set(gymSessions.filter(s => s.completed !== false).map(s => s.date));
-  if (!trained.size) return { current: 0, longest: 0 };
-  const todayStr = todayISO();
-  let cur = 0, d = new Date();
-  if (!trained.has(todayStr)) d.setDate(d.getDate() - 1);
-  while (true) {
-    const ds = d.toISOString().slice(0, 10);
-    if (trained.has(ds)) { cur++; d.setDate(d.getDate() - 1); } else break;
+  if (!gymSessions.length) return { current: 0, longest: 0 };
+  const dates = [...new Set(gymSessions.map(function(s) { return s.date; }))].sort();
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const lastDate = dates[dates.length - 1];
+  let current = 0;
+  if (lastDate === today || lastDate === yesterday) {
+    let streak = 1;
+    for (let i = dates.length - 1; i > 0; i--) {
+      const diff = (new Date(dates[i]) - new Date(dates[i - 1])) / 86400000;
+      if (diff === 1) { streak++; } else { break; }
+    }
+    current = streak;
   }
-  const sorted = [...trained].sort();
-  let longest = 0, run = 0, prev = null;
-  for (const ds of sorted) {
-    if (prev) {
-      const pd = new Date(prev); pd.setDate(pd.getDate() + 1);
-      run = pd.toISOString().slice(0, 10) === ds ? run + 1 : 1;
-    } else { run = 1; }
-    if (run > longest) longest = run;
-    prev = ds;
+  let longest = 0, cur = 1;
+  for (let i = 1; i < dates.length; i++) {
+    const diff = (new Date(dates[i]) - new Date(dates[i - 1])) / 86400000;
+    if (diff === 1) { cur++; if (cur > longest) longest = cur; } else { cur = 1; }
   }
-  return { current: cur, longest: Math.max(longest, cur) };
+  if (dates.length) longest = Math.max(longest, current, 1);
+  return { current: current, longest: longest };
 }
 
 function renderGym() {
-  const list = document.getElementById('list');
-  const todayStr = todayISO();
+  const typeColors = { push: '#ef4444', pull: '#3b82f6', legs: '#8b5cf6', cardio: '#f97316', full: '#10b981', other: '#6b7280' };
   const now = new Date();
-  const yr = now.getFullYear(), mo = now.getMonth();
-  const moStr = yr + '-' + String(mo + 1).padStart(2, '0');
+  const todayStr = now.toISOString().slice(0, 10);
+  const monthStr = now.toISOString().slice(0, 7);
+  const streaks = gymStreaks();
+  const thisMonth = gymSessions.filter(function(s) { return s.date && s.date.startsWith(monthStr); }).length;
+  const mon = new Date(now); mon.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+  const monStr = mon.toISOString().slice(0, 10);
+  const completedCount = gymSessions.filter(function(s) { return s.completed !== false; }).length;
+  const completionPct = gymSessions.length ? Math.round(completedCount / gymSessions.length * 100) : 0;
 
-  const completedDates = new Set(gymSessions.filter(s => s.completed !== false).map(s => s.date));
-  const thisMonthSessions = gymSessions.filter(s => s.date && s.date.slice(0, 7) === moStr);
-  const thisMonthCompleted = thisMonthSessions.filter(s => s.completed !== false).length;
-  const { current: streak, longest } = gymStreaks();
-
-  // Completion rate: completed vs target (5/week)
-  const weeksInMonth = Math.ceil((new Date(yr, mo + 1, 0).getDate()) / 7);
-  const target = weeksInMonth * 5;
-  const rate = target > 0 ? Math.round((thisMonthCompleted / target) * 100) : 0;
-
-  // Weekly dots (Mon–Sun)
-  const weekStart = new Date(now);
-  const dow = weekStart.getDay();
-  weekStart.setDate(weekStart.getDate() - (dow === 0 ? 6 : dow - 1));
-  const weekDays = [];
-  for (let i = 0; i < 7; i++) {
-    const wd = new Date(weekStart); wd.setDate(weekStart.getDate() + i);
-    weekDays.push(wd.toISOString().slice(0, 10));
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDow = new Date(year, month, 1).getDay();
+  const adjustedFirst = firstDow === 0 ? 6 : firstDow - 1;
+  const gymDates = new Set(gymSessions.map(function(s) { return s.date; }));
+  let heatCells = '';
+  for (let i = 0; i < adjustedFirst; i++) { heatCells += '<div class="gym-heat-cell empty"></div>'; }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    let cls = 'gym-heat-cell';
+    if (ds === todayStr) { cls += ' today'; }
+    else if (ds > todayStr) { cls += ' future'; }
+    else if (gymDates.has(ds)) { cls += ' trained'; }
+    heatCells += '<div class="' + cls + '" title="' + ds + '"><span class="gym-cal-num">' + d + '</span></div>';
   }
-  const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-  const weekDotsHtml = weekDays.map((d, i) => {
-    const done = completedDates.has(d);
-    const future = d > todayStr;
-    return '<div class="gym-week-dot' + (done ? ' done' : '') + (future ? ' future' : '') + '">' + dayLabels[i] + '</div>';
-  }).join('');
 
-  // Monthly calendar heatmap
-  const firstDay = new Date(yr, mo, 1);
-  const daysInMonth = new Date(yr, mo + 1, 0).getDate();
-  const offset = (firstDay.getDay() + 6) % 7;
-  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  let calHtml = '<div class="gym-cal-header-row">' + dayLabels.map(l => '<div class="gym-cal-lbl">' + l + '</div>').join('') + '</div>';
-  calHtml += '<div class="gym-heatmap">';
-  for (let i = 0; i < offset; i++) calHtml += '<div class="gym-heat-cell empty"></div>';
-  for (let day = 1; day <= daysInMonth; day++) {
-    const ds = yr + '-' + String(mo + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
-    const trained = completedDates.has(ds);
-    const isToday = ds === todayStr;
-    const future = ds > todayStr;
-    calHtml += '<div class="gym-heat-cell' + (trained ? ' trained' : '') + (isToday ? ' today' : '') + (future ? ' future' : '') + '">'
-      + '<span class="gym-cal-num">' + day + '</span></div>';
-  }
-  calHtml += '</div>';
-
-  // Recent sessions (last 8)
-  const recent = [...gymSessions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8);
-  const typeColors = { weights: '#3b82f6', cardio: '#f97316', hiit: '#ef4444', sport: '#a855f7', other: '#6b7280' };
-  const sessionCardsHtml = recent.map(s => {
+  const recent = gymSessions.slice().sort(function(a, b) { return b.date > a.date ? 1 : -1; }).slice(0, 10);
+  let sessionCardsHtml = '';
+  for (let i = 0; i < recent.length; i++) {
+    const s = recent[i];
     const col = typeColors[s.type] || typeColors.other;
     const dur = s.duration ? s.duration + 'm' : '';
     const done = s.completed !== false;
-    return '<div class="gym-session-card" onclick="openGymEditor('' + s.id + '')">'
-      + '<div class="gym-session-tick' + (done ? ' done' : '') + '">' + (done ? '✓' : '○') + '</div>'
-      + '<div class="gym-session-type" style="background:' + col + '22;color:' + col + '">' + (s.type || 'session') + '</div>'
-      + '<div class="gym-session-info">'
-      + '<div class="gym-session-date">' + shortDate(s.date) + (dur ? ' · ' + dur : '') + '</div>'
-      + (s.notes ? '<div class="gym-session-notes">' + esc(s.notes) + '</div>' : '')
-      + '</div></div>';
-  }).join('');
+    const tickCls = done ? 'gym-session-tick done' : 'gym-session-tick';
+    const tickChar = done ? '&#10003;' : '&#9675;';
+    sessionCardsHtml += '<div class="gym-session-card" data-id="' + s.id + '">';
+    sessionCardsHtml += '<div class="' + tickCls + '">' + tickChar + '</div>';
+    sessionCardsHtml += '<div class="gym-session-type" style="background:' + col + '22;color:' + col + '">' + (s.type || 'session') + '</div>';
+    sessionCardsHtml += '<div class="gym-session-info">';
+    sessionCardsHtml += '<div class="gym-session-date">' + shortDate(s.date) + (dur ? ' &middot; ' + dur : '') + '</div>';
+    if (s.notes) { sessionCardsHtml += '<div class="gym-session-notes">' + esc(s.notes) + '</div>'; }
+    sessionCardsHtml += '</div></div>';
+  }
 
-  // Body metrics - last entry + log button
   const lastMetric = bodyMetrics.length ? bodyMetrics[0] : null;
-  const metricsHtml = '<div class="gym-metrics-row">'
-    + '<div class="gym-metric-card">'
-    + '<span class="gym-metric-val">' + (lastMetric && lastMetric.weight ? lastMetric.weight + ' kg' : '—') + '</span>'
-    + '<span class="gym-metric-label">Weight</span>'
-    + (lastMetric ? '<span class="gym-metric-date">' + shortDate(lastMetric.date) + '</span>' : '')
-    + '</div>'
-    + '<div class="gym-metric-card">'
-    + '<span class="gym-metric-val">' + (lastMetric && lastMetric.body_fat ? lastMetric.body_fat + '%' : '—') + '</span>'
-    + '<span class="gym-metric-label">Body fat</span>'
-    + '</div>'
-    + '<button class="gym-metric-btn" onclick="openBodyMetricEditor()">+ Log</button>'
-    + '</div>';
+  const prevMetric = bodyMetrics.length > 1 ? bodyMetrics[1] : null;
+  let weightTrend = '';
+  let fatTrend = '';
+  if (lastMetric && prevMetric) {
+    const wDiff = (parseFloat(lastMetric.weight_kg) - parseFloat(prevMetric.weight_kg)).toFixed(1);
+    weightTrend = parseFloat(wDiff) > 0 ? ' <span style="color:#ef4444">+' + wDiff + 'kg</span>' : ' <span style="color:#10b981">' + wDiff + 'kg</span>';
+    if (lastMetric.body_fat_pct && prevMetric.body_fat_pct) {
+      const fDiff = (parseFloat(lastMetric.body_fat_pct) - parseFloat(prevMetric.body_fat_pct)).toFixed(1);
+      fatTrend = parseFloat(fDiff) > 0 ? ' <span style="color:#ef4444">+' + fDiff + '%</span>' : ' <span style="color:#10b981">' + fDiff + '%</span>';
+    }
+  }
 
-  const badge = document.getElementById('tc-gym');
-  if (badge) badge.textContent = streak > 0 ? streak + '🔥' : (completedDates.has(todayStr) ? '✓' : '');
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const calTitle = monthNames[month] + ' ' + year;
 
-  list.innerHTML = '<div class="gym-header">'
-    + '<div class="gym-stat"><span class="gym-stat-val">' + thisMonthCompleted + '</span><span class="gym-stat-label">This month</span></div>'
-    + '<div class="gym-stat"><span class="gym-stat-val">' + (streak > 0 ? streak + ' 🔥' : streak) + '</span><span class="gym-stat-label">Streak</span></div>'
-    + '<div class="gym-stat"><span class="gym-stat-val">' + longest + '</span><span class="gym-stat-label">Best streak</span></div>'
-    + '<div class="gym-stat"><span class="gym-stat-val">' + rate + '%</span><span class="gym-stat-label">Completion</span></div>'
-    + '</div>'
-    + '<button class="gym-log-btn" onclick="openGymEditor()">+ Log Session</button>'
-    + '<div class="gym-week">' + weekDotsHtml + '</div>'
-    + '<p class="gym-section-title">' + monthNames[mo] + ' ' + yr + '</p>'
-    + calHtml
-    + '<p class="gym-section-title">Body</p>'
-    + metricsHtml
-    + (recent.length ? '<p class="gym-section-title">Recent sessions</p>' + sessionCardsHtml : '<p class="gym-empty">No sessions yet — hit Log Session to start.</p>');
+  let html = '';
+  html += '<div class="section-header"><h2>Gym</h2><button class="add-btn" onclick="openGymEditor(null)">+ Log Session</button></div>';
+  html += '<div class="gym-header">';
+  html += '<div class="gym-stat"><div class="gym-stat-val">' + thisMonth + '</div><div class="gym-stat-lbl">This Month</div></div>';
+  html += '<div class="gym-stat"><div class="gym-stat-val">' + streaks.current + '</div><div class="gym-stat-lbl">Streak</div></div>';
+  html += '<div class="gym-stat"><div class="gym-stat-val">' + streaks.longest + '</div><div class="gym-stat-lbl">Best Streak</div></div>';
+  html += '<div class="gym-stat"><div class="gym-stat-val">' + completionPct + '%</div><div class="gym-stat-lbl">Completion</div></div>';
+  html += '</div>';
+  html += '<div class="gym-cal-header-row"><span class="gym-cal-lbl">' + calTitle + '</span></div>';
+  html += '<div class="gym-heatmap">';
+  html += '<div class="gym-cal-days"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>';
+  html += '<div class="gym-cal-grid">' + heatCells + '</div>';
+  html += '</div>';
+  html += '<div class="gym-metrics-row">';
+  html += '<div class="gym-metric-card">';
+  html += '<div class="gym-metric-val">' + (lastMetric && lastMetric.weight_kg ? lastMetric.weight_kg + 'kg' : '--') + '</div>';
+  html += '<div class="gym-metric-lbl">Weight' + weightTrend + '</div>';
+  html += '<button class="gym-metric-btn" onclick="openBodyMetricEditor()">Log</button>';
+  html += '</div>';
+  html += '<div class="gym-metric-card">';
+  html += '<div class="gym-metric-val">' + (lastMetric && lastMetric.body_fat_pct ? lastMetric.body_fat_pct + '%' : '--') + '</div>';
+  html += '<div class="gym-metric-lbl">Body Fat' + fatTrend + '</div>';
+  html += '</div>';
+  html += '</div>';
+  html += '<div id="gym-session-list">';
+  html += sessionCardsHtml || '<div class="empty-state">No sessions yet. Log your first!</div>';
+  html += '</div>';
+  document.getElementById('main').innerHTML = html;
+
+  const list = document.getElementById('gym-session-list');
+  if (list) {
+    list.addEventListener('click', function(e) {
+      const card = e.target.closest('[data-id]');
+      if (card) { openGymEditor(card.dataset.id); }
+    });
+  }
 }
 
 function openGymEditor(id) {
   const dlg = document.getElementById('gym-editor');
   const form = document.getElementById('gym-form');
   form.reset();
-  dlg.querySelectorAll('.dur-btn').forEach(b => b.classList.remove('selected'));
-  form.elements.completed.checked = true;
+  document.getElementById('gym-editor-title').textContent = id ? 'Edit Session' : 'Log Session';
+  document.getElementById('gym-session-id').value = id || '';
+  document.getElementById('gym-delete-btn').style.display = id ? 'inline-block' : 'none';
   if (id) {
-    const s = gymSessions.find(x => x.id === id);
-    if (!s) return;
-    form.elements.id.value = s.id;
-    form.elements.date.value = s.date;
-    form.elements.type.value = s.type || 'weights';
-    form.elements.duration.value = s.duration || '';
-    form.elements.notes.value = s.notes || '';
-    form.elements.completed.checked = s.completed !== false;
-    if (s.duration) {
-      const btn = dlg.querySelector('.dur-btn[data-mins="' + s.duration + '"]');
-      if (btn) btn.classList.add('selected');
+    const s = gymSessions.find(function(x) { return String(x.id) === String(id); });
+    if (s) {
+      if (form.elements['type']) { form.elements['type'].value = s.type || 'push'; }
+      if (form.elements['date']) { form.elements['date'].value = s.date || ''; }
+      if (form.elements['duration']) { form.elements['duration'].value = s.duration || ''; }
+      if (form.elements['notes']) { form.elements['notes'].value = s.notes || ''; }
+      const cb = form.elements['completed'];
+      if (cb) { cb.checked = s.completed !== false; }
     }
   } else {
-    form.elements.date.value = todayISO();
-    form.elements.type.value = 'weights';
+    if (form.elements['date']) { form.elements['date'].value = new Date().toISOString().slice(0, 10); }
+    const cb = form.elements['completed'];
+    if (cb) { cb.checked = true; }
   }
   dlg.showModal();
 }
 
 function openBodyMetricEditor() {
   const dlg = document.getElementById('body-metric-editor');
-  const form = document.getElementById('body-metric-form');
-  form.reset();
-  form.elements.date.value = todayISO();
-  dlg.showModal();
+  if (dlg) {
+    const dateEl = document.getElementById('bm-date');
+    if (dateEl) { dateEl.value = new Date().toISOString().slice(0, 10); }
+    dlg.showModal();
+  }
 }
 
-document.getElementById('gym-form').addEventListener('submit', async e => {
-  e.preventDefault();
-  const f = e.target;
-  const id = f.elements.id.value;
-  const payload = {
-    date: f.elements.date.value,
-    type: f.elements.type.value,
-    duration: f.elements.duration.value ? parseInt(f.elements.duration.value, 10) : null,
-    notes: f.elements.notes.value.trim() || null,
-    completed: f.elements.completed.checked,
-  };
-  if (id) payload.id = id;
-  const { error } = id
-    ? await window.db.from('gym_sessions').update(payload).eq('id', id)
-    : await window.db.from('gym_sessions').insert(payload);
-  if (error) { alert('Save failed: ' + error.message); return; }
-  document.getElementById('gym-editor').close();
-  await loadAll();
-});
-
-document.getElementById('gym-cancel-btn').addEventListener('click', () => {
-  document.getElementById('gym-editor').close();
-});
-
-document.getElementById('gym-editor').addEventListener('click', e => {
-  if (e.target === document.getElementById('gym-editor')) document.getElementById('gym-editor').close();
-});
-
-document.getElementById('body-metric-form').addEventListener('submit', async e => {
-  e.preventDefault();
-  const f = e.target;
-  const payload = {
-    date: f.elements.date.value,
-    weight: f.elements.weight.value ? parseFloat(f.elements.weight.value) : null,
-    body_fat: f.elements.body_fat.value ? parseFloat(f.elements.body_fat.value) : null,
-    notes: f.elements.notes.value.trim() || null,
-  };
-  const { error } = await window.db.from('body_metrics').insert(payload);
-  if (error) { alert('Save failed: ' + error.message); return; }
-  document.getElementById('body-metric-editor').close();
-  await loadAll();
-});
-
-document.getElementById('body-metric-cancel-btn').addEventListener('click', () => {
-  document.getElementById('body-metric-editor').close();
-});
-
-document.getElementById('body-metric-editor').addEventListener('click', e => {
-  if (e.target === document.getElementById('body-metric-editor')) document.getElementById('body-metric-editor').close();
-});
-
-document.querySelectorAll('.dur-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.dur-btn').forEach(b => b.classList.remove('selected'));
-    btn.classList.add('selected');
-    document.getElementById('gym-form').elements.duration.value = btn.dataset.mins;
+document.querySelectorAll('.dur-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    const durInput = document.getElementById('gym-duration');
+    if (durInput) { durInput.value = btn.dataset.val; }
+    document.querySelectorAll('.dur-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
   });
 });
+
+document.getElementById('gym-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const form = e.target;
+  const id = document.getElementById('gym-session-id').value;
+  const cb = form.elements['completed'];
+  const payload = {
+    type: form.elements['type'] ? form.elements['type'].value : 'other',
+    date: form.elements['date'] ? form.elements['date'].value : new Date().toISOString().slice(0, 10),
+    duration: form.elements['duration'] && form.elements['duration'].value ? parseInt(form.elements['duration'].value) : null,
+    notes: form.elements['notes'] ? (form.elements['notes'].value.trim() || null) : null,
+    completed: cb ? cb.checked : true
+  };
+  if (id) {
+    await window.db.from('gym_sessions').update(payload).eq('id', id);
+  } else {
+    await window.db.from('gym_sessions').insert(payload);
+  }
+  document.getElementById('gym-editor').close();
+  await loadAll();
+  renderGym();
+});
+
+document.getElementById('gym-delete-btn').addEventListener('click', async function() {
+  const id = document.getElementById('gym-session-id').value;
+  if (!id) { return; }
+  if (!confirm('Delete this session?')) { return; }
+  await window.db.from('gym_sessions').delete().eq('id', id);
+  document.getElementById('gym-editor').close();
+  await loadAll();
+  renderGym();
+});
+
+document.getElementById('gym-cancel-btn').addEventListener('click', function() {
+  document.getElementById('gym-editor').close();
+});
+
+var bmForm = document.getElementById('body-metric-form');
+if (bmForm) {
+  bmForm.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const form = e.target;
+    const payload = {
+      date: form.elements['date'] ? form.elements['date'].value : new Date().toISOString().slice(0, 10),
+      weight_kg: form.elements['weight_kg'] && form.elements['weight_kg'].value ? parseFloat(form.elements['weight_kg'].value) : null,
+      body_fat_pct: form.elements['body_fat_pct'] && form.elements['body_fat_pct'].value ? parseFloat(form.elements['body_fat_pct'].value) : null,
+      notes: form.elements['notes'] ? (form.elements['notes'].value.trim() || null) : null
+    };
+    await window.db.from('body_metrics').insert(payload);
+    document.getElementById('body-metric-editor').close();
+    await loadAll();
+    renderGym();
+  });
+  var bmCancel = document.getElementById('bm-cancel-btn');
+  if (bmCancel) {
+    bmCancel.addEventListener('click', function() {
+      document.getElementById('body-metric-editor').close();
+    });
+  }
+}
