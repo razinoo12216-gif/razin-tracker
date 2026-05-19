@@ -18,6 +18,7 @@ let invoices = [];
 let tasks = [];
 let tickets = [];
 let debts = [];
+let gymSessions = [];
 let debtPayments = [];
 let editingId = null;
 let editingReviewId = null;
@@ -239,7 +240,7 @@ async function loadAll() {
     list.innerHTML = '<div class="empty error">Supabase keys not set.</div>';
     return;
   }
-  const [eRes, rRes, iRes, tRes, kRes, dRes, pRes] = await Promise.all([
+  const [eRes, rRes, iRes, tRes, kRes, dRes, pRes, gRes] = await Promise.all([
     window.db.from('projects').select('*').order('created_at', { ascending: false }),
     window.db.from('reviews').select('*').order('week_of', { ascending: false }),
     window.db.from('invoices').select('*').order('month', { ascending: false }),
@@ -247,6 +248,7 @@ async function loadAll() {
     window.db.from('tickets').select('*').order('date', { ascending: false }),
     window.db.from('debts').select('*').order('created_at', { ascending: false }),
     window.db.from('debt_payments').select('*').order('date', { ascending: false }),
+    window.db.from('gym_sessions').select('*').order('date', { ascending: false }),
   ]);
   if (eRes.error) {
     list.innerHTML = `<div class="empty error">Load failed: ${esc(eRes.error.message)}</div>`;
@@ -264,6 +266,7 @@ async function loadAll() {
   tickets = (kRes && !kRes.error) ? (kRes.data || []) : [];
   debts = (dRes && !dRes.error) ? (dRes.data || []) : [];
   debtPayments = (pRes && !pRes.error) ? (pRes.data || []) : [];
+  gymSessions = (gRes && !gRes.error) ? (gRes.data || []) : [];
   rebuildMonthSelect();
   rebuildSecondaryFilter();
   render();
@@ -395,6 +398,7 @@ function render() {
   if (activeTab === 'ticket') return renderTickets();
   if (activeTab === 'debt') return renderDebts();
   if (activeTab === 'potential') return renderPotentials(potentials);
+  if (activeTab === 'gym') return renderGym();
 
   const q = $('#search').value.trim().toLowerCase();
   const sf = secondaryFilter.value;
@@ -2236,3 +2240,142 @@ document.querySelectorAll('.tab').forEach((btn) => {
 });
 
 loadAll();
+
+
+// ─── GYM ──────────────────────────────────────────────────────────────────────
+function gymStreak() {
+  if (!gymSessions.length) return 0;
+  const trained = new Set(gymSessions.map(s => s.date));
+  let streak = 0;
+  let d = new Date();
+  const todayStr = todayISO();
+  if (!trained.has(todayStr)) d.setDate(d.getDate() - 1);
+  while (true) {
+    const dateStr = d.toISOString().slice(0, 10);
+    if (trained.has(dateStr)) { streak++; d.setDate(d.getDate() - 1); }
+    else break;
+  }
+  return streak;
+}
+
+function renderGym() {
+  const list = document.getElementById('list');
+  const todayStr = todayISO();
+  const now = new Date();
+  const thisMonth = gymSessions.filter(s => s.date && s.date.slice(0, 7) === todayStr.slice(0, 7));
+  const streak = gymStreak();
+  const weekStart = new Date(now);
+  const day = weekStart.getDay();
+  weekStart.setDate(weekStart.getDate() - (day === 0 ? 6 : day - 1));
+  const weekDays = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
+    weekDays.push(d.toISOString().slice(0, 10));
+  }
+  const trainedDates = new Set(gymSessions.map(s => s.date));
+  const weekCount = weekDays.slice(0, 5).filter(d => trainedDates.has(d)).length;
+  const heatDays = [];
+  for (let i = 34; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i);
+    heatDays.push(d.toISOString().slice(0, 10));
+  }
+  const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  const weekDotsHtml = weekDays.map((d, i) => {
+    const done = trainedDates.has(d);
+    const isFuture = d > todayStr;
+    return '<div class="gym-week-dot' + (done ? ' done' : '') + (isFuture ? ' future' : '') + '">' + dayLabels[i] + '</div>';
+  }).join('');
+  const heatHtml = heatDays.map(d => {
+    const isTrained = trainedDates.has(d);
+    const isToday = d === todayStr;
+    return '<div class="gym-heat-cell' + (isTrained ? ' trained' : '') + (isToday ? ' today' : '') + '"></div>';
+  }).join('');
+  const recent = [...gymSessions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
+  const typeColors = { weights: '#3b82f6', cardio: '#f97316', hiit: '#ef4444', sport: '#a855f7', other: '#6b7280' };
+  const sessionCardsHtml = recent.map(s => {
+    const col = typeColors[s.type] || typeColors.other;
+    const dur = s.duration ? s.duration + 'm' : '';
+    return '<div class="gym-session-card" onclick="openGymEditor(\'' + s.id + '\')">'
+      + '<div class="gym-session-type" style="background:' + col + '22;color:' + col + '">' + (s.type || 'session') + '</div>'
+      + '<div class="gym-session-info">'
+      + '<div class="gym-session-date">' + shortDate(s.date) + (dur ? ' · ' + dur : '') + '</div>'
+      + (s.notes ? '<div class="gym-session-notes">' + esc(s.notes) + '</div>' : '')
+      + '</div></div>';
+  }).join('');
+  const badge = document.getElementById('tc-gym');
+  if (badge) badge.textContent = streak > 0 ? streak + '🔥' : (trainedDates.has(todayStr) ? '✓' : '');
+  list.innerHTML = '<div class="gym-header">'
+    + '<div class="gym-stat"><span class="gym-stat-val">' + thisMonth.length + '</span><span class="gym-stat-label">This month</span></div>'
+    + '<div class="gym-stat"><span class="gym-stat-val">' + (streak > 0 ? streak + ' 🔥' : streak) + '</span><span class="gym-stat-label">Streak</span></div>'
+    + '<div class="gym-stat"><span class="gym-stat-val">' + weekCount + '/5</span><span class="gym-stat-label">This week</span></div>'
+    + '<div class="gym-stat"><span class="gym-stat-val">' + gymSessions.length + '</span><span class="gym-stat-label">All time</span></div>'
+    + '</div>'
+    + '<button class="gym-log-btn" onclick="openGymEditor()">+ Log Session</button>'
+    + '<div class="gym-week">' + weekDotsHtml + '</div>'
+    + '<p class="gym-section-title">Last 35 days</p>'
+    + '<div class="gym-heatmap">' + heatHtml + '</div>'
+    + (recent.length
+      ? '<p class="gym-section-title">Recent sessions</p>' + sessionCardsHtml
+      : '<p class="gym-empty">No sessions yet — hit Log Session to start.</p>');
+}
+
+function openGymEditor(id) {
+  const dlg = document.getElementById('gym-editor');
+  const form = document.getElementById('gym-form');
+  form.reset();
+  dlg.querySelectorAll('.dur-btn').forEach(b => b.classList.remove('selected'));
+  if (id) {
+    const s = gymSessions.find(x => x.id === id);
+    if (!s) return;
+    form.elements.id.value = s.id;
+    form.elements.date.value = s.date;
+    form.elements.type.value = s.type || 'weights';
+    form.elements.duration.value = s.duration || '';
+    form.elements.notes.value = s.notes || '';
+    if (s.duration) {
+      const btn = dlg.querySelector('.dur-btn[data-mins="' + s.duration + '"]');
+      if (btn) btn.classList.add('selected');
+    }
+  } else {
+    form.elements.date.value = todayISO();
+    form.elements.type.value = 'weights';
+  }
+  dlg.showModal();
+}
+
+document.getElementById('gym-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target;
+  const id = f.elements.id.value;
+  const payload = {
+    date: f.elements.date.value,
+    type: f.elements.type.value,
+    duration: f.elements.duration.value ? parseInt(f.elements.duration.value, 10) : null,
+    notes: f.elements.notes.value.trim() || null,
+  };
+  if (id) payload.id = id;
+  const { error } = id
+    ? await window.db.from('gym_sessions').update(payload).eq('id', id)
+    : await window.db.from('gym_sessions').insert(payload);
+  if (error) { alert('Save failed: ' + error.message); return; }
+  document.getElementById('gym-editor').close();
+  await loadAll();
+});
+
+document.getElementById('gym-cancel-btn').addEventListener('click', () => {
+  document.getElementById('gym-editor').close();
+});
+
+document.getElementById('gym-editor').addEventListener('click', e => {
+  if (e.target === document.getElementById('gym-editor')) document.getElementById('gym-editor').close();
+});
+
+document.querySelectorAll('.dur-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.dur-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    document.getElementById('gym-form').elements.duration.value = btn.dataset.mins;
+  });
+});
