@@ -372,7 +372,7 @@ function render() {
   $('#tc-review').textContent = String(reviews.length);
   $('#tc-invoice').textContent = String(invoices.length);
   const ticketCountEl = $('#tc-ticket');
-  if (ticketCountEl) ticketCountEl.textContent = String(tickets.length);
+  if (ticketCountEl) ticketCountEl.textContent = String(tickets.filter(t => (t.ticket_kind || 'personal') === 'personal').length);
   const debtCountEl = $('#tc-debt');
   if (debtCountEl) debtCountEl.textContent = String(debts.filter(d => d.status !== 'paid').length);
 
@@ -1098,7 +1098,7 @@ function renderTicket(t) {
       </div>
       ${t.notes ? `<div class="block"><label>Notes</label><p>${esc(t.notes)}</p></div>` : ''}
       ${t.ticket_kind === 'client'
-        ? `<div style='display:flex;gap:5px;padding:5px 10px;flex-wrap:wrap'><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${t.client_paid?'#22c55e':'#d1d5db'};color:${t.client_paid?'#fff':'#555'}'>Client paid</span><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${t.guy_paid?'#22c55e':'#d1d5db'};color:${t.guy_paid?'#fff':'#555'}'>Guy paid</span><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${t.work_done?'#22c55e':'#d1d5db'};color:${t.work_done?'#fff':'#555'}'>Done</span></div>`
+        ? `<div style='display:flex;gap:5px;padding:5px 10px;flex-wrap:wrap'><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${t.client_paid?'#22c55e':'#d1d5db'};color:${t.client_paid?'#fff':'#555'}'>Client paid</span><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${(t.guy_paid||parseFloat(t.guy_cost)>0)?'#22c55e':'#d1d5db'};color:${(t.guy_paid||parseFloat(t.guy_cost)>0)?'#fff':'#555'}'>Guy paid</span><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${t.work_done?'#22c55e':'#d1d5db'};color:${t.work_done?'#fff':'#555'}'>Done</span></div>`
         : t.personal_paid ? `<div style='padding:4px 10px'><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:#22c55e;color:#fff'>Paid</span></div>` : ''}
     </div>`;
 }
