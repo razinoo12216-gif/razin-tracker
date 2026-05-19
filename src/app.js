@@ -935,20 +935,36 @@ function ticketsInYear(year) {
 }
 
 function renderTicketTotals() {
-  setTotalsLabels(['Tickets', 'Face value', 'Paid', 'Saved']);
   clearTotalSpanClasses();
   const inYear = ticketsInYear(selectedYear);
-  let face = 0, paid = 0;
-  for (const t of inYear) { face += parseNum(t.amount); paid += parseNum(t.paid); }
-  const saved = face - paid;
-  $('#t-rev').textContent = String(inYear.length);
-  $('#t-exp').textContent = fmt(face);
-  const net = $('#t-net');
-  net.textContent = fmt(paid);
-  if (paid > 0) net.classList.add('neg');
-  const savedEl = $('#t-count');
-  savedEl.textContent = fmt(saved);
-  if (saved > 0) savedEl.classList.add('pos');
+  const kindInYear = inYear.filter(t => (t.ticket_kind || 'personal') === ticketKindView);
+  if (ticketKindView === 'client') {
+    setTotalsLabels(['Tickets', 'Revenue', 'Cost', 'Profit']);
+    let revenue = 0, cost = 0;
+    for (const t of kindInYear) { revenue += parseNum(t.client_revenue); cost += parseNum(t.guy_cost); }
+    const profit = revenue - cost;
+    $('#t-rev').textContent = String(kindInYear.length);
+    $('#t-exp').textContent = fmt(revenue);
+    const net = $('#t-net');
+    net.textContent = fmt(cost);
+    if (cost > 0) net.classList.add('neg');
+    const savedEl = $('#t-count');
+    savedEl.textContent = fmt(profit);
+    if (profit > 0) savedEl.classList.add('pos');
+  } else {
+    setTotalsLabels(['Tickets', 'Face value', 'Paid', 'Saved']);
+    let face = 0, paid = 0;
+    for (const t of kindInYear) { face += parseNum(t.amount); paid += parseNum(t.paid); }
+    const saved = face - paid;
+    $('#t-rev').textContent = String(kindInYear.length);
+    $('#t-exp').textContent = fmt(face);
+    const net = $('#t-net');
+    net.textContent = fmt(paid);
+    if (paid > 0) net.classList.add('neg');
+    const savedEl = $('#t-count');
+    savedEl.textContent = fmt(saved);
+    if (saved > 0) savedEl.classList.add('pos');
+  }
 }
 
 
@@ -1001,6 +1017,7 @@ async function upsertTicketProject(ticket) {
 
 function renderTickets() {
   const inYear = ticketsInYear(selectedYear);
+  const kindInYear = inYear.filter(t => (t.ticket_kind || 'personal') === ticketKindView);
   let filtered = inYear;
   if (ticketTypeFilter !== 'all') filtered = filtered.filter((t) => t.type === ticketTypeFilter);
   filtered = filtered.filter((t) => (t.ticket_kind || 'personal') === ticketKindView);
@@ -1032,9 +1049,9 @@ function renderTickets() {
         <button type="button" class="day-nav" id="year-next" aria-label="Next year">→</button>
       </div>
       <div class="ticket-type-filter">
-        <button type="button" class="ticket-filter ${ticketTypeFilter === 'all' ? 'active' : ''}" data-type="all">All <span class="tf-count">${inYear.length}</span></button>
-        <button type="button" class="ticket-filter ${ticketTypeFilter === 'parking' ? 'active' : ''}" data-type="parking">Parking <span class="tf-count">${inYear.filter((t) => t.type === 'parking').length}</span></button>
-        <button type="button" class="ticket-filter ${ticketTypeFilter === 'speeding' ? 'active' : ''}" data-type="speeding">Speeding <span class="tf-count">${inYear.filter((t) => t.type === 'speeding').length}</span></button>
+        <button type="button" class="ticket-filter ${ticketTypeFilter === 'all' ? 'active' : ''}" data-type="all">All <span class="tf-count">${kindInYear.length}</span></button>
+        <button type="button" class="ticket-filter ${ticketTypeFilter === 'parking' ? 'active' : ''}" data-type="parking">Parking <span class="tf-count">${kindInYear.filter((t) => t.type === 'parking').length}</span></button>
+        <button type="button" class="ticket-filter ${ticketTypeFilter === 'speeding' ? 'active' : ''}" data-type="speeding">Speeding <span class="tf-count">${kindInYear.filter((t) => t.type === 'speeding').length}</span></button>
       </div>
       ${tallyEntries.length > 0 ? `
         <div class="borough-tally">
@@ -1091,11 +1108,15 @@ function renderTicket(t) {
         <div><label>Date</label><span>${esc(dateLabel)}</span></div>
         <div><label>PCN</label><span>${esc(t.pcn || '—')}</span></div>
       </div>
-      <div class="card-grid">
+      ${t.ticket_kind === 'client' ? `<div class="card-grid">
+        <div><label>Revenue</label><span class="${parseNum(t.client_revenue) > 0 ? 'pos' : ''}">${t.client_revenue ? fmt(parseNum(t.client_revenue)) : '—'}</span></div>
+        <div><label>Cost</label><span class="${parseNum(t.guy_cost) > 0 ? 'neg' : ''}">${t.guy_cost ? fmt(parseNum(t.guy_cost)) : '—'}</span></div>
+        <div><label>Profit</label><span class="${parseNum(t.client_revenue) - parseNum(t.guy_cost) > 0 ? 'pos' : ''}">${fmt(parseNum(t.client_revenue) - parseNum(t.guy_cost))}</span></div>
+      </div>` : `<div class="card-grid">
         <div><label>Amount</label><span>${amount ? fmt(amount) : '—'}</span></div>
         <div><label>Paid</label><span class="${paid && paid < amount ? 'pos' : ''}">${paid ? fmt(paid) : '—'}</span></div>
         <div><label>Saved</label><span class="${saved > 0 ? 'pos' : ''}">${saved > 0 ? fmt(saved) : '—'}</span></div>
-      </div>
+      </div>`}
       ${t.notes ? `<div class="block"><label>Notes</label><p>${esc(t.notes)}</p></div>` : ''}
       ${t.ticket_kind === 'client'
         ? `<div style='display:flex;gap:5px;padding:5px 10px;flex-wrap:wrap'><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${t.client_paid?'#22c55e':'#d1d5db'};color:${t.client_paid?'#fff':'#555'}'>Client paid</span><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${(t.guy_paid||parseFloat(t.guy_cost)>0)?'#22c55e':'#d1d5db'};color:${(t.guy_paid||parseFloat(t.guy_cost)>0)?'#fff':'#555'}'>Guy paid</span><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${t.work_done?'#22c55e':'#d1d5db'};color:${t.work_done?'#fff':'#555'}'>Done</span></div>`
