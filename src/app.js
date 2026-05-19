@@ -1522,17 +1522,20 @@ function renderReview(r) {
     </div>`;
 }
 
+// PATCH A: updated renderWork — adds invoices dispatch
 function renderWork() {
   const companies = entries.filter(e => e.type === 'work-company');
   const tasks     = entries.filter(e => e.type === 'work-task');
-  if (workView === 'tasks') renderWorkTasksView(tasks, companies);
+  if (workView === 'tasks')     renderWorkTasksView(tasks, companies);
+  else if (workView === 'invoices') renderWorkInvoicesView();
   else renderWorkCompaniesView(companies);
 }
 
+// PATCH B: updated task toggle — 3 buttons
 function renderWorkTasksView(tasks, companies) {
   const pending = tasks.filter(t => t.status !== 'done');
   const done    = tasks.filter(t => t.status === 'done');
-  const toggle  = `<div class="ticket-type-filter"><button class="ticket-filter active" onclick="workView='tasks';renderWork()">Tasks</button><button class="ticket-filter" onclick="workView='companies';renderWork()">Companies</button></div>`;
+  const toggle  = `<div class="ticket-type-filter"><button class="ticket-filter active" onclick="workView='tasks';renderWork()">Tasks</button><button class="ticket-filter" onclick="workView='companies';renderWork()">Companies</button><button class="ticket-filter" onclick="workView='invoices';renderWork()">Invoices</button></div>`;
   if (tasks.length === 0) {
     list.innerHTML = `<div class="work-header-bar">${toggle}<button class="work-fab" onclick="openWorkTaskEditor()">+ Task</button></div><div class="empty">No tasks yet. Hit <strong>+ Task</strong> to add one.</div>`;
     return;
@@ -1540,10 +1543,41 @@ function renderWorkTasksView(tasks, companies) {
   list.innerHTML = `<div class="work-header-bar">${toggle}<button class="work-fab" onclick="openWorkTaskEditor()">+ Task</button></div>${pending.map(t => renderWorkTaskCard(t, companies)).join('')}${done.length ? `<div class="work-section-divider">Completed (${done.length})</div>${done.map(t => renderWorkTaskCard(t, companies)).join('')}` : ''}`;
 }
 
+// PATCH C: updated companies toggle — 3 buttons
 function renderWorkCompaniesView(companies) {
-  const toggle = `<div class="ticket-type-filter"><button class="ticket-filter" onclick="workView='tasks';renderWork()">Tasks</button><button class="ticket-filter active" onclick="workView='companies';renderWork()">Companies</button></div>`;
+  const toggle = `<div class="ticket-type-filter"><button class="ticket-filter" onclick="workView='tasks';renderWork()">Tasks</button><button class="ticket-filter active" onclick="workView='companies';renderWork()">Companies</button><button class="ticket-filter" onclick="workView='invoices';renderWork()">Invoices</button></div>`;
   const chKey  = localStorage.getItem('ch_api_key') || '';
   list.innerHTML = `<div class="work-header-bar">${toggle}<button class="work-fab" onclick="openWorkCompanyEditor()">+ Company</button></div><div class="work-ch-bar"><span class="work-ch-label">CH API Key</span><input type="password" id="ch-key-input" value="${esc(chKey)}" placeholder="Your Companies House API key"/><button class="work-ch-save" onclick="saveCHKey()">Save</button></div>${companies.length === 0 ? '<div class="empty">No companies yet. Hit <strong>+ Company</strong> to add one.</div>' : ''}<div class="work-companies-grid">${companies.map(c => renderWorkCompanyCard(c)).join('')}</div>`;
+}
+
+// PATCH D: new invoices view
+function renderWorkInvoicesView() {
+  const toggle = `<div class="ticket-type-filter"><button class="ticket-filter" onclick="workView='tasks';renderWork()">Tasks</button><button class="ticket-filter" onclick="workView='companies';renderWork()">Companies</button><button class="ticket-filter active" onclick="workView='invoices';renderWork()">Invoices</button></div>`;
+  if (invoices.length === 0) {
+    list.innerHTML = `<div class="work-header-bar">${toggle}<button class="work-fab" onclick="openInvoiceEditor()">+ Invoice</button></div><div class="empty">No invoices yet. Hit <strong>+ Invoice</strong> to draft one.</div>`;
+    return;
+  }
+  list.innerHTML = `<div class="work-header-bar">${toggle}<button class="work-fab" onclick="openInvoiceEditor()">+ Invoice</button></div>${invoices.map(renderInvoiceCard).join('')}`;
+}
+
+function renderInvoiceCard(inv) {
+  const sections = Array.isArray(inv.sections) ? inv.sections : [];
+  const total = sections.reduce((s, sec) => s + (parseFloat(sec.total) || 0), 0);
+  const month = inv.month ? inv.month.replace('-', ' / ') : '';
+  const sectionsHtml = sections.filter(s => s.title || s.total).map(s =>
+    `<div class="inv-section-row"><span class="inv-section-name">${esc(s.title||'')}</span><span class="inv-section-total">${s.total ? '£' + parseFloat(s.total).toLocaleString() : '—'}</span></div>`
+  ).join('');
+  return `<div class="card inv-card" onclick="openInvoiceEditor('${inv.id}')">
+    <div class="inv-card-head">
+      <span class="inv-card-title">${esc(inv.title || 'Untitled Invoice')}</span>
+      <span class="inv-card-month">${month}</span>
+    </div>
+    ${sectionsHtml}
+    <div class="inv-card-total"><span>Total</span><span class="inv-total-num">£${total.toLocaleString()}</span></div>
+    <div class="inv-card-actions">
+      <button class="work-btn-ghost inv-copy-btn" onclick="event.stopPropagation();copyInvoiceText('${inv.id}')">Copy text</button>
+    </div>
+  </div>`;
 }
 
 function renderWorkTaskCard(t, companies) {
