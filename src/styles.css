@@ -1237,6 +1237,18 @@ dialog .actions {
   padding-top: 20px;
   line-height: 1.6;
 }
+.drive-explanation {
+  margin-top: -8px;
+  font-size: 14px;
+  color: var(--text);
+  max-width: 560px;
+  line-height: 1.75;
+  background: rgba(251, 191, 36, 0.07);
+  border-left: 3px solid var(--gold);
+  border-radius: 0 8px 8px 0;
+  padding: 14px 18px;
+  text-align: left;
+}
 
 @media (max-width: 640px) {
   header { padding: 12px 16px 0; }
