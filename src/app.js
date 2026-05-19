@@ -2361,7 +2361,7 @@ function renderGym() {
   html += '<div id="gym-session-list">';
   html += sessionCardsHtml || '<div class="empty-state">No sessions yet. Log your first!</div>';
   html += '</div>';
-  document.getElementById('main').innerHTML = html;
+  document.getElementById('list').innerHTML = html;
 
   const list = document.getElementById('gym-session-list');
   if (list) {
