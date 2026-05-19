@@ -241,7 +241,7 @@ async function loadAll() {
     list.innerHTML = '<div class="empty error">Supabase keys not set.</div>';
     return;
   }
-  const [eRes, rRes, iRes, tRes, kRes, dRes, pRes, gRes], mRes]= await Promise.all([
+  const [eRes, rRes, iRes, tRes, kRes, dRes, pRes, gRes, mRes]= await Promise.all([
     window.db.from('projects').select('*').order('created_at', { ascending: false }),
     window.db.from('reviews').select('*').order('week_of', { ascending: false }),
     window.db.from('invoices').select('*').order('month', { ascending: false }),
