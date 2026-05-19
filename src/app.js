@@ -1644,7 +1644,8 @@ function openWorkTaskEditor(id) {
     const fd = new FormData(ev.target);
     const name = (fd.get('name')||'').trim(); if (!name) return;
     const notes = JSON.stringify({ company_id: fd.get('company_id')||null, category: (fd.get('category')||'').trim(), priority: fd.get('priority'), due: fd.get('due')||null, notes: (fd.get('task_notes')||'').trim() });
-    const payload = { name, type: 'work-task', status: (t && t.status) || 'pending', notes };
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+    const payload = { id, name, type: 'work-task', status: (t && t.status) || 'pending', notes };
     document.getElementById('work-task-submit').disabled = true;
     if (editingWorkTaskId) { await window.db.from('projects').update(payload).eq('id', editingWorkTaskId); }
     else { await window.db.from('projects').insert(payload); }
@@ -1663,7 +1664,8 @@ function openWorkCompanyEditor(id) {
     const fd = new FormData(ev.target);
     const name = (fd.get('name')||'').trim(); if (!name) return;
     const notes = JSON.stringify({ company_number: (fd.get('company_number')||'').trim(), accounts_due: fd.get('accounts_due')||null, confirmation_due: fd.get('confirmation_due')||null, notes: (fd.get('company_notes')||'').trim() });
-    const payload = { name, type: 'work-company', status: fd.get('status'), notes };
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+    const payload = { id, name, type: 'work-company', status: fd.get('status'), notes };
     document.getElementById('work-co-submit').disabled = true;
     if (editingWorkCompanyId) { await window.db.from('projects').update(payload).eq('id', editingWorkCompanyId); }
     else { await window.db.from('projects').insert(payload); }
