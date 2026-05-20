@@ -1104,6 +1104,10 @@ function renderTickets() {
 }
 
 function renderTicket(t) {
+  if (t.type === 'admin') {
+    var kindLabel = t.admin_kind === 'admin' ? 'Admin Ticket' : 'My Ticket';
+    return `<div class="card ticket" data-id="${esc(t.id)}"><div class="card-head"><h3>${esc(t.admin_name || '—')}</h3><span class="status ticket-admin">Admin</span></div><div class="card-grid"><div><label>Reference</label><span>${esc(t.pcn || '—')}</span></div><div><label>Date</label><span>${esc(t.date || '—')}</span></div><div><label>Address</label><span>${esc(t.admin_address || '—')}</span></div><div><label>Ticket</label><span>${esc(kindLabel)}</span></div></div></div>`;
+  }
   const amount = parseNum(t.amount);
   const paid = parseNum(t.paid);
   const saved = amount - paid;
@@ -1172,12 +1176,15 @@ function openTicketEditor(id) {
   }
   applyTicketBoroughLabel();
   var _isAdmin = (ticketForm.type && ticketForm.type.value === 'admin');
-  ['admin-name-row','admin-address-row'].forEach(function(id){
+  ['admin-name-row','admin-address-row','admin-kind-row'].forEach(function(id){
     var el = document.getElementById(id);
     if (el) el.style.display = _isAdmin ? 'block' : 'none';
   });
+  var _ntf = document.getElementById('non-admin-ticket-fields');
+  if (_ntf) _ntf.style.display = _isAdmin ? 'none' : 'block';
   if (ticketForm.admin_name) ticketForm.admin_name.value = (t && t.admin_name) || '';
   if (ticketForm.admin_address) ticketForm.admin_address.value = (t && t.admin_address) || '';
+  if (ticketForm.admin_kind) ticketForm.admin_kind.value = (t && t.admin_kind) || 'mine';
   ticketEditor.showModal();
   setTimeout(() => ticketForm.amount?.focus(), 50);
 }
