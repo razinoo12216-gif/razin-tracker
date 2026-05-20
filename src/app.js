@@ -1045,6 +1045,7 @@ function renderTickets() {
     .sort((a, b) => b[1].count - a[1].count);
 
   const isAdminFilter = ticketTypeFilter === 'admin';
+  const isParkingFilter = ticketTypeFilter === 'parking';
   const isSpeedingFilter = ticketTypeFilter === 'speeding';
   const boroughLabel = isAdminFilter ? 'Name' : (isSpeedingFilter ? 'Police Force' : 'Borough');
 
@@ -1061,8 +1062,9 @@ function renderTickets() {
       </div>
       <div class="ticket-type-filter">
         <button type="button" class="ticket-filter ${ticketTypeFilter === 'all' ? 'active' : ''}" data-type="all">All <span class="tf-count">${kindInYear.length}</span></button>
-        <button type="button" class="ticket-filter ${ticketTypeFilter === 'admin' ? 'active' : ''}" data-type="admin">Admin <span class="tf-count">${kindInYear.filter((t) => t.type === 'admin').length}</span></button>
-        <button type="button" class="ticket-filter ${ticketTypeFilter === 'speeding' ? 'active' : ''}" data-type="speeding">Speeding <span class="tf-count">${kindInYear.filter((t) => t.type === 'speeding').length}</span></button>
+        ${ticketKindView === 'personal' ? `<button type="button" class="ticket-filter ${ticketTypeFilter === 'parking' ? 'active' : ''}" data-type="parking">Parking <span class="tf-count">${kindInYear.filter((t) => t.type === 'parking').length}</span></button>
+        <button type="button" class="ticket-filter ${ticketTypeFilter === 'speeding' ? 'active' : ''}" data-type="speeding">Speeding <span class="tf-count">${kindInYear.filter((t) => t.type === 'speeding').length}</span></button>` : `<button type="button" class="ticket-filter ${ticketTypeFilter === 'speeding' ? 'active' : ''}" data-type="speeding">Speeding <span class="tf-count">${kindInYear.filter((t) => t.type === 'speeding').length}</span></button>
+        <button type="button" class="ticket-filter ${ticketTypeFilter === 'admin' ? 'active' : ''}" data-type="admin">Admin <span class="tf-count">${kindInYear.filter((t) => t.type === 'admin').length}</span></button>`}
       </div>
       ${tallyEntries.length > 0 ? `
         <div class="borough-tally">
@@ -1086,7 +1088,7 @@ function renderTickets() {
     </div>`;
 
   list.querySelectorAll('.ticket-kind-btn').forEach((btn) => {
-    btn.addEventListener('click', () => { ticketKindView = btn.dataset.kind; render(); });
+    btn.addEventListener('click', () => { ticketKindView = btn.dataset.kind; ticketTypeFilter = 'all'; render(); });
   });
   $('#year-prev').addEventListener('click', () => { selectedYear -= 1; render(); });
   $('#year-next').addEventListener('click', () => { selectedYear += 1; render(); });
@@ -1105,14 +1107,14 @@ function renderTicket(t) {
   const amount = parseNum(t.amount);
   const paid = parseNum(t.paid);
   const saved = amount - paid;
-  const typeLabel = t.type === 'speeding' ? 'Speeding' : 'Admin';
+  const typeLabel = t.type === 'speeding' ? 'Speeding' : t.type === 'admin' ? 'Admin' : 'Parking';
   const placeLabel = t.type === 'speeding' ? 'Force' : 'Borough';
   const dateLabel = t.date ? new Date(t.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
   return `
     <div class="card ticket" data-id="${esc(t.id)}">
       <div class="card-head">
         <h3>${esc(t.ticket_kind === 'client' ? (t.client_name || 'Client') : (t.borough || '—'))}</h3>
-        <span class="status ticket-${t.type || 'admin'}">${esc(typeLabel)}</span>
+        <span class="status ticket-${t.type || 'parking'}">${esc(typeLabel)}</span>
       </div>
       <div class="card-grid">
         <div><label>${esc(placeLabel)}</label><span>${esc(t.borough || '—')}</span></div>
@@ -1163,7 +1165,7 @@ function openTicketEditor(id) {
     }
     onTicketKindChange(kv);
   } else {
-    ticketForm.type.value = isAdminFilter ? 'admin' : (ticketTypeFilter === 'speeding' ? 'speeding' : 'admin');
+    ticketForm.type.value = ticketKindView === 'client' ? (ticketTypeFilter === 'speeding' ? 'speeding' : 'admin') : (ticketTypeFilter === 'speeding' ? 'speeding' : 'parking');
     ticketForm.date.value = todayISO();
     ticketForm.ticket_kind.value = 'personal';
     onTicketKindChange('personal');
