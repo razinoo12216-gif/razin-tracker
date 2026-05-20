@@ -244,44 +244,45 @@
       <h2 id="ticket-editor-title">Ticket</h2>
       <div class="row">
         <label>For
-          <select name="ticket_kind" id="ticket-kind-select">
+        <select name="ticket_kind" id="ticket-kind-select">
             <option value="personal">Personal (mine)</option>
-            <option value="client">Client (business)</option>
-          </select>
-        </label>
+            <option value="client">Client</option>
+          </select></label>
         <label>Type
-          <select name="type" id="ticket-type-select" onchange="applyTicketBoroughLabel();var _a=this.value==='admin';['admin-name-row','admin-address-row'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display=_a?'block':'none';});">
+        <select name="type" id="ticket-type-select" onchange="applyTicketBoroughLabel();var _a=this.value==='admin';['admin-name-row','admin-address-row','admin-kind-row'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display=_a?'block':'none';});var _ntf=document.getElementById('non-admin-ticket-fields');if(_ntf)_ntf.style.display=_a?'none':'block';">
             <option value="admin">Admin</option>
             <option value="parking">Parking</option>
             <option value="speeding">Speeding</option>
             <option value="redlight">Red light</option>
-          </select>
-        </label>
+          </select></label>
       </div>
-      <div class="row">
-        <label>Date<input name="date" type="date" required /></label>
-        <label>Amount £<input name="amount" autocomplete="off" placeholder="60" inputmode="decimal" /></label>
-      </div>
-      <div id="personal-ticket-fields">
-        <label>Actually paid £<input name="paid" autocomplete="off" placeholder="30 if half-price" inputmode="decimal" /></label>
-        <label class="check-row"><input type="checkbox" name="personal_paid" value="true"> Mark as paid — adds to monthly expenses</label>
-      </div>
-      <div id="client-ticket-fields" style="display:none">
-        <label>Client name<input name="client_name" autocomplete="off" placeholder="John Smith" /></label>
-        <div class="row">
-          <label>Revenue (client paid me) £<input name="client_revenue" autocomplete="off" inputmode="decimal" placeholder="0" /></label>
-          <label>Cost (paid my guy) £<input name="guy_cost" autocomplete="off" inputmode="decimal" placeholder="0" /></label>
-        </div>
-        <div class="status-checks">
-          <label class="check-row"><input type="checkbox" name="client_paid" value="true"> Client has paid me</label>
-          <label class="check-row"><input type="checkbox" name="guy_paid" value="true"> I've paid my guy</label>
-          <label class="check-row"><input type="checkbox" name="work_done" value="true"> Work completed</label>
-        </div>
-      </div>
-      <label id="ticket-borough-label">Borough<input name="borough" autocomplete="off" placeholder="Borough / Name" /></label>
+      <label>Date<input name="date" type="date" required /></label>
       <label>PCN / Reference number<input name="pcn" autocomplete="off" /></label>
       <label id="admin-name-row" style="display:none">Name<input name="admin_name" autocomplete="off" placeholder="Person's name" /></label>
       <label id="admin-address-row" style="display:none">Address<input name="admin_address" autocomplete="off" placeholder="Address / location" /></label>
+      <label id="admin-kind-row" style="display:none">My ticket / Admin ticket<select name="admin_kind"><option value="mine">My ticket</option><option value="admin">Admin ticket</option></select></label>
+      <div id="non-admin-ticket-fields">
+        <div class="row">
+          <label>Amount £<input name="amount" autocomplete="off" inputmode="decimal" placeholder="0" /></label>
+          <label>Paid £<input name="paid" autocomplete="off" inputmode="decimal" placeholder="0" /></label>
+        </div>
+        <label id="ticket-borough-label">Borough / Name<input name="borough" autocomplete="off" placeholder="Borough / Name" /></label>
+        <div id="personal-ticket-fields" style="display:none">
+          <label>Actually paid<input type="checkbox" name="personal_paid" /></label>
+        </div>
+        <div id="client-ticket-fields" style="display:none">
+          <label>Client name<input name="client_name" autocomplete="off" placeholder="John Smith" /></label>
+          <div class="row">
+            <label>Revenue (client paid me) £<input name="client_revenue" autocomplete="off" inputmode="decimal" placeholder="0" /></label>
+            <label>Cost (paid my guy) £<input name="guy_cost" autocomplete="off" inputmode="decimal" placeholder="0" /></label>
+          </div>
+          <div class="row">
+            <label>Client paid<input type="checkbox" name="client_paid" /></label>
+            <label>Guy paid<input type="checkbox" name="guy_paid" /></label>
+          </div>
+          <label>Work done<textarea name="work_done" rows="2"></textarea></label>
+        </div>
+      </div>
       <label>Notes<textarea name="notes" rows="2"></textarea></label>
       <div class="actions">
         <button type="button" id="ticket-delete-btn" class="danger">Delete</button>
