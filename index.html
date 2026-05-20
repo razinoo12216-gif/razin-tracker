@@ -31,6 +31,7 @@
       <button class="tab" data-tab="potential" type="button">Chop list <span class="tab-count" id="tc-potential">0</span></button>
       <button class="tab" data-tab="expense" type="button">Expenses <span class="tab-count" id="tc-expense">0</span></button>
       <button class="tab" data-tab="invoice" type="button">Work <span class="tab-count" id="tc-invoice">0</span></button>
+      <button class="tab" data-tab="travel" type="button">Travel</button>
       <button class="tab" data-tab="gym" type="button">Gym <span class="tab-count" id="tc-gym"></span></button>
       <button class="tab" data-tab="ticket" type="button">Tickets <span class="tab-count" id="tc-ticket">0</span></button>
       <button class="tab" data-tab="debt" type="button">Debts <span class="tab-count" id="tc-debt">0</span></button>
@@ -408,6 +409,35 @@
       </div>
     </form>
   </dialog>
+<dialog id="trip-editor">
+  <h2 id="trip-editor-title">Log Trip</h2>
+  <form method="dialog">
+    <input type="hidden" id="trip-id">
+    <div class="row">
+      <label>Date<input id="trip-date" type="date"></label>
+      <label>Postcode<input id="trip-postcode" type="text" placeholder="e.g. M1 1AE"></label>
+    </div>
+    <div class="row">
+      <label>Miles<input id="trip-miles" type="number" step="0.1" oninput="updateTripCalcPreview()"></label>
+      <label>Hours<input id="trip-hours" type="number" step="0.25" oninput="updateTripCalcPreview()"></label>
+    </div>
+    <div class="row">
+      <label>Hourly rate (Â£)<input id="trip-hourly-r" type="number" step="0.5" oninput="updateTripCalcPreview()"></label>
+      <label>Petrol (Â£/litre)<input id="trip-petrol-p" type="number" step="0.01" oninput="updateTripCalcPreview()"></label>
+    </div>
+    <div class="row">
+      <label>MPG<input id="trip-mpg-v" type="number" step="1" oninput="updateTripCalcPreview()"></label>
+      <label>Wear &amp; tear (Â£/mile)<input id="trip-wear-v" type="number" step="0.01" oninput="updateTripCalcPreview()"></label>
+    </div>
+    <div id="trip-cost-preview" style="font-size:13px;color:#c9a84c;padding:8px;background:#1a1a1a;border-radius:6px;margin-bottom:8px;min-height:32px"></div>
+    <label>Notes (optional)<textarea id="trip-notes" rows="2"></textarea></label>
+    <div class="row">
+      <button type="button" id="trip-delete-btn" onclick="deleteTripEditor()" style="display:none;color:#e53e3e">Delete</button>
+      <button type="button" onclick="document.getElementById('trip-editor').close()">Cancel</button>
+      <button type="submit" onclick="saveTripEditor()">Save</button>
+    </div>
+  </form>
+</dialog>
 >
   <script src="src/app.js"></script>
 </body>
