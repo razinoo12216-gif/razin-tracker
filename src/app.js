@@ -2558,6 +2558,7 @@ function renderTravel() {
     + '</div>'
     + '<div id="tr-calc-result" style="font-size:13px;color:#c9a84c;padding:8px;background:#222;border-radius:6px;min-height:34px;line-height:1.6"></div>'
     + '</div>'
+    + (function(){var tot=roadTrips.reduce(function(a,t){var mi=parseFloat(t.miles)||0,hr=parseFloat(t.hours)||0,rate=parseFloat(t.hourly_rate)||s.hourlyRate,mg=parseFloat(t.mpg)||s.mpg,pp=parseFloat(t.petrol_price)||s.petrolPrice;return{mi:a.mi+mi,rev:a.rev+hr*rate,exp:a.exp+mi/mg*4.546*pp,cnt:a.cnt+1};},{mi:0,rev:0,exp:0,cnt:0});var q=function(l,v){return'<div style="background:#1a1a1a;border-radius:8px;padding:12px;text-align:center"><div style="color:#c9a84c;font-size:11px;font-weight:600;margin-bottom:4px">'+l+'</div><div style="color:#fff;font-size:18px;font-weight:700">'+v+'</div></div>';};return'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">'+q('REVENUE','£'+tot.rev.toFixed(0))+q('EXPENSES','£'+tot.exp.toFixed(0))+q('JOBS',String(tot.cnt))+q('MILES',tot.mi.toFixed(1))+'</div>';})()
     + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
     + '<span style="color:#fff;font-weight:600;font-size:16px">Road Trips</span>'
     + '<button onclick="openTripEditor(null)" style="padding:7px 16px;background:#c9a84c;color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:600">+ Log Trip</button>'
@@ -2664,7 +2665,7 @@ async function saveTripEditor() {
   }
   document.getElementById('trip-editor').close();
   await loadAll();
-  activeTab = 'travel';
+  activeTab = 'invoice'; workView = 'travel';
   render();
 }
 
