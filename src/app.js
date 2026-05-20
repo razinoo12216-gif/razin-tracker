@@ -20,6 +20,7 @@ let tickets = [];
 let debts = [];
 let gymSessions = [];
 let bodyMetrics = [];
+let roadTrips = [];
 let debtPayments = [];
 let editingId = null;
 let editingReviewId = null;
@@ -241,7 +242,7 @@ async function loadAll() {
     list.innerHTML = '<div class="empty error">Supabase keys not set.</div>';
     return;
   }
-  const [eRes, rRes, iRes, tRes, kRes, dRes, pRes, gRes, mRes]= await Promise.all([
+  const [eRes, rRes, iRes, tRes, kRes, dRes, pRes, gRes, mRes, trRes]= await Promise.all([
     window.db.from('projects').select('*').order('created_at', { ascending: false }),
     window.db.from('reviews').select('*').order('week_of', { ascending: false }),
     window.db.from('invoices').select('*').order('month', { ascending: false }),
@@ -251,6 +252,7 @@ async function loadAll() {
     window.db.from('debt_payments').select('*').order('date', { ascending: false }),
     window.db.from('gym_sessions').select('*').order('date', { ascending: false }),
     window.db.from('body_metrics').select('*').order('date', { ascending: false }),
+    window.db.from('road_trips').select('*').order('date', { ascending: false }),
   ]);
   if (eRes.error) {
     list.innerHTML = `<div class="empty error">Load failed: ${esc(eRes.error.message)}</div>`;
@@ -270,6 +272,7 @@ async function loadAll() {
   debtPayments = (pRes && !pRes.error) ? (pRes.data || []) : [];
   gymSessions = (gRes && !gRes.error) ? (gRes.data || []) : [];
   bodyMetrics = (mRes && !mRes.error) ? (mRes.data || []) : [];
+  roadTrips = (trRes && !trRes.error) ? (trRes.data ?? []) : [];
   rebuildMonthSelect();
   rebuildSecondaryFilter();
   render();
@@ -402,6 +405,7 @@ function render() {
   if (activeTab === 'debt') return renderDebts();
   if (activeTab === 'potential') return renderPotentials(potentials);
   if (activeTab === 'gym') return renderGym();
+  if (activeTab === 'travel') return renderTravel();
 
   const q = $('#search').value.trim().toLowerCase();
   const sf = secondaryFilter.value;
@@ -2473,4 +2477,195 @@ if (bmForm) {
       document.getElementById('body-metric-editor').close();
     });
   }
+
+function renderTravel() {
+  var list = document.getElementById('list');
+  var s = {
+    hourlyRate: parseFloat(localStorage.getItem('tr_hr') || '25'),
+    petrolPrice: parseFloat(localStorage.getItem('tr_pp') || '1.55'),
+    mpg: parseFloat(localStorage.getItem('tr_mpg') || '35'),
+    wearRate: parseFloat(localStorage.getItem('tr_wr') || '0.45'),
+  };
+  window._ttm = {};
+  window._tct = {};
+  for (var t of roadTrips) window._ttm[t.id] = t;
+  var byMonth = {};
+  for (var t of roadTrips) {
+    var k = t.date.substring(0, 7);
+    if (!byMonth[k]) byMonth[k] = [];
+    byMonth[k].push(t);
+  }
+  var months = Object.keys(byMonth).sort().reverse();
+  months.forEach(function(m) {
+    var trips = byMonth[m].slice().sort(function(a, b) { return b.date.localeCompare(a.date); });
+    window._tct[m] = trips.map(function(t) {
+      return t.postcode + ' â Â£' + parseFloat(t.total_cost).toFixed(2) + ' (' + t.date + ')';
+    }).join('\n');
+  });
+  var monthHtml = months.map(function(m) {
+    var trips = byMonth[m].slice().sort(function(a, b) { return b.date.localeCompare(a.date); });
+    var total = trips.reduce(function(acc, t) { return acc + parseFloat(t.total_cost || 0); }, 0);
+    var label = new Date(m + '-02').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    var tripRows = trips.map(function(t) {
+      return '<div onclick="openTripEditor(window._ttm[\'' + t.id + '\'])" style="display:flex;align-items:center;padding:11px 16px;border-bottom:1px solid #111;cursor:pointer;gap:12px">'
+        + '<span style="font-weight:600;color:#fff;min-width:100px">' + t.postcode + '</span>'
+        + '<span style="color:#666;font-size:13px;flex:1">' + t.miles + ' mi &middot; ' + t.hours + 'h</span>'
+        + '<span style="color:#666;font-size:12px">' + t.date + '</span>'
+        + '<span style="color:#c9a84c;font-weight:700;min-width:65px;text-align:right">&pound;' + parseFloat(t.total_cost).toFixed(2) + '</span>'
+        + '</div>';
+    }).join('');
+    return '<div style="background:#1a1a1a;border-radius:10px;margin-bottom:12px;overflow:hidden">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #2a2a2a">'
+      + '<span style="color:#c9a84c;font-weight:600">' + label + '</span>'
+      + '<div style="display:flex;align-items:center;gap:10px">'
+      + '<span style="color:#fff;font-weight:700">&pound;' + total.toFixed(2) + '</span>'
+      + '<button onclick="copyMonthText(\'' + m + '\')" style="padding:4px 10px;background:#2a2a2a;color:#aaa;border:1px solid #444;border-radius:5px;cursor:pointer;font-size:12px">Copy</button>'
+      + '</div></div>'
+      + tripRows
+      + '</div>';
+  }).join('');
+  var inp = function(id, lbl, val) {
+    return '<label style="font-size:12px;color:#888">' + lbl + '<input id="' + id + '" type="number" step="any" value="' + val + '" style="display:block;width:100%;padding:7px;margin-top:4px;background:#222;border:1px solid #333;border-radius:6px;color:#fff;box-sizing:border-box"></label>';
+  };
+  list.innerHTML = '<div style="padding:16px;max-width:720px;margin:0 auto">'
+    + '<div style="background:#1a1a1a;border-radius:10px;padding:16px;margin-bottom:14px">'
+    + '<div style="color:#c9a84c;font-weight:600;margin-bottom:12px">Settings</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
+    + inp('tr-hourly', 'Hourly rate (Â£)', s.hourlyRate)
+    + inp('tr-petrol', 'Petrol (Â£/litre)', s.petrolPrice)
+    + inp('tr-mpg', 'MPG', s.mpg)
+    + inp('tr-wear', 'Wear &amp; tear (Â£/mile)', s.wearRate)
+    + '</div>'
+    + '<button onclick="saveTravelSettings()" style="padding:7px 16px;background:#c9a84c;color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:600">Save Settings</button>'
+    + '</div>'
+    + '<div style="background:#1a1a1a;border-radius:10px;padding:16px;margin-bottom:14px">'
+    + '<div style="color:#c9a84c;font-weight:600;margin-bottom:12px">Quick Calculator</div>'
+    + '<div style="display:flex;gap:10px;margin-bottom:10px">'
+    + '<input id="tr-calc-miles" type="number" placeholder="Miles" oninput="updateTravelCalc()" style="flex:1;padding:8px;background:#222;border:1px solid #333;border-radius:6px;color:#fff">'
+    + '<input id="tr-calc-hours" type="number" placeholder="Hours" oninput="updateTravelCalc()" style="flex:1;padding:8px;background:#222;border:1px solid #333;border-radius:6px;color:#fff">'
+    + '</div>'
+    + '<div id="tr-calc-result" style="font-size:13px;color:#c9a84c;padding:8px;background:#222;border-radius:6px;min-height:34px;line-height:1.6"></div>'
+    + '</div>'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
+    + '<span style="color:#fff;font-weight:600;font-size:16px">Road Trips</span>'
+    + '<button onclick="openTripEditor(null)" style="padding:7px 16px;background:#c9a84c;color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:600">+ Log Trip</button>'
+    + '</div>'
+    + (months.length === 0 ? '<p style="color:#555;text-align:center;padding:40px">No trips yet.</p>' : monthHtml)
+    + '</div>';
+}
+
+function updateTravelCalc() {
+  var miles = parseFloat(document.getElementById('tr-calc-miles').value) || 0;
+  var hours = parseFloat(document.getElementById('tr-calc-hours').value) || 0;
+  var hr = parseFloat(localStorage.getItem('tr_hr') || '25');
+  var pp = parseFloat(localStorage.getItem('tr_pp') || '1.55');
+  var mpg = parseFloat(localStorage.getItem('tr_mpg') || '35');
+  var wr = parseFloat(localStorage.getItem('tr_wr') || '0.45');
+  var labour = hours * hr;
+  var petrol = (miles / mpg) * 4.546 * pp;
+  var wear = miles * wr;
+  var total = labour + petrol + wear;
+  var el = document.getElementById('tr-calc-result');
+  if (el) el.innerHTML = (miles || hours) ? 'Labour: &pound;' + labour.toFixed(2) + ' &nbsp;|&nbsp; Petrol: &pound;' + petrol.toFixed(2) + ' &nbsp;|&nbsp; W&amp;T: &pound;' + wear.toFixed(2) + ' &nbsp;|&nbsp; <strong style="color:#fff">Total: &pound;' + total.toFixed(2) + '</strong>' : '';
+}
+
+function saveTravelSettings() {
+  localStorage.setItem('tr_hr', document.getElementById('tr-hourly').value);
+  localStorage.setItem('tr_pp', document.getElementById('tr-petrol').value);
+  localStorage.setItem('tr_mpg', document.getElementById('tr-mpg').value);
+  localStorage.setItem('tr_wr', document.getElementById('tr-wear').value);
+  renderTravel();
+}
+
+function copyMonthText(m) {
+  navigator.clipboard.writeText(window._tct[m]);
+}
+
+function openTripEditor(trip) {
+  var s = {
+    hr: parseFloat(localStorage.getItem('tr_hr') || '25'),
+    pp: parseFloat(localStorage.getItem('tr_pp') || '1.55'),
+    mpg: parseFloat(localStorage.getItem('tr_mpg') || '35'),
+    wr: parseFloat(localStorage.getItem('tr_wr') || '0.45'),
+  };
+  document.getElementById('trip-editor').showModal();
+  document.getElementById('trip-editor-title').textContent = trip ? 'Edit Trip' : 'Log Trip';
+  document.getElementById('trip-id').value = trip ? trip.id : '';
+  document.getElementById('trip-date').value = trip ? trip.date : new Date().toISOString().split('T')[0];
+  document.getElementById('trip-postcode').value = trip ? trip.postcode : '';
+  document.getElementById('trip-miles').value = trip ? trip.miles : '';
+  document.getElementById('trip-hours').value = trip ? trip.hours : '';
+  document.getElementById('trip-hourly-r').value = trip ? trip.hourly_rate : s.hr;
+  document.getElementById('trip-petrol-p').value = trip ? trip.petrol_price : s.pp;
+  document.getElementById('trip-mpg-v').value = trip ? trip.mpg : s.mpg;
+  document.getElementById('trip-wear-v').value = trip ? trip.wear_rate : s.wr;
+  document.getElementById('trip-notes').value = trip ? (trip.notes || '') : '';
+  document.getElementById('trip-delete-btn').style.display = trip ? '' : 'none';
+  updateTripCalcPreview();
+}
+
+function updateTripCalcPreview() {
+  var mel = document.getElementById('trip-miles');
+  var hel = document.getElementById('trip-hours');
+  var miles = mel ? parseFloat(mel.value) || 0 : 0;
+  var hours = hel ? parseFloat(hel.value) || 0 : 0;
+  var hrel = document.getElementById('trip-hourly-r');
+  var ppel = document.getElementById('trip-petrol-p');
+  var mpgel = document.getElementById('trip-mpg-v');
+  var wrel = document.getElementById('trip-wear-v');
+  var hr = hrel ? parseFloat(hrel.value) || 25 : 25;
+  var pp = ppel ? parseFloat(ppel.value) || 1.55 : 1.55;
+  var mpg = mpgel ? parseFloat(mpgel.value) || 35 : 35;
+  var wr = wrel ? parseFloat(wrel.value) || 0.45 : 0.45;
+  var labour = hours * hr;
+  var petrol = (miles / mpg) * 4.546 * pp;
+  var wear = miles * wr;
+  var total = labour + petrol + wear;
+  var el = document.getElementById('trip-cost-preview');
+  if (el) el.innerHTML = (miles || hours) ? 'Labour: &pound;' + labour.toFixed(2) + ' | Petrol: &pound;' + petrol.toFixed(2) + ' | W&amp;T: &pound;' + wear.toFixed(2) + ' | <strong>Total: &pound;' + total.toFixed(2) + '</strong>' : '';
+}
+
+async function saveTripEditor() {
+  var id = document.getElementById('trip-id').value;
+  var miles = parseFloat(document.getElementById('trip-miles').value) || 0;
+  var hours = parseFloat(document.getElementById('trip-hours').value) || 0;
+  var hr = parseFloat(document.getElementById('trip-hourly-r').value) || 25;
+  var pp = parseFloat(document.getElementById('trip-petrol-p').value) || 1.55;
+  var mpg = parseFloat(document.getElementById('trip-mpg-v').value) || 35;
+  var wr = parseFloat(document.getElementById('trip-wear-v').value) || 0.45;
+  var labour = hours * hr;
+  var petrol = (miles / mpg) * 4.546 * pp;
+  var wear = miles * wr;
+  var total = labour + petrol + wear;
+  var data = {
+    date: document.getElementById('trip-date').value,
+    postcode: document.getElementById('trip-postcode').value.toUpperCase().trim(),
+    miles: miles, hours: hours,
+    hourly_rate: hr, petrol_price: pp, mpg: mpg, wear_rate: wr,
+    labour_cost: +labour.toFixed(2),
+    petrol_cost: +petrol.toFixed(2),
+    wear_cost: +wear.toFixed(2),
+    total_cost: +total.toFixed(2),
+    notes: document.getElementById('trip-notes').value.trim(),
+  };
+  if (id) {
+    await window.db.from('road_trips').update(data).eq('id', id);
+  } else {
+    await window.db.from('road_trips').insert(data);
+  }
+  document.getElementById('trip-editor').close();
+  await loadAll();
+  activeTab = 'travel';
+  render();
+}
+
+async function deleteTripEditor() {
+  var id = document.getElementById('trip-id').value;
+  if (!id || !confirm('Delete this trip?')) return;
+  await window.db.from('road_trips').delete().eq('id', id);
+  document.getElementById('trip-editor').close();
+  await loadAll();
+  activeTab = 'travel';
+  render();
+}
 }
