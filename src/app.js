@@ -2679,25 +2679,25 @@ async function deleteTripEditor() {
 }
 }
 
+
 async function lookupTripPostcode() {
   var pc = (document.getElementById('trip-postcode').value || '').trim().replace(/\s+/g,'').toUpperCase();
   if (pc.length < 3) return;
   var milesEl = document.getElementById('trip-miles');
-  if (milesEl.dataset.manualMiles === '1') return; // user typed miles manually, don't override
+  if (milesEl.dataset.manualMiles === '1') return;
   try {
     var r = await fetch('https://api.postcodes.io/postcodes/' + encodeURIComponent(pc));
     var j = await r.json();
     if (!j.result) return;
-    var destLat = j.result.latitude, destLng = j.result.longitude;
     var homeLat = 51.6178, homeLng = -0.1757;
-    var R = 3958.8;
-    var dLat = (destLat - homeLat) * Math.PI / 180;
-    var dLng = (destLng - homeLng) * Math.PI / 180;
-    var a = Math.sin(dLat/2)*Math.sin(dLat/2) +
-            Math.cos(homeLat*Math.PI/180)*Math.cos(destLat*Math.PI/180)*
-            Math.sin(dLng/2)*Math.sin(dLng/2);
-    var miles = Math.round(2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)) * 1.3 * 10) / 10;
+    var destLat = j.result.latitude, destLng = j.result.longitude;
+    var osrm = 'https://router.project-osrm.org/route/v1/driving/' +
+      homeLng + ',' + homeLat + ';' + destLng + ',' + destLat + '?overview=false';
+    var ro = await fetch(osrm);
+    var jo = await ro.json();
+    if (!jo.routes || !jo.routes[0]) return;
+    var miles = Math.round(jo.routes[0].distance / 1609.344 * 2 * 10) / 10;
     milesEl.value = miles;
     updateTripCalcPreview();
-  } catch(e) { /* silent fail */ }
+  } catch(e) {}
 }
