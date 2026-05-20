@@ -2511,7 +2511,7 @@ function renderTravel() {
   months.forEach(function(m) {
     var trips = byMonth[m].slice().sort(function(a, b) { return b.date.localeCompare(a.date); });
     window._tct[m] = trips.map(function(t) {
-      return t.postcode + ' â Â£' + parseFloat(t.total_cost).toFixed(2) + ' (' + t.date + ')';
+      return t.postcode + ' â £' + parseFloat(t.total_cost).toFixed(2) + ' (' + t.date + ')';
     }).join('\n');
   });
   var monthHtml = months.map(function(m) {
@@ -2543,10 +2543,10 @@ function renderTravel() {
     + '<div style="background:#1a1a1a;border-radius:10px;padding:16px;margin-bottom:14px">'
     + '<div style="color:#c9a84c;font-weight:600;margin-bottom:12px">Settings</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
-    + inp('tr-hourly', 'Hourly rate (Â£)', s.hourlyRate)
-    + inp('tr-petrol', 'Petrol (Â£/litre)', s.petrolPrice)
+    + inp('tr-hourly', 'Hourly rate (£)', s.hourlyRate)
+    + inp('tr-petrol', 'Petrol (£/litre)', s.petrolPrice)
     + inp('tr-mpg', 'MPG', s.mpg)
-    + inp('tr-wear', 'Wear &amp; tear (Â£/mile)', s.wearRate)
+    + inp('tr-wear', 'Wear &amp; tear (£/mile)', s.wearRate)
     + '</div>'
     + '<button onclick="saveTravelSettings()" style="padding:7px 16px;background:#c9a84c;color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:600">Save Settings</button>'
     + '</div>'
@@ -2654,9 +2654,6 @@ async function saveTripEditor() {
     postcode: document.getElementById('trip-postcode').value.toUpperCase().trim(),
     miles: miles, hours: hours,
     hourly_rate: hr, petrol_price: pp, mpg: mpg, wear_rate: wr,
-    labour_cost: +labour.toFixed(2),
-    petrol_cost: +petrol.toFixed(2),
-    wear_cost: +wear.toFixed(2),
     total_cost: +total.toFixed(2),
     notes: document.getElementById('trip-notes').value.trim(),
   };
@@ -2680,4 +2677,27 @@ async function deleteTripEditor() {
   activeTab = 'travel';
   render();
 }
+}
+
+async function lookupTripPostcode() {
+  var pc = (document.getElementById('trip-postcode').value || '').trim().replace(/\s+/g,'').toUpperCase();
+  if (pc.length < 3) return;
+  var milesEl = document.getElementById('trip-miles');
+  if (milesEl.dataset.manualMiles === '1') return; // user typed miles manually, don't override
+  try {
+    var r = await fetch('https://api.postcodes.io/postcodes/' + encodeURIComponent(pc));
+    var j = await r.json();
+    if (!j.result) return;
+    var destLat = j.result.latitude, destLng = j.result.longitude;
+    var homeLat = 51.6178, homeLng = -0.1757;
+    var R = 3958.8;
+    var dLat = (destLat - homeLat) * Math.PI / 180;
+    var dLng = (destLng - homeLng) * Math.PI / 180;
+    var a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+            Math.cos(homeLat*Math.PI/180)*Math.cos(destLat*Math.PI/180)*
+            Math.sin(dLng/2)*Math.sin(dLng/2);
+    var miles = Math.round(2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)) * 1.3 * 10) / 10;
+    milesEl.value = miles;
+    updateTripCalcPreview();
+  } catch(e) { /* silent fail */ }
 }
