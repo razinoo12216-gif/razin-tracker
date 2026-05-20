@@ -414,10 +414,10 @@
     <input type="hidden" id="trip-id">
     <div class="row">
       <label>Date<input id="trip-date" type="date"></label>
-      <label>Postcode<input id="trip-postcode" type="text" placeholder="e.g. M1 1AE"></label>
+      <label>Postcode<input id="trip-postcode" onchange="lookupTripPostcode()" type="text" placeholder="e.g. M1 1AE"></label>
     </div>
     <div class="row">
-      <label>Miles<input id="trip-miles" type="number" step="0.1" oninput="updateTripCalcPreview()"></label>
+      <label>Miles<input id="trip-miles" type="number" step="0.1" oninput="this.dataset.manualMiles='1';updateTripCalcPreview()"></label>
       <label>Hours<input id="trip-hours" type="number" step="0.25" oninput="updateTripCalcPreview()"></label>
     </div>
     <div class="row">
@@ -433,7 +433,7 @@
     <div class="row">
       <button type="button" id="trip-delete-btn" onclick="deleteTripEditor()" style="display:none;color:#e53e3e">Delete</button>
       <button type="button" onclick="document.getElementById('trip-editor').close()">Cancel</button>
-      <button type="submit" onclick="saveTripEditor()">Save</button>
+      <button type="button" onclick="saveTripEditor()">Save</button>
     </div>
   </form>
 </dialog>
