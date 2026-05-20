@@ -1046,7 +1046,7 @@ function renderTickets() {
 
   const isAdminFilter = ticketTypeFilter === 'admin';
   const isSpeedingFilter = ticketTypeFilter === 'speeding';
-  const boroughLabel = isAdminFilter ? 'Reference #' : (isSpeedingFilter ? 'Police Force' : 'Borough');
+  const boroughLabel = isAdminFilter ? 'Name' : (isSpeedingFilter ? 'Police Force' : 'Borough');
 
   list.innerHTML = `
     <div class="tickets-page">
@@ -1169,6 +1169,13 @@ function openTicketEditor(id) {
     onTicketKindChange('personal');
   }
   applyTicketBoroughLabel();
+  var _isAdmin = (ticketForm.type && ticketForm.type.value === 'admin');
+  ['admin-name-row','admin-address-row'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (el) el.style.display = _isAdmin ? 'block' : 'none';
+  });
+  if (ticketForm.admin_name) ticketForm.admin_name.value = (t && t.admin_name) || '';
+  if (ticketForm.admin_address) ticketForm.admin_address.value = (t && t.admin_address) || '';
   ticketEditor.showModal();
   setTimeout(() => ticketForm.amount?.focus(), 50);
 }
