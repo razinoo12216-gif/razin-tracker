@@ -252,6 +252,7 @@
         <label>Type
           <select name="type" id="ticket-type-select" onchange="applyTicketBoroughLabel();var _a=this.value==='admin';['admin-name-row','admin-address-row'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display=_a?'block':'none';});">
             <option value="admin">Admin</option>
+            <option value="parking">Parking</option>
             <option value="speeding">Speeding</option>
             <option value="redlight">Red light</option>
           </select>
