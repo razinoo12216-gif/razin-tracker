@@ -2667,6 +2667,9 @@ async function deleteTripEditor() {
 }
 
 
+window.saveTripEditor = saveTripEditor;
+window.deleteTripEditor = deleteTripEditor;
+
 async function lookupTripPostcode() {
   var pc = (document.getElementById('trip-postcode').value || '').trim().replace(/\s+/g,'').toUpperCase();
   if (pc.length < 3) return;
