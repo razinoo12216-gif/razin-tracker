@@ -362,7 +362,7 @@ function renderPotentialTotals(potentials) {
 }
 
 function render() {
-  if(!['today','drive','review','invoice','ticket','debt','health'].includes(activeTab))activeTab='today';
+  if(!['today','drive','review','invoice','ticket','debt','gym','project','potential','expense'].includes(activeTab))activeTab='today';
   // Month-scoped entries (projects/expenses use month, potentials/reviews/invoices ignore)
   const moneyEntries = entries.filter((e) => e.type !== 'potential');
   const inMonth = moneyEntries.filter((e) => matchesMonth(e, selectedMonth));
