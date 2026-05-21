@@ -2294,103 +2294,72 @@ function gymStreaks() {
 
 function renderGym() {
   const typeColors = { push: '#ef4444', pull: '#3b82f6', legs: '#8b5cf6', cardio: '#f97316', full: '#10b981', other: '#6b7280' };
+  const typeLabels = { push: 'Push', pull: 'Pull', legs: 'Legs', cardio: 'Cardio', full: 'Full', other: 'Other' };
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
-  const monthStr = now.toISOString().slice(0, 7);
-  const streaks = gymStreaks();
-  const thisMonth = gymSessions.filter(function(s) { return s.date && s.date.startsWith(monthStr); }).length;
-  const mon = new Date(now); mon.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-  const monStr = mon.toISOString().slice(0, 10);
-  const completedCount = gymSessions.filter(function(s) { return s.completed !== false; }).length;
-  const completionPct = gymSessions.length ? Math.round(completedCount / gymSessions.length * 100) : 0;
+  const monthStr = selectedMonth || now.toISOString().slice(0, 7);
+  const parts = monthStr.split('-');
+  const yr = parseInt(parts[0]); const mo = parseInt(parts[1]);
 
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDow = new Date(year, month, 1).getDay();
-  const adjustedFirst = firstDow === 0 ? 6 : firstDow - 1;
-  const gymDates = new Set(gymSessions.map(function(s) { return s.date; }));
-  let heatCells = '';
-  for (let i = 0; i < adjustedFirst; i++) { heatCells += '<div class="gym-heat-cell empty"></div>'; }
-  for (let d = 1; d <= daysInMonth; d++) {
-    const ds = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
-    let cls = 'gym-heat-cell';
-    if (ds === todayStr) { cls += ' today'; }
-    else if (ds > todayStr) { cls += ' future'; }
-    else if (gymDates.has(ds)) { cls += ' trained'; }
-    heatCells += '<div class="' + cls + '" title="' + ds + '"><span class="gym-cal-num">' + d + '</span></div>';
+  const monthSessions = gymSessions.filter(s => s.date && s.date.startsWith(monthStr));
+  const sessionByDate = {};
+  gymSessions.forEach(s => { if (s.date) sessionByDate[s.date] = s; });
+
+  let streak = 0;
+  const sd = new Date(todayStr);
+  while (true) { const ds = sd.toISOString().slice(0,10); if (!sessionByDate[ds]) break; streak++; sd.setDate(sd.getDate()-1); }
+
+  const sortedDates = gymSessions.filter(s=>s.date).map(s=>s.date).sort();
+  let bestStreak = 0, curStreak = 0, prevDate = null;
+  sortedDates.forEach(d => {
+    if (!prevDate) { curStreak = 1; }
+    else { const diff = (new Date(d) - new Date(prevDate)) / 86400000; curStreak = diff === 1 ? curStreak+1 : 1; }
+    bestStreak = Math.max(bestStreak, curStreak); prevDate = d;
+  });
+
+  const daysInMonth = new Date(yr, mo, 0).getDate();
+  const completionPct = daysInMonth ? Math.round((monthSessions.length / daysInMonth) * 100) : 0;
+
+  const firstDay = new Date(yr, mo-1, 1).getDay();
+  const startOffset = (firstDay + 6) % 7;
+
+  let cells = '';
+  for (let i = 0; i < startOffset; i++) cells += '<div class="gym-cal-cell empty"></div>';
+  for (let day = 1; day <= daysInMonth; day++) {
+    const ds = yr + '-' + String(mo).padStart(2,'0') + '-' + String(day).padStart(2,'0');
+    const sess = sessionByDate[ds];
+    const isToday = ds === todayStr;
+    const tColor = sess ? (typeColors[sess.type] || typeColors.other) : '';
+    const tLabel = sess ? (sess.type || 'other').slice(0,2).toUpperCase() : '';
+    const clickFn = sess
+      ? `openGymEditor('${sess.id}')`
+      : `openGymEditor(null);setTimeout(function(){var f=document.getElementById('gym-form');if(f&&f.date)f.date.value='${ds}';},50)`;
+    cells += `<div class="gym-cal-cell${isToday?' today':''}" onclick="${clickFn}" title="${sess?(sess.type||'')+' '+ds:ds}">`;
+    cells += `<span class="gym-cal-num">${day}</span>`;
+    if (sess) cells += `<span class="gym-cal-pip" style="background:${tColor}">${tLabel}</span>`;
+    cells += '</div>';
   }
 
-  const recent = gymSessions.slice().sort(function(a, b) { return b.date > a.date ? 1 : -1; }).slice(0, 10);
-  let sessionCardsHtml = '';
-  for (let i = 0; i < recent.length; i++) {
-    const s = recent[i];
-    const col = typeColors[s.type] || typeColors.other;
-    const dur = s.duration ? s.duration + 'm' : '';
-    const done = s.completed !== false;
-    const tickCls = done ? 'gym-session-tick done' : 'gym-session-tick';
-    const tickChar = done ? '&#10003;' : '&#9675;';
-    sessionCardsHtml += '<div class="gym-session-card" data-id="' + s.id + '">';
-    sessionCardsHtml += '<div class="' + tickCls + '">' + tickChar + '</div>';
-    sessionCardsHtml += '<div class="gym-session-type" style="background:' + col + '22;color:' + col + '">' + (s.type || 'session') + '</div>';
-    sessionCardsHtml += '<div class="gym-session-info">';
-    sessionCardsHtml += '<div class="gym-session-date">' + shortDate(s.date) + (dur ? ' &middot; ' + dur : '') + '</div>';
-    if (s.notes) { sessionCardsHtml += '<div class="gym-session-notes">' + esc(s.notes) + '</div>'; }
-    sessionCardsHtml += '</div></div>';
-  }
+  const monthLabel = new Date(yr, mo-1, 1).toLocaleString('default', {month:'long', year:'numeric'});
+  const legendHtml = Object.keys(typeColors).map(k =>
+    `<span class="gym-legend-item"><span class="gym-legend-dot" style="background:${typeColors[k]}"></span>${typeLabels[k]}</span>`
+  ).join('');
 
-  const lastMetric = bodyMetrics.length ? bodyMetrics[0] : null;
-  const prevMetric = bodyMetrics.length > 1 ? bodyMetrics[1] : null;
-  let weightTrend = '';
-  let fatTrend = '';
-  if (lastMetric && prevMetric) {
-    const wDiff = (parseFloat(lastMetric.weight_kg) - parseFloat(prevMetric.weight_kg)).toFixed(1);
-    weightTrend = parseFloat(wDiff) > 0 ? ' <span style="color:#ef4444">+' + wDiff + 'kg</span>' : ' <span style="color:#10b981">' + wDiff + 'kg</span>';
-    if (lastMetric.body_fat_pct && prevMetric.body_fat_pct) {
-      const fDiff = (parseFloat(lastMetric.body_fat_pct) - parseFloat(prevMetric.body_fat_pct)).toFixed(1);
-      fatTrend = parseFloat(fDiff) > 0 ? ' <span style="color:#ef4444">+' + fDiff + '%</span>' : ' <span style="color:#10b981">' + fDiff + '%</span>';
-    }
-  }
-
-  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const calTitle = monthNames[month] + ' ' + year;
-
-  let html = '';
-  html += '<div class="section-header"><h2>Gym</h2><button class="add-btn" onclick="openGymEditor(null)">+ Log Session</button></div>';
-  html += '<div class="gym-header">';
-  html += '<div class="gym-stat"><div class="gym-stat-val">' + thisMonth + '</div><div class="gym-stat-lbl">This Month</div></div>';
-  html += '<div class="gym-stat"><div class="gym-stat-val">' + streaks.current + '</div><div class="gym-stat-lbl">Streak</div></div>';
-  html += '<div class="gym-stat"><div class="gym-stat-val">' + streaks.longest + '</div><div class="gym-stat-lbl">Best Streak</div></div>';
-  html += '<div class="gym-stat"><div class="gym-stat-val">' + completionPct + '%</div><div class="gym-stat-lbl">Completion</div></div>';
-  html += '</div>';
-  html += '<div class="gym-cal-header-row"><span class="gym-cal-lbl">' + calTitle + '</span></div>';
-  html += '<div class="gym-heatmap">';
-  html += '<div class="gym-cal-days"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>';
-  html += '<div class="gym-cal-grid">' + heatCells + '</div>';
-  html += '</div>';
-  html += '<div class="gym-metrics-row">';
-  html += '<div class="gym-metric-card">';
-  html += '<div class="gym-metric-val">' + (lastMetric && lastMetric.weight_kg ? lastMetric.weight_kg + 'kg' : '--') + '</div>';
-  html += '<div class="gym-metric-lbl">Weight' + weightTrend + '</div>';
-  html += '<button class="gym-metric-btn" onclick="openBodyMetricEditor()">Log</button>';
-  html += '</div>';
-  html += '<div class="gym-metric-card">';
-  html += '<div class="gym-metric-val">' + (lastMetric && lastMetric.body_fat_pct ? lastMetric.body_fat_pct + '%' : '--') + '</div>';
-  html += '<div class="gym-metric-lbl">Body Fat' + fatTrend + '</div>';
-  html += '</div>';
-  html += '</div>';
-  html += '<div id="gym-session-list">';
-  html += sessionCardsHtml || '<div class="empty-state">No sessions yet. Log your first!</div>';
-  html += '</div>';
-  document.getElementById('list').innerHTML = html;
-
-  const list = document.getElementById('gym-session-list');
-  if (list) {
-    list.addEventListener('click', function(e) {
-      const card = e.target.closest('[data-id]');
-      if (card) { openGymEditor(card.dataset.id); }
-    });
-  }
+  list.innerHTML = `
+    <div class="section-header"><h2>Gym</h2><button class="add-btn" onclick="openGymEditor(null)">+ Log Session</button></div>
+    <div class="gym-stats-row">
+      <div class="gym-stat"><div class="gym-stat-val">${monthSessions.length}</div><div class="gym-stat-lbl">This Month</div></div>
+      <div class="gym-stat"><div class="gym-stat-val">${streak}</div><div class="gym-stat-lbl">Streak</div></div>
+      <div class="gym-stat"><div class="gym-stat-val">${bestStreak}</div><div class="gym-stat-lbl">Best</div></div>
+      <div class="gym-stat"><div class="gym-stat-val">${completionPct}%</div><div class="gym-stat-lbl">Completion</div></div>
+    </div>
+    <div class="gym-calendar">
+      <div class="gym-cal-month">${monthLabel}</div>
+      <div class="gym-cal-header"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+      <div class="gym-cal-grid">${cells}</div>
+    </div>
+    <div class="gym-legend">${legendHtml}</div>
+  `;
 }
 
 function openGymEditor(id) {
