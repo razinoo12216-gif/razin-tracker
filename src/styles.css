@@ -1499,3 +1499,18 @@ dialog .actions {
 
 /* Macro dot on calendar cell */
 .gym-cal-mac { display:block; font-size:0.55rem; color:var(--accent,#4af); font-weight:700; line-height:1; margin-top:1px; }
+
+/* ── Macro Targets ── */
+.gym-macro-targets { display:flex; flex-direction:column; gap:10px; padding:12px 0 8px; }
+.gym-macro-row { display:flex; flex-direction:column; gap:4px; }
+.gym-macro-row > div:first-of-type { display:flex; justify-content:space-between; align-items:center; }
+.gym-macro-label { font-size:0.8rem; color:var(--text-secondary); font-weight:500; }
+.gym-macro-val { font-size:0.8rem; color:var(--text-secondary); }
+.gym-macro-bar { height:6px; background:rgba(255,255,255,0.1); border-radius:3px; overflow:hidden; }
+.gym-macro-fill { height:100%; background:var(--accent,#7c6cfc); border-radius:3px; transition:width 0.4s ease; }
+
+/* ── Receivables ── */
+.receivables-section { margin-top:24px; }
+.receivables-hdr { display:flex; justify-content:space-between; align-items:center; padding:0 0 12px; border-bottom:1px solid rgba(255,255,255,0.08); margin-bottom:12px; }
+.receivables-hdr h3 { font-size:1rem; font-weight:600; margin:0; }
+.debt-card-top { display:flex; justify-content:space-between; align-items:center; }
