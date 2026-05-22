@@ -20,6 +20,8 @@ let tickets = [];
 let debts = [];
 let gymSessions = [];
 let dailyMacros = [];
+let receivables = [];
+const MACRO_TARGETS = {protein:180, carbs:280, fats:70, calories:2500};
 let bodyMetrics = [];
 let roadTrips = [];
 let debtPayments = [];
@@ -278,6 +280,7 @@ async function loadAll() {
   rebuildSecondaryFilter();
   render();
   try { const {data:_dm} = await window.db.from('daily_macros').select('*').order('date',{ascending:false}); dailyMacros = _dm || []; } catch(_e) {}
+  try { const {data:_rv} = await window.db.from('receivables').select('*').order('created_at',{ascending:false}); receivables = _rv || []; } catch(_e) {}
 }
 
 function rebuildMonthSelect() {
@@ -1295,6 +1298,34 @@ function renderDebtTotals() {
   $('#t-count').textContent = String(active.length);
 }
 
+function renderReceivablesSection() {
+  var q = "'";
+  var act = receivables.filter(function(r){ return r.status !== "settled"; });
+  var h = '<div class="receivables-hdr"><h3>Owed to Me</h3><button class="add-btn" onclick="openReceivableEditor(null)">+ Add</button></div>';
+  if (!act.length) return h + '<p class="debt-empty" style="margin:8px 16px">No one owes you</p>';
+  return h + act.map(function(r){ return renderReceivable(r); }).join('');
+}
+function renderReceivable(r) {
+  var q = "'";
+  return '<div class="debt-card"><div class="debt-card-top"><span class="debt-creditor">' + (r.creditor||"") + '</span><button class="ghost" onclick="openReceivableEditor(' + q + r.id + q + ')">Edit</button></div><div class="debt-balance" style="margin:4px 0">Owes you: £' + fmt(r.current_balance||0) + '</div>' + (r.notes ? '<div class="debt-notes">' + r.notes + '</div>' : '') + '</div>';
+}
+function openReceivableEditor(id) {
+  window._receivableMode = true;
+  editingDebtId = id || null;
+  var r = id ? receivables.find(function(x){ return x.id === id; }) : null;
+  debtForm.reset();
+  $('#debt-editor-title').textContent = r ? 'Edit Receivable' : 'New Receivable';
+  $('#debt-delete-btn').style.display = r ? '' : 'none';
+  if (r) {
+    debtForm.creditor.value = r.creditor || '';
+    debtForm.original_amount.value = r.original_amount || '';
+    debtForm.current_balance.value = r.current_balance || '';
+    debtForm.notes.value = r.notes || '';
+    debtForm.status.value = r.status || 'active';
+  }
+  debtEditor.showModal();
+  setTimeout(function(){ debtForm.creditor && debtForm.creditor.focus(); }, 50);
+}
 function renderDebts() {
   const sorted = [...debts].sort(debtSort);
   const active = sorted.filter((d) => d.status !== 'paid');
@@ -1367,6 +1398,9 @@ function renderDebt(d) {
       ${!isPaid ? `<button type="button" class="debt-pay-btn" data-id="${esc(d.id)}">+ Log payment</button>` : ''}
     </div>
   `;
+  var _rvEl = list.querySelector('.receivables-section');
+  if (!_rvEl) { _rvEl = document.createElement('div'); _rvEl.className = 'receivables-section'; var _dp = list.querySelector('.debts-page'); if (_dp) _dp.appendChild(_rvEl); }
+  _rvEl.innerHTML = renderReceivablesSection();
 }
 
 function openDebtEditor(id) {
@@ -1423,6 +1457,24 @@ function renderPaymentHistory(debtId) {
 
 debtForm.addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (window._receivableMode) {
+    var _rFd = new FormData(debtForm);
+    var _rPay = Object.fromEntries(_rFd.entries());
+    if (!_rPay.creditor || !_rPay.creditor.trim()) { window._receivableMode = false; return; }
+    var _rvId = editingDebtId;
+    if (_rvId) {
+      await window.db.from('receivables').update({creditor:_rPay.creditor,original_amount:parseNum(_rPay.original_amount)||0,current_balance:parseNum(_rPay.current_balance)||0,notes:_rPay.notes||null,status:_rPay.status||'active'}).eq('id',_rvId);
+      var _ri = receivables.findIndex(function(x){ return x.id===_rvId; });
+      if (_ri>=0) receivables[_ri] = Object.assign({},receivables[_ri],{creditor:_rPay.creditor,original_amount:parseNum(_rPay.original_amount)||0,current_balance:parseNum(_rPay.current_balance)||0,notes:_rPay.notes||null,status:_rPay.status||'active'});
+    } else {
+      var _ins = await window.db.from('receivables').insert({creditor:_rPay.creditor,original_amount:parseNum(_rPay.original_amount)||0,current_balance:parseNum(_rPay.current_balance)||0,notes:_rPay.notes||null,status:_rPay.status||'active'}).select().single();
+      if (_ins && _ins.data) receivables.push(_ins.data);
+    }
+    window._receivableMode = false;
+    debtEditor.close();
+    renderDebts();
+    return;
+  }
   const fd = new FormData(debtForm);
   const payload = Object.fromEntries(fd.entries());
   payload.priority = fd.has('priority_focus') ? 'focus' : 'normal';
@@ -1453,9 +1505,20 @@ debtForm.addEventListener('submit', async (e) => {
   debtEditor.close();
 });
 
-$('#debt-cancel-btn').addEventListener('click', () => debtEditor.close());
+$('#debt-cancel-btn').addEventListener('click', () => { window._receivableMode = false; debtEditor.close(); });
 
 $('#debt-delete-btn').addEventListener('click', async () => {
+  if (window._receivableMode) {
+    if (!editingDebtId) { window._receivableMode = false; return; }
+    if (!confirm('Delete this receivable?')) return;
+    var _dId = editingDebtId;
+    receivables = receivables.filter(function(x){ return x.id !== _dId; });
+    await window.db.from('receivables').delete().eq('id', _dId);
+    window._receivableMode = false;
+    debtEditor.close();
+    renderDebts();
+    return;
+  }
   if (!editingDebtId) return;
   if (!confirm('Delete this debt? Payment history will also be deleted.')) return;
   const id = editingDebtId;
@@ -1470,7 +1533,7 @@ $('#debt-delete-btn').addEventListener('click', async () => {
 debtEditor.addEventListener('click', (e) => {
   const rect = debtEditor.getBoundingClientRect();
   const inside = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
-  if (!inside) debtEditor.close();
+  if (!inside) { window._receivableMode = false; debtEditor.close(); }
 });
 
 // ─── Payment logging ────────────────────────────────────────
@@ -2362,7 +2425,11 @@ function renderGym() {
   const todayEntries = dailyMacros.filter(m => m && m.date === todayStr);
   const todayTotals = todayEntries.reduce(function(acc,m){return{p:acc.p+(m.protein||0),c:acc.c+(m.carbs||0),f:acc.f+(m.fats||0)};},{p:0,c:0,f:0});
   const macroHtml = todayEntries.length
-  ? '<div class="gym-macros-vals"><span>Protein: '+Math.round(todayTotals.p)+'g</span><span>Carbs: '+Math.round(todayTotals.c)+'g</span><span>Fats: '+Math.round(todayTotals.f)+'g</span></div>'
+  ? '<div class="gym-macro-targets">'
+    + '<div class="gym-macro-row"><span class="gym-macro-label">Protein</span><span class="gym-macro-val">'+Math.round(todayTotals.p)+'g / 180g</span><div class="gym-macro-bar"><div class="gym-macro-fill" style="width:'+Math.min(100,+(todayTotals.p/180*100).toFixed(1))+'%"></div></div></div>'
+    + '<div class="gym-macro-row"><span class="gym-macro-label">Carbs</span><span class="gym-macro-val">'+Math.round(todayTotals.c)+'g / 280g</span><div class="gym-macro-bar"><div class="gym-macro-fill" style="width:'+Math.min(100,+(todayTotals.c/280*100).toFixed(1))+'%"></div></div></div>'
+    + '<div class="gym-macro-row"><span class="gym-macro-label">Fats</span><span class="gym-macro-val">'+Math.round(todayTotals.f)+'g / 70g</span><div class="gym-macro-bar"><div class="gym-macro-fill" style="width:'+Math.min(100,+(todayTotals.f/70*100).toFixed(1))+'%"></div></div></div>'
+    + '</div>'
     + todayEntries.map(function(m){
         return '<div class="gym-macros-entry">'
           + '<span>Protein: '+Math.round(m.protein||0)+'g · Carbs: '+Math.round(m.carbs||0)+'g · Fats: '+Math.round(m.fats||0)+'g'+(m.calories?' · '+Math.round(m.calories)+'kcal':'')+'</span>'
