@@ -1380,13 +1380,13 @@ dialog .actions {
 }
 .gym-stat-lbl {
   font-size: 0.65rem;
-  color: rgba(255,255,255,0.5);
+  background: #141414;
   margin-top: 4px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 .gym-calendar {
-  background: rgba(255,255,255,0.05);
+  background: #141414;
   border-radius: 12px;
   padding: 14px;
   margin-bottom: 12px;
@@ -1431,7 +1431,7 @@ dialog .actions {
   min-width: 0;
 }
 .gym-cal-cell:hover {
-  background: rgba(255,255,255,0.1);
+  background: #141414;
 }
 .gym-cal-cell.empty {
   background: transparent;
@@ -1485,7 +1485,7 @@ dialog .actions {
 .muscle-btn.active { background: #e8c97e; border-color: #e8c97e; color: #1a1a2e; font-weight: 600; }
 
 /* Macros section in gym */
-.gym-macros-section { background: rgba(255,255,255,0.05); border-radius: 12px; padding: 12px 14px; margin-top: 10px; }
+.gym-macros-section { background: #141414; border-radius: 12px; padding: 12px 14px; margin-top: 10px; }
 .gym-macros-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .gym-macros-title { font-size: 0.85rem; font-weight: 600; color: rgba(255,255,255,0.85); }
 .gym-macros-vals { display: flex; gap: 10px; flex-wrap: wrap; }
