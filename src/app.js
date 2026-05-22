@@ -19,6 +19,7 @@ let tasks = [];
 let tickets = [];
 let debts = [];
 let gymSessions = [];
+let dailyMacros = [];
 let bodyMetrics = [];
 let roadTrips = [];
 let debtPayments = [];
@@ -276,6 +277,7 @@ async function loadAll() {
   rebuildMonthSelect();
   rebuildSecondaryFilter();
   render();
+  try { const {data:_dm} = await window.db.from('daily_macros').select('*').order('date',{ascending:false}); dailyMacros = _dm || []; } catch(_e) {}
 }
 
 function rebuildMonthSelect() {
@@ -2293,8 +2295,8 @@ function gymStreaks() {
 }
 
 function renderGym() {
-  const typeColors = { push: '#ef4444', pull: '#3b82f6', legs: '#8b5cf6', cardio: '#f97316', full: '#10b981', other: '#6b7280' };
-  const typeLabels = { push: 'Push', pull: 'Pull', legs: 'Legs', cardio: 'Cardio', full: 'Full', other: 'Other' };
+  const typeColors = { weights: '#ef4444', cardio: '#f97316', hiit: '#8b5cf6', sport: '#3b82f6', other: '#6b7280' };
+  const typeLabels = { weights: 'WT', cardio: 'CA', hiit: 'HI', sport: 'SP', other: 'OT' };
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
   const monthStr = selectedMonth || now.toISOString().slice(0, 7);
@@ -2337,6 +2339,7 @@ function renderGym() {
     cells += `<div class="gym-cal-cell${isToday?' today':''}" onclick="${clickFn}" title="${sess?(sess.type||'')+' '+ds:ds}">`;
     cells += `<span class="gym-cal-num">${day}</span>`;
     if (sess) cells += `<span class="gym-cal-pip" style="background:${tColor}">${tLabel}</span>`;
+    if (sess && sess.muscles) cells += '<span class="gym-cal-muscles">' + sess.muscles.split(',').slice(0,3).map(m=>m.trim().slice(0,2)).join(',') + '</span>';
     cells += '</div>';
   }
 
@@ -2345,6 +2348,8 @@ function renderGym() {
     `<span class="gym-legend-item"><span class="gym-legend-dot" style="background:${typeColors[k]}"></span>${typeLabels[k]}</span>`
   ).join('');
 
+  const todayMacros = dailyMacros.find(m => m && m.date === todayStr) || null;
+  const macroHtml = todayMacros ? '<div class="gym-macros-vals"><span>P:' + (todayMacros.protein||0) + 'g</span><span>C:' + (todayMacros.carbs||0) + 'g</span><span>F:' + (todayMacros.fats||0) + 'g</span></div>' : '<p class="gym-macros-empty">No macros logged yet</p>';
   list.innerHTML = `
     <div class="section-header"><h2>Gym</h2><button class="add-btn" onclick="openGymEditor(null)">+ Log Session</button></div>
     <div class="gym-stats-row">
@@ -2359,6 +2364,7 @@ function renderGym() {
       <div class="gym-cal-grid">${cells}</div>
     </div>
     <div class="gym-legend">${legendHtml}</div>
+    <div class="gym-macros-section"><div class="gym-macros-hdr"><span class="gym-macros-title">Daily Macros</span><button class="add-btn" onclick="openMacrosEditor('${todayStr}')">+ Log</button></div>${macroHtml}</div>
   `;
 }
 
@@ -2376,6 +2382,13 @@ function openGymEditor(id) {
       if (form.elements['date']) { form.elements['date'].value = s.date || ''; }
       if (form.elements['duration']) { form.elements['duration'].value = s.duration || ''; }
       if (form.elements['notes']) { form.elements['notes'].value = s.notes || ''; }
+    const _mv = document.getElementById('gym-muscles-val');
+    document.querySelectorAll('#muscle-btns .muscle-btn').forEach(b => b.classList.remove('active'));
+    if (sess && sess.muscles && _mv) {
+      const _mArr = sess.muscles.split(',').map(s=>s.trim());
+      document.querySelectorAll('#muscle-btns .muscle-btn').forEach(b => { if(_mArr.includes(b.dataset.m)) b.classList.add('active'); });
+      _mv.value = sess.muscles;
+    } else if (_mv) { _mv.value = ''; }
       const cb = form.elements['completed'];
       if (cb) { cb.checked = s.completed !== false; }
     }
@@ -2415,6 +2428,7 @@ document.getElementById('gym-form').addEventListener('submit', async function(e)
     date: form.elements['date'] ? form.elements['date'].value : new Date().toISOString().slice(0, 10),
     duration: form.elements['duration'] && form.elements['duration'].value ? parseInt(form.elements['duration'].value) : null,
     notes: form.elements['notes'] ? (form.elements['notes'].value.trim() || null) : null,
+        muscles: document.getElementById('gym-muscles-val').value || null,
     completed: cb ? cb.checked : true
   };
   if (id) {
@@ -2463,6 +2477,55 @@ if (bmForm) {
       document.getElementById('body-metric-editor').close();
     });
   }
+
+// Muscle button toggle (event delegation)
+document.addEventListener('click', function(e) {
+  if (e.target.classList.contains('muscle-btn')) {
+    e.target.classList.toggle('active');
+    const active = [...document.querySelectorAll('#muscle-btns .muscle-btn.active')].map(b => b.dataset.m);
+    const mv = document.getElementById('gym-muscles-val');
+    if (mv) mv.value = active.join(',');
+  }
+});
+
+// Macros editor
+async function openMacrosEditor(dateStr) {
+  const f = document.getElementById('macros-form');
+  const dlg = document.getElementById('macros-editor');
+  if (!f || !dlg) return;
+  const existing = dailyMacros.find(m => m.date === dateStr);
+  document.getElementById('macros-id').value = existing ? (existing.id || '') : '';
+  document.getElementById('macros-date').value = dateStr;
+  document.getElementById('macros-protein').value = existing ? (existing.protein || 0) : '';
+  document.getElementById('macros-carbs').value = existing ? (existing.carbs || 0) : '';
+  document.getElementById('macros-fats').value = existing ? (existing.fats || 0) : '';
+  document.getElementById('macros-calories').value = existing && existing.calories ? existing.calories : '';
+  dlg.showModal();
+}
+window.openMacrosEditor = openMacrosEditor;
+
+const _mForm = document.getElementById('macros-form');
+if (_mForm) _mForm.addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const f = e.target;
+  const editId = f.id ? f.id.value : '';
+  const rec = {
+    date: f.date.value,
+    protein: parseFloat(f.protein.value) || 0,
+    carbs: parseFloat(f.carbs.value) || 0,
+    fats: parseFloat(f.fats.value) || 0,
+    calories: parseFloat(f.calories.value) || null,
+  };
+  if (editId) {
+    await window.db.from('daily_macros').update(rec).eq('id', editId);
+    dailyMacros = dailyMacros.map(m => m.id === editId ? Object.assign({}, m, rec) : m);
+  } else {
+    const {data: _nd} = await window.db.from('daily_macros').insert(rec).select().single();
+    if (_nd) { dailyMacros.unshift(_nd); } else { dailyMacros.unshift(Object.assign({ id: Date.now() + '' }, rec)); }
+  }
+  document.getElementById('macros-editor').close();
+  renderGym();
+});
 
 function renderWorkTravelView() {
   renderTravel();
