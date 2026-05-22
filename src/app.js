@@ -2296,7 +2296,7 @@ function gymStreaks() {
 
 function renderGym() {
   const typeColors = { weights: '#ef4444', cardio: '#f97316', hiit: '#8b5cf6', sport: '#3b82f6', other: '#6b7280' };
-  const typeLabels = { weights: 'WT', cardio: 'CA', hiit: 'HI', sport: 'SP', other: 'OT' };
+  const typeLabels = { weights: 'Weights', cardio: 'Cardio', hiit: 'HIIT', sport: 'Sport', other: 'Other' };
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
   const monthStr = selectedMonth || now.toISOString().slice(0, 7);
@@ -2341,7 +2341,7 @@ function renderGym() {
     cells += `<div class="gym-cal-cell${isToday?' today':''}" onclick="${clickFn}" title="${sess?(sess.type||'')+' '+ds:ds}">`;
     cells += `<span class="gym-cal-num">${day}</span>`;
     if (sess) cells += `<span class="gym-cal-pip" style="background:${tColor}">${tLabel}</span>`;
-    if (sess && sess.muscles) cells += '<span class="gym-cal-muscles">' + sess.muscles.split(',').slice(0,3).map(m=>m.trim().slice(0,2)).join(',') + '</span>';
+    if (sess && sess.muscles) cells += '<span class="gym-cal-muscles">' + sess.muscles.split(',').slice(0,3).map(function(m){var t=m.trim();return t.charAt(0).toUpperCase()+t.slice(1);}).join(', ') + '</span>';
     if (macrosByDate[ds] && macrosByDate[ds].length) cells += '<span class="gym-cal-mac">M</span>';
     cells += '</div>';
   }
@@ -2354,10 +2354,10 @@ function renderGym() {
   const todayEntries = dailyMacros.filter(m => m && m.date === todayStr);
   const todayTotals = todayEntries.reduce(function(acc,m){return{p:acc.p+(m.protein||0),c:acc.c+(m.carbs||0),f:acc.f+(m.fats||0)};},{p:0,c:0,f:0});
   const macroHtml = todayEntries.length
-  ? '<div class="gym-macros-vals"><span>P:'+Math.round(todayTotals.p)+'g</span><span>C:'+Math.round(todayTotals.c)+'g</span><span>F:'+Math.round(todayTotals.f)+'g</span></div>'
+  ? '<div class="gym-macros-vals"><span>Protein: '+Math.round(todayTotals.p)+'g</span><span>Carbs: '+Math.round(todayTotals.c)+'g</span><span>Fats: '+Math.round(todayTotals.f)+'g</span></div>'
     + todayEntries.map(function(m){
         return '<div class="gym-macros-entry">'
-          + '<span>P:'+Math.round(m.protein||0)+'g C:'+Math.round(m.carbs||0)+'g F:'+Math.round(m.fats||0)+'g'+(m.calories?' · '+Math.round(m.calories)+'kcal':'')+'</span>'
+          + '<span>Protein: '+Math.round(m.protein||0)+'g · Carbs: '+Math.round(m.carbs||0)+'g · Fats: '+Math.round(m.fats||0)+'g'+(m.calories?' · '+Math.round(m.calories)+'kcal':'')+'</span>'
           + '<button class="ghost" onclick="openMacrosEditor(\'' + m.date + '\',\'' + m.id + '\')" >Edit</button>'
           + '</div>';
       }).join('')
