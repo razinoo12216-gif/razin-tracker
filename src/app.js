@@ -2306,6 +2306,8 @@ function renderGym() {
   const monthSessions = gymSessions.filter(s => s.date && s.date.startsWith(monthStr));
   const sessionByDate = {};
   gymSessions.forEach(s => { if (s.date) sessionByDate[s.date] = s; });
+  const macrosByDate = {};
+  dailyMacros.forEach(function(m){ if(m.date){ if(!macrosByDate[m.date])macrosByDate[m.date]=[]; macrosByDate[m.date].push(m); }});
 
   let streak = 0;
   const sd = new Date(todayStr);
@@ -2340,6 +2342,7 @@ function renderGym() {
     cells += `<span class="gym-cal-num">${day}</span>`;
     if (sess) cells += `<span class="gym-cal-pip" style="background:${tColor}">${tLabel}</span>`;
     if (sess && sess.muscles) cells += '<span class="gym-cal-muscles">' + sess.muscles.split(',').slice(0,3).map(m=>m.trim().slice(0,2)).join(',') + '</span>';
+    if (macrosByDate[ds] && macrosByDate[ds].length) cells += '<span class="gym-cal-mac">M</span>';
     cells += '</div>';
   }
 
@@ -2350,7 +2353,15 @@ function renderGym() {
 
   const todayEntries = dailyMacros.filter(m => m && m.date === todayStr);
   const todayTotals = todayEntries.reduce(function(acc,m){return{p:acc.p+(m.protein||0),c:acc.c+(m.carbs||0),f:acc.f+(m.fats||0)};},{p:0,c:0,f:0});
-  const macroHtml = todayEntries.length ? '<div class="gym-macros-vals"><span>P:'+Math.round(todayTotals.p)+'g</span><span>C:'+Math.round(todayTotals.c)+'g</span><span>F:'+Math.round(todayTotals.f)+'g</span>'+(todayEntries.length>1?'<span class="gym-macros-count">'+todayEntries.length+' entries</span>':'')+'</div>' : '<p class="gym-macros-empty">Nothing logged today</p>';
+  const macroHtml = todayEntries.length
+  ? '<div class="gym-macros-vals"><span>P:'+Math.round(todayTotals.p)+'g</span><span>C:'+Math.round(todayTotals.c)+'g</span><span>F:'+Math.round(todayTotals.f)+'g</span></div>'
+    + todayEntries.map(function(m){
+        return '<div class="gym-macros-entry">'
+          + '<span>P:'+Math.round(m.protein||0)+'g C:'+Math.round(m.carbs||0)+'g F:'+Math.round(m.fats||0)+'g'+(m.calories?' · '+Math.round(m.calories)+'kcal':'')+'</span>'
+          + '<button class="ghost" onclick="openMacrosEditor(\'' + m.date + '\',\'' + m.id + '\')" >Edit</button>'
+          + '</div>';
+      }).join('')
+  : '<p class="gym-macros-empty">Nothing logged today</p>';
   list.innerHTML = `
     <div class="section-header"><h2>Gym</h2><button class="add-btn" onclick="openGymEditor(null)">+ Log Session</button></div>
     <div class="gym-stats-row">
@@ -2413,7 +2424,7 @@ function openBodyMetricEditor() {
 document.querySelectorAll('.dur-btn').forEach(function(btn) {
   btn.addEventListener('click', function() {
     const durInput = document.getElementById('gym-duration');
-    if (durInput) { durInput.value = btn.dataset.val; }
+    if (durInput) { durInput.value = btn.dataset.mins; }
     document.querySelectorAll('.dur-btn').forEach(function(b) { b.classList.remove('active'); });
     btn.classList.add('active');
   });
@@ -2431,7 +2442,7 @@ document.getElementById('gym-form').addEventListener('submit', async function(e)
     notes: form.elements['notes'] ? (form.elements['notes'].value.trim() || null) : null,
     completed: cb ? cb.checked : true
   };
-    const _mv = document.getElementById('gym-muscles-val'); if (_mv && _mv.value) data.muscles = _mv.value;
+    const _mv = document.getElementById('gym-muscles-val'); if (_mv && _mv.value) payload.muscles = _mv.value;
   if (id) {
     await window.db.from('gym_sessions').update(payload).eq('id', id);
   } else {
@@ -2490,13 +2501,15 @@ document.addEventListener('click', function(e) {
 });
 
 // Macros editor
-async function openMacrosEditor(dateStr) {
+async function openMacrosEditor(dateStr, editId) {
   const f = document.getElementById('macros-form');
   const dlg = document.getElementById('macros-editor');
   if (!f || !dlg) return;
   f.reset();
-  document.getElementById('macros-id').value = '';
-  document.getElementById('macros-date').value = dateStr;
+  var _ex = editId ? dailyMacros.find(function(m){return m.id===editId;}) : null;
+  document.getElementById('macros-id').value = _ex ? (_ex.id||'') : '';
+  document.getElementById('macros-date').value = _ex ? (_ex.date||dateStr) : dateStr;
+  if (_ex) { var _pi=f.querySelector('[name="protein"]'); if(_pi)_pi.value=_ex.protein||''; var _ci=f.querySelector('[name="carbs"]'); if(_ci)_ci.value=_ex.carbs||''; var _fi=f.querySelector('[name="fats"]'); if(_fi)_fi.value=_ex.fats||''; var _cali=f.querySelector('[name="calories"]'); if(_cali)_cali.value=_ex.calories||''; }
   dlg.showModal();
 }
 window.openMacrosEditor = openMacrosEditor;
@@ -2505,6 +2518,7 @@ const _mForm = document.getElementById('macros-form');
 if (_mForm) _mForm.addEventListener('submit', async function(e) {
   e.preventDefault();
   const f = e.target;
+  const editId = document.getElementById('macros-id') ? document.getElementById('macros-id').value : '';
   const rec = {
     date: document.getElementById('macros-date').value,
     protein: parseFloat(f.protein.value) || 0,
@@ -2512,8 +2526,13 @@ if (_mForm) _mForm.addEventListener('submit', async function(e) {
     fats: parseFloat(f.fats.value) || 0,
     calories: parseFloat(f.calories.value) || null,
   };
-  const {data:_nd} = await window.db.from('daily_macros').insert(rec).select().single();
-  if (_nd) { dailyMacros.unshift(_nd); } else { dailyMacros.unshift(Object.assign({id:Date.now()+'',created_at:new Date().toISOString()},rec)); }
+  if (editId) {
+    await window.db.from('daily_macros').update(rec).eq('id', editId);
+    dailyMacros = dailyMacros.map(function(m){ return m.id===editId ? Object.assign({},m,rec) : m; });
+  } else {
+    const {data:_nd} = await window.db.from('daily_macros').insert(rec).select().single();
+    if (_nd) { dailyMacros.unshift(_nd); } else { dailyMacros.unshift(Object.assign({id:Date.now()+'',created_at:new Date().toISOString()},rec)); }
+  }
   document.getElementById('macros-editor').close();
   renderGym();
 });
