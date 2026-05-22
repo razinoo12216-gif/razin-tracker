@@ -386,6 +386,22 @@
       <label>Notes (optional)<textarea name="notes" placeholder="What did you work on?" rows="2"></textarea></label>
       <label class="gym-completed-row"><input type="checkbox" name="completed" checked /> Completed this session</label>
       <input type="hidden" name="id" id="gym-session-id" />
+  <div class="muscle-tag-row">
+    <div class="muscle-label">Muscles worked</div>
+    <div class="muscle-btns" id="muscle-btns">
+      <button type="button" class="muscle-btn" data-m="Chest">Chest</button>
+      <button type="button" class="muscle-btn" data-m="Back">Back</button>
+      <button type="button" class="muscle-btn" data-m="Shoulders">Shoulders</button>
+      <button type="button" class="muscle-btn" data-m="Biceps">Biceps</button>
+      <button type="button" class="muscle-btn" data-m="Triceps">Triceps</button>
+      <button type="button" class="muscle-btn" data-m="Core">Core</button>
+      <button type="button" class="muscle-btn" data-m="Quads">Quads</button>
+      <button type="button" class="muscle-btn" data-m="Hams">Hams</button>
+      <button type="button" class="muscle-btn" data-m="Glutes">Glutes</button>
+      <button type="button" class="muscle-btn" data-m="Calves">Calves</button>
+    </div>
+    <input type="hidden" id="gym-muscles-val" name="muscles" />
+  </div>
       <div class="row">
         <button type="button" id="gym-delete-btn" style="display:none">Delete</button>
         <button type="button" id="gym-cancel-btn">Cancel</button>
@@ -438,6 +454,25 @@
       <button type="button" id="trip-delete-btn" onclick="deleteTripEditor()" style="display:none;color:#e53e3e">Delete</button>
       <button type="button" onclick="document.getElementById('trip-editor').close()">Cancel</button>
       <button type="button" onclick="saveTripEditor()">Save</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="macros-editor">
+  <form id="macros-form">
+    <h2>Log Macros</h2>
+    <input type="hidden" id="macros-id" name="id" />
+    <input type="hidden" id="macros-date" name="date" />
+    <div class="row">
+      <label>Protein (g)<input id="macros-protein" name="protein" type="number" min="0" step="1" inputmode="numeric" placeholder="0" /></label>
+      <label>Carbs (g)<input id="macros-carbs" name="carbs" type="number" min="0" step="1" inputmode="numeric" placeholder="0" /></label>
+    </div>
+    <div class="row">
+      <label>Fats (g)<input id="macros-fats" name="fats" type="number" min="0" step="1" inputmode="numeric" placeholder="0" /></label>
+      <label>Calories<input id="macros-calories" name="calories" type="number" min="0" step="1" inputmode="numeric" placeholder="auto" /></label>
+    </div>
+    <div class="row">
+      <button type="button" onclick="document.getElementById('macros-editor').close()">Cancel</button>
+      <button type="submit">Save</button>
     </div>
   </form>
 </dialog>
