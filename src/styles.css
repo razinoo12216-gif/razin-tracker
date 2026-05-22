@@ -1475,7 +1475,7 @@ dialog .actions {
   border-radius: 2px;
   flex-shrink: 0;
 }
-.gym-cal-muscles { font-size: 0.42rem; color: rgba(255,255,255,0.75); margin-top: 1px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+.gym-cal-muscles { font-size: 0.65rem; color: rgba(255,255,255,0.85); margin-top: 2px; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; display: block; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
 
 /* Muscle tag buttons */
 .muscle-tag-row { margin-top: 10px; }
