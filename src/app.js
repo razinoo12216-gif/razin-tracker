@@ -2350,7 +2350,7 @@ function renderGym() {
 
   const todayEntries = dailyMacros.filter(m => m && m.date === todayStr);
   const todayTotals = todayEntries.reduce(function(acc,m){return{p:acc.p+(m.protein||0),c:acc.c+(m.carbs||0),f:acc.f+(m.fats||0)};},{p:0,c:0,f:0});
-  const macroHtml = todayEntries.length ? '<div class="gym-macros-vals"><span>P:'+Math.round(todayTotals.p)+'g</span><span>C:'+Math.round(todayTotals.c)+'g</span><span>F:'+Math.round(todayTotals.f)+'g</span>'+(todayEntries.length>1?'<span class="gym-macros-count">'+todayEntries.length+' entries</span>':'')+ '</div>' : '<p class="gym-macros-empty">Nothing logged today</p>';
+  const macroHtml = todayEntries.length ? '<div class="gym-macros-vals"><span>P:'+Math.round(todayTotals.p)+'g</span><span>C:'+Math.round(todayTotals.c)+'g</span><span>F:'+Math.round(todayTotals.f)+'g</span>'+(todayEntries.length>1?'<span class="gym-macros-count">'+todayEntries.length+' entries</span>':'')+'</div>' : '<p class="gym-macros-empty">Nothing logged today</p>';
   list.innerHTML = `
     <div class="section-header"><h2>Gym</h2><button class="add-btn" onclick="openGymEditor(null)">+ Log Session</button></div>
     <div class="gym-stats-row">
@@ -2500,6 +2500,7 @@ async function openMacrosEditor(dateStr) {
   dlg.showModal();
 }
 window.openMacrosEditor = openMacrosEditor;
+
 const _mForm = document.getElementById('macros-form');
 if (_mForm) _mForm.addEventListener('submit', async function(e) {
   e.preventDefault();
@@ -2516,6 +2517,36 @@ if (_mForm) _mForm.addEventListener('submit', async function(e) {
   document.getElementById('macros-editor').close();
   renderGym();
 });
+
+function renderWorkTravelView() {
+  renderTravel();
+  var list = document.getElementById('list');
+  var nav = '<div class="ticket-type-filter">' +
+    '<button class="ticket-filter" onclick="workView=\'tasks\';renderWork()">Tasks</button>' +
+    '<button class="ticket-filter" onclick="workView=\'companies\';renderWork()">Companies</button>' +
+    '<button class="ticket-filter active" onclick="workView=\'travel\';renderWork()">Travel</button>' +
+    '<button class="ticket-filter" onclick="workView=\'invoices\';renderWork()">Invoices</button>' +
+    '</div>';
+  list.insertAdjacentHTML('afterbegin', nav);
+}
+
+function renderTravel() {
+  var list = document.getElementById('list');
+  var s = {
+    hourlyRate: parseFloat(localStorage.getItem('tr_hr') || '25'),
+    petrolPrice: parseFloat(localStorage.getItem('tr_pp') || '1.55'),
+    mpg: parseFloat(localStorage.getItem('tr_mpg') || '35'),
+    wearRate: parseFloat(localStorage.getItem('tr_wr') || '0.45'),
+  };
+  window._ttm = {};
+  window._tct = {};
+  for (var t of roadTrips) window._ttm[t.id] = t;
+  var byMonth = {};
+  for (var t of roadTrips) {
+    var k = t.date.substring(0, 7);
+    if (!byMonth[k]) byMonth[k] = [];
+    byMonth[k].push(t);
+  }
   var months = Object.keys(byMonth).sort().reverse();
   months.forEach(function(m) {
     var trips = byMonth[m].slice().sort(function(a, b) { return b.date.localeCompare(a.date); });
@@ -2690,8 +2721,6 @@ async function deleteTripEditor() {
   window.saveTripEditor = saveTripEditor;
   window.deleteTripEditor = deleteTripEditor;
 }
-
-
 
 async function lookupTripPostcode() {
   var pc = (document.getElementById('trip-postcode').value || '').trim().replace(/\s+/g,'').toUpperCase();
