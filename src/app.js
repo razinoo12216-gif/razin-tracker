@@ -2294,6 +2294,14 @@ function gymStreaks() {
   return { current: current, longest: longest };
 }
 
+function renderSessionsList() {
+  var q = "'";
+  if (!gymSessions || !gymSessions.length) return '<p class="gym-sessions-empty">No sessions logged yet</p>';
+  return gymSessions.slice(0,10).map(function(s) {
+    var tm = {weights:'Weights',cardio:'Cardio',hiit:'HIIT',sport:'Sport',other:'Other'};
+    return '<div class="gym-session-row">'+'<div class="gym-session-info">'+'<span class="gym-type-badge gym-type-'+s.type+'">'+(tm[s.type]||s.type)+'</span><span class="gym-session-date">'+s.date+'</span>'+(s.duration?'<span class="gym-session-dur">'+s.duration+'m</span>':'')+(s.muscles?'<span class="gym-session-muscles">'+s.muscles.split(',').slice(0,3).map(function(m){var t=m.trim();return t.charAt(0).toUpperCase()+t.slice(1);}).join(', ')+'</span>':'')+'</div>'+'<button class="ghost" onclick="openGymEditor('+q+s.id+q+')">Edit</button>'+'</div>';
+  }).join('');
+}
 function renderGym() {
   const typeColors = { weights: '#ef4444', cardio: '#f97316', hiit: '#8b5cf6', sport: '#3b82f6', other: '#6b7280' };
   const typeLabels = { weights: 'Weights', cardio: 'Cardio', hiit: 'HIIT', sport: 'Sport', other: 'Other' };
@@ -2377,6 +2385,7 @@ function renderGym() {
     </div>
     <div class="gym-legend">${legendHtml}</div>
     <div class="gym-macros-section"><div class="gym-macros-hdr"><span class="gym-macros-title">Daily Macros</span><button class="add-btn" onclick="openMacrosEditor('${todayStr}')">+ Log</button></div>${macroHtml}</div>
+    <div class="gym-sessions-section"><div class="gym-sessions-hdr-row"><h3>Recent Sessions</h3></div>${renderSessionsList()}</div>
   `;
 }
 
