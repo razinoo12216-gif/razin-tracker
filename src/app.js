@@ -2428,9 +2428,9 @@ document.getElementById('gym-form').addEventListener('submit', async function(e)
     date: form.elements['date'] ? form.elements['date'].value : new Date().toISOString().slice(0, 10),
     duration: form.elements['duration'] && form.elements['duration'].value ? parseInt(form.elements['duration'].value) : null,
     notes: form.elements['notes'] ? (form.elements['notes'].value.trim() || null) : null,
-        muscles: document.getElementById('gym-muscles-val').value || null,
     completed: cb ? cb.checked : true
   };
+    const _mv = document.getElementById('gym-muscles-val'); if (_mv && _mv.value) data.muscles = _mv.value;
   if (id) {
     await window.db.from('gym_sessions').update(payload).eq('id', id);
   } else {
