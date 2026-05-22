@@ -1491,3 +1491,11 @@ dialog .actions {
 .gym-macros-vals { display: flex; gap: 10px; flex-wrap: wrap; }
 .gym-macros-vals span { background: rgba(255,255,255,0.08); border-radius: 8px; padding: 5px 10px; font-size: 0.8rem; font-weight: 600; color: #e8c97e; }
 .gym-macros-empty { font-size: 0.75rem; color: rgba(255,255,255,0.35); font-style: italic; }
+
+/* Macros entry row with edit button */
+.gym-macros-entry { display:flex; align-items:center; justify-content:space-between; padding:4px 0; font-size:0.8rem; color:var(--muted); border-top:1px solid var(--border); }
+.gym-macros-entry button { font-size:0.75rem; padding:2px 8px; opacity:0.7; }
+.gym-macros-entry button:hover { opacity:1; }
+
+/* Macro dot on calendar cell */
+.gym-cal-mac { display:block; font-size:0.55rem; color:var(--accent,#4af); font-weight:700; line-height:1; margin-top:1px; }
