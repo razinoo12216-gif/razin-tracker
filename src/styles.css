@@ -1475,3 +1475,19 @@ dialog .actions {
   border-radius: 2px;
   flex-shrink: 0;
 }
+.gym-cal-muscles { font-size: 0.42rem; color: rgba(255,255,255,0.75); margin-top: 1px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+
+/* Muscle tag buttons */
+.muscle-tag-row { margin-top: 10px; }
+.muscle-label { font-size: 0.7rem; color: rgba(255,255,255,0.5); margin-bottom: 6px; }
+.muscle-btns { display: flex; flex-wrap: wrap; gap: 5px; }
+.muscle-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: rgba(255,255,255,0.7); font-size: 0.72rem; padding: 4px 9px; cursor: pointer; transition: all 0.15s; }
+.muscle-btn.active { background: #e8c97e; border-color: #e8c97e; color: #1a1a2e; font-weight: 600; }
+
+/* Macros section in gym */
+.gym-macros-section { background: rgba(255,255,255,0.05); border-radius: 12px; padding: 12px 14px; margin-top: 10px; }
+.gym-macros-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.gym-macros-title { font-size: 0.85rem; font-weight: 600; color: rgba(255,255,255,0.85); }
+.gym-macros-vals { display: flex; gap: 10px; flex-wrap: wrap; }
+.gym-macros-vals span { background: rgba(255,255,255,0.08); border-radius: 8px; padding: 5px 10px; font-size: 0.8rem; font-weight: 600; color: #e8c97e; }
+.gym-macros-empty { font-size: 0.75rem; color: rgba(255,255,255,0.35); font-style: italic; }
