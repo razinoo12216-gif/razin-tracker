@@ -1360,6 +1360,9 @@ function renderDebts() {
   list.querySelectorAll('.debt-pay-btn').forEach((btn) => {
     btn.addEventListener('click', (e) => { e.stopPropagation(); openPaymentEditor(btn.dataset.id); });
   });
+  var _rvEl = list.querySelector('.receivables-section');
+  if (!_rvEl) { _rvEl = document.createElement('div'); _rvEl.className = 'receivables-section'; var _dp = list.querySelector('.debts-page'); if (_dp) _dp.appendChild(_rvEl); }
+  _rvEl.innerHTML = renderReceivablesSection();
 }
 
 function renderDebt(d) {
@@ -2424,7 +2427,7 @@ function renderGym() {
 
   const todayEntries = dailyMacros.filter(m => m && m.date === todayStr);
   const todayTotals = todayEntries.reduce(function(acc,m){return{p:acc.p+(m.protein||0),c:acc.c+(m.carbs||0),f:acc.f+(m.fats||0)};},{p:0,c:0,f:0});
-  const macroHtml = todayEntries.length
+  const macroHtml = true
   ? '<div class="gym-macro-targets">'
     + '<div class="gym-macro-row"><span class="gym-macro-label">Protein</span><span class="gym-macro-val">'+Math.round(todayTotals.p)+'g / 180g</span><div class="gym-macro-bar"><div class="gym-macro-fill" style="width:'+Math.min(100,+(todayTotals.p/180*100).toFixed(1))+'%"></div></div></div>'
     + '<div class="gym-macro-row"><span class="gym-macro-label">Carbs</span><span class="gym-macro-val">'+Math.round(todayTotals.c)+'g / 280g</span><div class="gym-macro-bar"><div class="gym-macro-fill" style="width:'+Math.min(100,+(todayTotals.c/280*100).toFixed(1))+'%"></div></div></div>'
