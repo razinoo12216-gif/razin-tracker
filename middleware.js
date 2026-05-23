@@ -1,3 +1,4 @@
-// Auth is handled client-side via the in-app lock screen.
-// No server-side auth needed.
+export default function middleware(req) {
+  // Auth handled client-side. Pass all requests through.
+}
 export const config = { matcher: [] };
