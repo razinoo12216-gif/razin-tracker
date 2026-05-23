@@ -13,6 +13,40 @@
   <link rel="stylesheet" href="src/styles.css" />
 </head>
 <body>
+<!-- Lock Screen -->
+<div id="lock-screen">
+  <div class="lock-inner">
+    <svg class="lock-logo" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="8" y="18" width="24" height="18" rx="3" fill="currentColor" opacity="0.85"/><path d="M13 18v-6a7 7 0 0114 0v6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg>
+    <h2 class="lock-title">12 World</h2>
+    <p class="lock-sub">Your private space.</p>
+    <input type="password" id="lock-input" class="lock-input" placeholder="Password" autocomplete="current-password" />
+    <button type="button" class="lock-btn" onclick="window._twUnlock()">Unlock</button>
+    <div id="lock-error" class="lock-error"></div>
+  </div>
+</div>
+<script>
+(function(){
+  var TK='tw_auth',EK='tw_exp';
+  var D30=30*24*60*60*1000;
+  var H='92d2a7deeec66a351e03decbcd77620922841143842aa56a285cacc9200ce606';
+  function authed(){var t=localStorage.getItem(TK),e=+(localStorage.getItem(EK)||0);return t==='ok'&&Date.now()<e;}
+  function hide(){var el=document.getElementById('lock-screen');if(el)el.style.display='none';}
+  if(authed())hide();
+  window._twUnlock=async function(){
+    var inp=document.getElementById('lock-input');
+    var val=inp?inp.value:'';if(!val)return;
+    var buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(val));
+    var h=Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+    if(h===H){localStorage.setItem(TK,'ok');localStorage.setItem(EK,String(Date.now()+D30));hide();}
+    else{var er=document.getElementById('lock-error');if(er)er.textContent='Wrong password.';if(inp){inp.value='';inp.focus();}}
+  };
+  document.addEventListener('DOMContentLoaded',function(){
+    var inp=document.getElementById('lock-input');
+    if(inp)inp.addEventListener('keydown',function(e){if(e.key==='Enter')window._twUnlock();});
+    if(authed())hide();
+  });
+})();
+</script>
   <header>
     <div class="header-top">
       <h1>12 World</h1>
@@ -478,6 +512,6 @@
   </form>
 </dialog>
 >
-  <script src="src/app.js?v=3"></script>
+  <script src="src/app.js?v=4"></script>
 </body>
 </html>
