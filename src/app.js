@@ -1300,31 +1300,91 @@ function renderDebtTotals() {
 
 function renderReceivablesSection() {
   var q = "'";
-  var act = receivables.filter(function(r){ return r.status !== "settled"; });
-  var h = '<div class="receivables-hdr"><h3>Owed to Me</h3><button class="add-btn" onclick="openReceivableEditor(null)">+ Add</button></div>';
-  if (!act.length) return h + '<p class="debt-empty" style="margin:8px 16px">No one owes you</p>';
-  return h + act.map(function(r){ return renderReceivable(r); }).join('');
-}
-function renderReceivable(r) {
-  var q = "'";
-  return '<div class="debt-card"><div class="debt-card-top"><span class="debt-creditor">' + (r.creditor||"") + '</span><button class="ghost" onclick="openReceivableEditor(' + q + r.id + q + ')">Edit</button></div><div class="debt-balance" style="margin:4px 0">Owes you: £' + fmt(r.current_balance||0) + '</div>' + (r.notes ? '<div class="debt-notes">' + r.notes + '</div>' : '') + '</div>';
+  var act = receivables || [];
+  if (!act.length) {
+    return '<div class="empty-state"><p>No one owes you yet.</p><button class="add-btn" onclick="openReceivableEditor(null)">+ Add</button></div>';
+  }
+  var cards = act.map(function(r) {
+    var name = r.creditor || 'Unknown';
+    var orig = parseFloat(r.original_amount) || 0;
+    var remaining = parseFloat(r.current_balance != null ? r.current_balance : orig);
+    var paid = orig - remaining;
+    var pct = orig > 0 ? Math.round((paid / orig) * 100) : 0;
+    return '<div class="debt-card">' +
+      '<div class="debt-card-top"><span class="debt-name">' + name + '</span>' +
+      '<span class="debt-amount">£' + remaining.toFixed(2) + ' left</span></div>' +
+      '<div class="debt-meta">Original: £' + orig.toFixed(2) + ' · Paid: £' + paid.toFixed(2) + ' (' + pct + '%)</div>' +
+      '<div class="debt-actions">' +
+      '<button class="btn-sm" onclick="openReceivableEditor(' + q + r.id + q + ')">Edit</button> ' +
+      '<button class="btn-sm btn-green" onclick="logReceivablePayment(' + q + r.id + q + ')">Log Payment</button>' +
+      '</div></div>';
+  }).join('');
+  return cards + '<button class="add-btn" style="margin-top:12px" onclick="openReceivableEditor(null)">+ Add</button>';
 }
 function openReceivableEditor(id) {
-  window._receivableMode = true;
-  editingDebtId = id || null;
-  var r = id ? receivables.find(function(x){ return x.id === id; }) : null;
-  debtForm.reset();
-  $('#debt-editor-title').textContent = r ? 'Edit Receivable' : 'New Receivable';
-  $('#debt-delete-btn').style.display = r ? '' : 'none';
-  if (r) {
-    debtForm.creditor.value = r.creditor || '';
-    debtForm.original_amount.value = r.original_amount || '';
-    debtForm.current_balance.value = r.current_balance || '';
-    debtForm.notes.value = r.notes || '';
-    debtForm.status.value = r.status || 'active';
+  var existing = id ? (receivables || []).find(function(r) { return String(r.id) === String(id); }) : null;
+  window._rvEditId = id || null;
+  var overlay = document.createElement('div');
+  overlay.id = 'rv-dlg';
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = '<div class="modal-box" style="max-width:360px">' +
+    '<div class="modal-header"><span>' + (id ? 'Edit' : 'New') + ' — Owes Me</span>' +
+    '<button id="rv-close" class="modal-close">✕</button></div>' +
+    '<div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px">' +
+    '<label style="font-size:0.85rem;color:rgba(255,255,255,0.6)">Name<input id="rv-name" class="form-input" style="margin-top:4px" placeholder="Who owes you?"></label>' +
+    '<label style="font-size:0.85rem;color:rgba(255,255,255,0.6)">Amount (£)<input id="rv-amount" class="form-input" type="number" step="0.01" style="margin-top:4px" placeholder="0.00"></label>' +
+    '</div><div style="padding:0 20px 16px;display:flex;gap:8px" id="rv-btns"></div></div>';
+  document.body.appendChild(overlay);
+  document.getElementById('rv-close').onclick = function() { overlay.remove(); };
+  var btns = document.getElementById('rv-btns');
+  var saveBtn = document.createElement('button');
+  saveBtn.className = 'btn-primary'; saveBtn.style.flex = '1'; saveBtn.textContent = 'Save';
+  saveBtn.onclick = saveReceivableEditor; btns.appendChild(saveBtn);
+  if (id) {
+    var delBtn = document.createElement('button');
+    delBtn.className = 'btn-danger'; delBtn.textContent = 'Delete';
+    delBtn.onclick = function() { deleteReceivable(id); }; btns.appendChild(delBtn);
   }
-  debtEditor.showModal();
-  setTimeout(function(){ debtForm.creditor && debtForm.creditor.focus(); }, 50);
+  if (existing) {
+    document.getElementById('rv-name').value = existing.creditor || '';
+    document.getElementById('rv-amount').value = existing.original_amount || '';
+  }
+}
+async function saveReceivableEditor() {
+  var name = (document.getElementById('rv-name') || {}).value || '';
+  var amount = parseFloat((document.getElementById('rv-amount') || {}).value) || 0;
+  if (!name || !amount) { alert('Name and amount are required.'); return; }
+  var id = window._rvEditId;
+  var payload = { creditor: name, original_amount: amount, current_balance: amount, type: 'personal', status: 'active' };
+  if (id) {
+    var existing2 = (receivables || []).find(function(r) { return String(r.id) === String(id); });
+    var origAmt = existing2 ? parseFloat(existing2.original_amount) : amount;
+    var curBal = existing2 ? parseFloat(existing2.current_balance != null ? existing2.current_balance : origAmt) : amount;
+    payload.current_balance = Math.max(0, amount - (origAmt - curBal));
+    delete payload.type; delete payload.status;
+  }
+  var res = id ? await supabase.from('receivables').update(payload).eq('id', id) : await supabase.from('receivables').insert([payload]);
+  if (res.error) { alert('Error: ' + res.error.message); return; }
+  var dlg = document.getElementById('rv-dlg'); if (dlg) dlg.remove();
+  await loadData(); renderDebts();
+}
+async function deleteReceivable(id) {
+  if (!confirm('Delete this entry?')) return;
+  await supabase.from('receivables').delete().eq('id', id);
+  var dlg = document.getElementById('rv-dlg'); if (dlg) dlg.remove();
+  await loadData(); renderDebts();
+}
+async function logReceivablePayment(id) {
+  var existing = (receivables || []).find(function(r) { return String(r.id) === String(id); });
+  if (!existing) return;
+  var amt = prompt('Payment received (£)?');
+  if (!amt) return;
+  var payment = parseFloat(amt);
+  if (isNaN(payment) || payment <= 0) { alert('Invalid amount'); return; }
+  var newBal = Math.max(0, parseFloat(existing.current_balance != null ? existing.current_balance : existing.original_amount) - payment);
+  var res = await supabase.from('receivables').update({ current_balance: newBal }).eq('id', id);
+  if (res.error) { alert('Error: ' + res.error.message); return; }
+  await loadData(); renderDebts();
 }
 function renderDebts() {
   const sorted = [...debts].sort(debtSort);
@@ -2378,12 +2438,27 @@ function gymStreaks() {
   return { current: current, longest: longest };
 }
 
+function gymShiftDate(delta) {
+  var base = window._gymViewDate || new Date().toISOString().slice(0,10);
+  var d = new Date(base + 'T12:00:00');
+  d.setDate(d.getDate() + delta);
+  window._gymViewDate = d.toISOString().slice(0,10);
+  renderGym();
+}
 function renderSessionsList() {
-  var q = "'";
   if (!gymSessions || !gymSessions.length) return '<p class="gym-sessions-empty">No sessions logged yet</p>';
-  return gymSessions.slice(0,10).map(function(s) {
-    var tm = {weights:'Weights',cardio:'Cardio',hiit:'HIIT',sport:'Sport',other:'Other'};
-    return '<div class="gym-session-row">'+'<div class="gym-session-info">'+'<span class="gym-type-badge gym-type-'+s.type+'">'+(tm[s.type]||s.type)+'</span><span class="gym-session-date">'+s.date+'</span>'+(s.duration?'<span class="gym-session-dur">'+s.duration+'m</span>':'')+(s.muscles?'<span class="gym-session-muscles">'+s.muscles.split(',').slice(0,3).map(function(m){var t=m.trim();return t.charAt(0).toUpperCase()+t.slice(1);}).join(', ')+'</span>':'')+'</div>'+'<button class="ghost" onclick="openGymEditor('+q+s.id+q+')">Edit</button>'+'</div>';
+  var q = "'";
+  var tl = {weights:'Weights',cardio:'Cardio',hiit:'HIIT',sport:'Sport',other:'Other'};
+  return gymSessions.slice(0,15).map(function(s) {
+    var type = tl[s.type] || (s.type ? s.type.charAt(0).toUpperCase()+s.type.slice(1) : 'Session');
+    var dur = s.duration ? s.duration + 'm' : '';
+    var musc = s.muscles ? s.muscles.split(',').slice(0,3).map(function(m){var t=m.trim();return t.charAt(0).toUpperCase()+t.slice(1);}).join(', ') : '';
+    var meta = [s.date, dur, musc].filter(Boolean).join(' · ');
+    return '<div class="gym-session-row">' +
+      '<div class="gym-session-info"><span class="gym-session-badge">'+type+'</span>' +
+      '<span class="gym-session-meta">'+meta+'</span></div>' +
+      '<button class="gym-session-edit-btn" onclick="openGymEditor('+q+s.id+q+')">Edit</button>' +
+    '</div>';
   }).join('');
 }
 function renderGym() {
@@ -2443,7 +2518,9 @@ function renderGym() {
     `<span class="gym-legend-item"><span class="gym-legend-dot" style="background:${typeColors[k]}"></span>${typeLabels[k]}</span>`
   ).join('');
 
-  const todayEntries = dailyMacros.filter(m => m && m.date === todayStr);
+  window._gymViewDate = (window._gymViewDate && window._gymViewDate <= todayStr) ? window._gymViewDate : todayStr;
+  const gymViewDate = window._gymViewDate;
+  const todayEntries = dailyMacros.filter(m => m && m.date === gymViewDate);
   const todayTotals = todayEntries.reduce(function(acc,m){return{p:acc.p+(m.protein||0),c:acc.c+(m.carbs||0),f:acc.f+(m.fats||0)};},{p:0,c:0,f:0});
   const macroHtml = true
   ? '<div class="gym-macro-targets">'
@@ -2472,7 +2549,7 @@ function renderGym() {
       <div class="gym-cal-grid">${cells}</div>
     </div>
     <div class="gym-legend">${legendHtml}</div>
-    <div class="gym-macros-section"><div class="gym-macros-hdr"><span class="gym-macros-title">Daily Macros</span><button class="add-btn" onclick="openMacrosEditor('${todayStr}')">+ Log</button></div>${macroHtml}</div>}</div>
+    <div class="gym-macros-section"><div class="gym-macros-hdr"><button class="gym-date-nav" onclick="gymShiftDate(-1)">&#8592;</button><span class="gym-macros-title">${gymViewDate}</span><button class="gym-date-nav" onclick="gymShiftDate(1)">&#8594;</button><button class="add-btn" onclick="openMacrosEditor('${gymViewDate}')">+ Log</button></div>${macroHtml}</div><div class="gym-sessions-section"><div class="section-header"><span class="section-title">Sessions</span></div><div class="gym-sessions-list">${renderSessionsList()}</div></div>}</div>
   `;
 }
 
