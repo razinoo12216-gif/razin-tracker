@@ -1420,32 +1420,36 @@ function renderDebts() {
   list.querySelectorAll('.debt-pay-btn').forEach((btn) => {
     btn.addEventListener('click', (e) => { e.stopPropagation(); openPaymentEditor(btn.dataset.id); });
   });
-    var _dv = window._debtView || 'debts';
+  // Sub-tabs
+  var _dv = window._debtView || 'debts';
   var _dpEl = list.querySelector('.debts-page');
   if (_dpEl) {
     var _stEl = list.querySelector('.debt-subtabs');
-    if (!_stEl) { _stEl = document.createElement('div'); _stEl.className = 'debt-subtabs'; _dpEl.insertBefore(_stEl, _dpEl.firstChild); }
+    if (!_stEl) {
+      _stEl = document.createElement('div');
+      _stEl.style.cssText = 'display:flex;gap:8px;margin-bottom:18px;';
+      _dpEl.parentNode.insertBefore(_stEl, _dpEl);
+    }
     _stEl.innerHTML = '';
-    ['My Debts','Owed to Me'].forEach(function(label,i){
+    [['My Debts','debts'],['Owes Me','owed']].forEach(function(pair) {
       var btn = document.createElement('button');
-      btn.className = 'debt-subtab' + ((_dv==='owed')===(i===1)?' active':'');
-      btn.textContent = label;
-      btn.onclick = function(){window._debtView=i===0?'debts':'owed';renderDebts();};
+      btn.textContent = pair[0];
+      btn.style.cssText = 'flex:1;padding:9px 0;border:none;border-radius:10px;font-size:0.9rem;font-weight:600;cursor:pointer;letter-spacing:0.01em;' +
+        (_dv === pair[1] ? 'background:#7c6cfc;color:#fff;' : 'background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.5);');
+      btn.onclick = (function(v){ return function(){ window._debtView=v; renderDebts(); }; })(pair[1]);
       _stEl.appendChild(btn);
     });
     var _rvEl = list.querySelector('.receivables-section');
-    if (!_rvEl) { _rvEl = document.createElement('div'); _rvEl.className = 'receivables-section'; _dpEl.appendChild(_rvEl); }
-    if (_dv === 'owed') {
-      _dpEl.querySelectorAll(':scope > *:not(.debt-subtabs):not(.receivables-section)').forEach(function(el){el.style.display='none';});
-      _rvEl.innerHTML = renderReceivablesSection();
-      _rvEl.style.display = '';
-    } else {
-      _dpEl.querySelectorAll(':scope > *:not(.debt-subtabs)').forEach(function(el){el.style.display='';});
-      _rvEl.style.display = 'none';
+    if (!_rvEl) {
+      _rvEl = document.createElement('div');
+      _rvEl.className = 'receivables-section';
+      _dpEl.parentNode.appendChild(_rvEl);
     }
+    _rvEl.innerHTML = renderReceivablesSection();
+    _dpEl.style.display = _dv === 'debts' ? '' : 'none';
+    _rvEl.style.display = _dv === 'owed' ? '' : 'none';
   }
 }
-
 function renderDebt(d) {
   const original = parseNum(d.original_amount);
   const current = parseNum(d.current_balance);
