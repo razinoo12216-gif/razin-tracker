@@ -1651,3 +1651,24 @@ dialog .actions {
   font-family: inherit;
   line-height: 1.45;
 }
+
+
+/* Gym sessions list */
+.gym-sessions-section { margin-top: 18px; }
+.gym-sessions-empty { color: rgba(255,255,255,0.35); font-size: 0.85rem; text-align: center; padding: 12px 0; }
+.gym-session-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: rgba(255,255,255,0.05); border-radius: 10px; margin-bottom: 8px; gap: 10px; }
+.gym-session-info { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.gym-session-badge { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; background: var(--accent, #7c6cfc); color: #fff; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
+.gym-session-meta { font-size: 0.83rem; color: rgba(255,255,255,0.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gym-session-edit-btn { font-size: 0.78rem; padding: 4px 10px; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); border: none; border-radius: 7px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+.gym-session-edit-btn:hover { background: rgba(255,255,255,0.18); color: #fff; }
+
+/* Gym date navigation */
+.gym-date-nav { background: rgba(255,255,255,0.08); border: none; color: rgba(255,255,255,0.6); font-size: 1rem; padding: 4px 10px; border-radius: 7px; cursor: pointer; transition: background 0.15s; }
+.gym-date-nav:hover { background: rgba(255,255,255,0.16); color: #fff; }
+
+/* Small action buttons (receivables + debts) */
+.btn-sm { font-size: 0.78rem; padding: 5px 12px; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.75); border: none; border-radius: 7px; cursor: pointer; transition: background 0.15s; }
+.btn-sm:hover { background: rgba(255,255,255,0.18); color: #fff; }
+.btn-sm.btn-green { background: rgba(52,199,89,0.18); color: #34c759; }
+.btn-sm.btn-green:hover { background: rgba(52,199,89,0.32); }
