@@ -1326,8 +1326,8 @@ function openReceivableEditor(id) {
   window._rvEditId = id || null;
   var overlay = document.createElement('div');
   overlay.id = 'rv-dlg';
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = '<div class="modal-box" style="max-width:360px">' +
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.65);display:flex;align-items:center;justify-content:center;z-index:9999;';
+  overlay.innerHTML = '<div style="max-width:360px;width:92%;background:#1e1b2e;border-radius:14px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.5)">' +
     '<div class="modal-header"><span>' + (id ? 'Edit' : 'New') + ' — Owes Me</span>' +
     '<button id="rv-close" class="modal-close">✕</button></div>' +
     '<div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px">' +
@@ -2553,7 +2553,7 @@ function renderGym() {
       <div class="gym-cal-grid">${cells}</div>
     </div>
     <div class="gym-legend">${legendHtml}</div>
-    <div class="gym-macros-section"><div class="gym-macros-hdr"><button class="gym-date-nav" onclick="gymShiftDate(-1)">&#8592;</button><span class="gym-macros-title">${gymViewDate}</span><button class="gym-date-nav" onclick="gymShiftDate(1)">&#8594;</button><button class="add-btn" onclick="openMacrosEditor('${gymViewDate}')">+ Log</button></div>${macroHtml}</div><div class="gym-sessions-section"><div class="section-header"><span class="section-title">Sessions</span></div><div class="gym-sessions-list">${renderSessionsList()}</div></div>}</div>
+    <div class="gym-macros-section"><div class="gym-macros-hdr"><button class="gym-date-nav" onclick="gymShiftDate(-1)">&#8592;</button><span class="gym-macros-title">${gymViewDate}</span><button class="gym-date-nav" onclick="gymShiftDate(1)">&#8594;</button><button class="add-btn" onclick="openMacrosEditor('${gymViewDate}')">+ Log</button></div>${macroHtml}</div>}</div>
   `;
 }
 
