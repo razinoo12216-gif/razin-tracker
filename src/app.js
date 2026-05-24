@@ -1360,9 +1360,30 @@ function renderDebts() {
   list.querySelectorAll('.debt-pay-btn').forEach((btn) => {
     btn.addEventListener('click', (e) => { e.stopPropagation(); openPaymentEditor(btn.dataset.id); });
   });
-  var _rvEl = list.querySelector('.receivables-section');
-  if (!_rvEl) { _rvEl = document.createElement('div'); _rvEl.className = 'receivables-section'; var _dp = list.querySelector('.debts-page'); if (_dp) _dp.appendChild(_rvEl); }
-  _rvEl.innerHTML = renderReceivablesSection();
+    var _dv = window._debtView || 'debts';
+  var _dpEl = list.querySelector('.debts-page');
+  if (_dpEl) {
+    var _stEl = list.querySelector('.debt-subtabs');
+    if (!_stEl) { _stEl = document.createElement('div'); _stEl.className = 'debt-subtabs'; _dpEl.insertBefore(_stEl, _dpEl.firstChild); }
+    _stEl.innerHTML = '';
+    ['My Debts','Owed to Me'].forEach(function(label,i){
+      var btn = document.createElement('button');
+      btn.className = 'debt-subtab' + ((_dv==='owed')===(i===1)?' active':'');
+      btn.textContent = label;
+      btn.onclick = function(){window._debtView=i===0?'debts':'owed';renderDebts();};
+      _stEl.appendChild(btn);
+    });
+    var _rvEl = list.querySelector('.receivables-section');
+    if (!_rvEl) { _rvEl = document.createElement('div'); _rvEl.className = 'receivables-section'; _dpEl.appendChild(_rvEl); }
+    if (_dv === 'owed') {
+      _dpEl.querySelectorAll(':scope > *:not(.debt-subtabs):not(.receivables-section)').forEach(function(el){el.style.display='none';});
+      _rvEl.innerHTML = renderReceivablesSection();
+      _rvEl.style.display = '';
+    } else {
+      _dpEl.querySelectorAll(':scope > *:not(.debt-subtabs)').forEach(function(el){el.style.display='';});
+      _rvEl.style.display = 'none';
+    }
+  }
 }
 
 function renderDebt(d) {
@@ -1401,9 +1422,6 @@ function renderDebt(d) {
       ${!isPaid ? `<button type="button" class="debt-pay-btn" data-id="${esc(d.id)}">+ Log payment</button>` : ''}
     </div>
   `;
-  var _rvEl = list.querySelector('.receivables-section');
-  if (!_rvEl) { _rvEl = document.createElement('div'); _rvEl.className = 'receivables-section'; var _dp = list.querySelector('.debts-page'); if (_dp) _dp.appendChild(_rvEl); }
-  _rvEl.innerHTML = renderReceivablesSection();
 }
 
 function openDebtEditor(id) {
@@ -2454,8 +2472,7 @@ function renderGym() {
       <div class="gym-cal-grid">${cells}</div>
     </div>
     <div class="gym-legend">${legendHtml}</div>
-    <div class="gym-macros-section"><div class="gym-macros-hdr"><span class="gym-macros-title">Daily Macros</span><button class="add-btn" onclick="openMacrosEditor('${todayStr}')">+ Log</button></div>${macroHtml}</div>
-    <div class="gym-sessions-section"><div class="gym-sessions-hdr-row"><h3>Recent Sessions</h3></div>${renderSessionsList()}</div>
+    <div class="gym-macros-section"><div class="gym-macros-hdr"><span class="gym-macros-title">Daily Macros</span><button class="add-btn" onclick="openMacrosEditor('${todayStr}')">+ Log</button></div>${macroHtml}</div>}</div>
   `;
 }
 
