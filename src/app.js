@@ -280,7 +280,7 @@ async function loadAll() {
   rebuildSecondaryFilter();
   render();
   try { const {data:_dm} = await window.db.from('daily_macros').select('*').order('date',{ascending:false}); dailyMacros = _dm || []; } catch(_e) {}
-  try { const {data:_rv} = await window.db.from('receivables').select('*').order('created_at',{ascending:false}); receivables = _rv || []; } catch(_e) {}
+  try { const {data:_rv} = await window.db.from('debts').select('*').eq('type','receivable').order('created_at',{ascending:false}); receivables = _rv || []; } catch(_e) {}
 }
 
 function rebuildMonthSelect() {
@@ -1139,9 +1139,9 @@ function renderTicket(t) {
         <div><label>Paid</label><span class="${paid && paid < amount ? 'pos' : ''}">${paid ? fmt(paid) : '—'}</span></div>
         <div><label>Saved</label><span class="${saved > 0 ? 'pos' : ''}">${saved > 0 ? fmt(saved) : '—'}</span></div>
       </div>`}
-      ${t.notes ? `<div class="block"><label>Notes</label><p>${esc(t.notes)}</p></div>` : ''}
+      ${t.work_done ? `<div class="block"><label>Notes</label><p>${esc(t.work_done)}</p></div>` : ''}
       ${t.ticket_kind === 'client'
-        ? `<div style='display:flex;gap:5px;padding:5px 10px;flex-wrap:wrap'><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${t.client_paid?'#22c55e':'#d1d5db'};color:${t.client_paid?'#fff':'#555'}'>Client paid</span><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${(t.guy_paid||parseFloat(t.guy_cost)>0)?'#22c55e':'#d1d5db'};color:${(t.guy_paid||parseFloat(t.guy_cost)>0)?'#fff':'#555'}'>Guy paid</span><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${t.work_done?'#22c55e':'#d1d5db'};color:${t.work_done?'#fff':'#555'}'>Done</span></div>`
+        ? `<div style='display:flex;gap:5px;padding:5px 10px;flex-wrap:wrap'><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${t.client_paid?'#22c55e':'#d1d5db'};color:${t.client_paid?'#fff':'#555'}'>Client paid</span><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${(t.guy_paid||parseFloat(t.guy_cost)>0)?'#22c55e':'#d1d5db'};color:${(t.guy_paid||parseFloat(t.guy_cost)>0)?'#fff':'#555'}'>Guy paid</span><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${t.personal_paid?'#22c55e':'#d1d5db'};color:${t.personal_paid?'#fff':'#555'}'>Done</span></div>`
         : t.personal_paid ? `<div style='padding:4px 10px'><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:#22c55e;color:#fff'>Paid</span></div>` : ''}
     </div>`;
 }
@@ -1158,7 +1158,7 @@ function openTicketEditor(id) {
     ticketForm.amount.value = t.amount || '';
     ticketForm.borough.value = t.borough || '';
     ticketForm.pcn.value = t.pcn || '';
-    ticketForm.notes.value = t.notes || '';
+    ticketForm.work_done.value = t.work_done || '';
     const kv = t.ticket_kind || 'personal';
     ticketForm.ticket_kind.value = kv;
     if (kv === 'personal') {
@@ -1170,7 +1170,7 @@ function openTicketEditor(id) {
       ticketForm.guy_cost.value = t.guy_cost == null ? '' : t.guy_cost;
       ticketForm.client_paid.checked = !!t.client_paid;
       ticketForm.guy_paid.checked = !!t.guy_paid;
-      ticketForm.work_done.checked = !!t.work_done;
+      ticketForm.personal_paid.checked = !!t.personal_paid;
     }
     onTicketKindChange(kv);
   } else {
@@ -1212,7 +1212,7 @@ ticketForm.addEventListener('submit', async (e) => {
   const fd = new FormData(ticketForm);
   const payload = Object.fromEntries(fd.entries());
   if (!payload.date) payload.date = todayISO();
-  for (const k of ['personal_paid','client_paid','guy_paid','work_done']) payload[k] = payload[k] === 'true';
+  for (const k of ['personal_paid','client_paid','guy_paid']) payload[k] = !!(payload[k]);
   for (const k of ['amount','paid','client_revenue','guy_cost']) { if (payload[k] === '' || payload[k] === undefined) payload[k] = null; else { const n = parseFloat(payload[k]); payload[k] = isNaN(n) ? null : n; } }
 
   if (editingTicketId) {
@@ -1355,7 +1355,7 @@ async function saveReceivableEditor() {
   var amount = parseFloat((document.getElementById('rv-amount') || {}).value) || 0;
   if (!name || !amount) { alert('Name and amount are required.'); return; }
   var id = window._rvEditId;
-  var payload = { creditor: name, original_amount: amount, current_balance: amount, type: 'personal', status: 'active' };
+  var payload = { creditor: name, original_amount: amount, current_balance: amount, type: 'receivable', status: 'active' };
   if (id) {
     var existing2 = (receivables || []).find(function(r) { return String(r.id) === String(id); });
     var origAmt = existing2 ? parseFloat(existing2.original_amount) : amount;
@@ -1363,14 +1363,14 @@ async function saveReceivableEditor() {
     payload.current_balance = Math.max(0, amount - (origAmt - curBal));
     delete payload.type; delete payload.status;
   }
-  var res = id ? await supabase.from('receivables').update(payload).eq('id', id) : await supabase.from('receivables').insert([payload]);
+  var res = id ? await supabase.from('debts').update(payload).eq('id', id) : await supabase.from('debts').insert([payload]);
   if (res.error) { alert('Error: ' + res.error.message); return; }
   var dlg = document.getElementById('rv-dlg'); if (dlg) dlg.remove();
   await loadData(); renderDebts();
 }
 async function deleteReceivable(id) {
   if (!confirm('Delete this entry?')) return;
-  await supabase.from('receivables').delete().eq('id', id);
+  await supabase.from('debts').delete().eq('id', id);
   var dlg = document.getElementById('rv-dlg'); if (dlg) dlg.remove();
   await loadData(); renderDebts();
 }
@@ -1382,7 +1382,7 @@ async function logReceivablePayment(id) {
   var payment = parseFloat(amt);
   if (isNaN(payment) || payment <= 0) { alert('Invalid amount'); return; }
   var newBal = Math.max(0, parseFloat(existing.current_balance != null ? existing.current_balance : existing.original_amount) - payment);
-  var res = await supabase.from('receivables').update({ current_balance: newBal }).eq('id', id);
+  var res = await supabase.from('debts').update({ current_balance: newBal }).eq('id', id);
   if (res.error) { alert('Error: ' + res.error.message); return; }
   await loadData(); renderDebts();
 }
@@ -1548,11 +1548,11 @@ debtForm.addEventListener('submit', async (e) => {
     if (!_rPay.creditor || !_rPay.creditor.trim()) { window._receivableMode = false; return; }
     var _rvId = editingDebtId;
     if (_rvId) {
-      await window.db.from('receivables').update({creditor:_rPay.creditor,original_amount:parseNum(_rPay.original_amount)||0,current_balance:parseNum(_rPay.current_balance)||0,notes:_rPay.notes||null,status:_rPay.status||'active'}).eq('id',_rvId);
+      await window.db.from('debts').update({creditor:_rPay.creditor,original_amount:parseNum(_rPay.original_amount)||0,current_balance:parseNum(_rPay.current_balance)||0,notes:_rPay.notes||null,status:_rPay.status||'active'}).eq('id',_rvId);
       var _ri = receivables.findIndex(function(x){ return x.id===_rvId; });
       if (_ri>=0) receivables[_ri] = Object.assign({},receivables[_ri],{creditor:_rPay.creditor,original_amount:parseNum(_rPay.original_amount)||0,current_balance:parseNum(_rPay.current_balance)||0,notes:_rPay.notes||null,status:_rPay.status||'active'});
     } else {
-      var _ins = await window.db.from('receivables').insert({creditor:_rPay.creditor,original_amount:parseNum(_rPay.original_amount)||0,current_balance:parseNum(_rPay.current_balance)||0,notes:_rPay.notes||null,status:_rPay.status||'active'}).select().single();
+      var _ins = await window.db.from('debts').insert({creditor:_rPay.creditor,original_amount:parseNum(_rPay.original_amount)||0,current_balance:parseNum(_rPay.current_balance)||0,notes:_rPay.notes||null,status:_rPay.status||'active'}).select().single();
       if (_ins && _ins.data) receivables.push(_ins.data);
     }
     window._receivableMode = false;
@@ -1598,7 +1598,7 @@ $('#debt-delete-btn').addEventListener('click', async () => {
     if (!confirm('Delete this receivable?')) return;
     var _dId = editingDebtId;
     receivables = receivables.filter(function(x){ return x.id !== _dId; });
-    await window.db.from('receivables').delete().eq('id', _dId);
+    await window.db.from('debts').delete().eq('id', _dId);
     window._receivableMode = false;
     debtEditor.close();
     renderDebts();
