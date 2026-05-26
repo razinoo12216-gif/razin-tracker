@@ -1375,14 +1375,14 @@ async function saveReceivableEditor() {
     delete payload.type; delete payload.status;
   }
   if (!id) payload.id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
-  var res = id ? await window.db.from('debts').update(payload).eq('id', id) : await window.db.from('debts').insert([payload]);
+  var res = id ? await window.db.from('receivables').update(payload).eq('id', id) : await window.db.from('receivables').insert([payload]);
   if (res.error) { alert('Error: ' + res.error.message); return; }
   var dlg = document.getElementById('rv-dlg'); if (dlg) dlg.remove();
   await loadData(); renderDebts();
 }
 async function deleteReceivable(id) {
   if (!confirm('Delete this entry?')) return;
-  await supabase.from('debts').delete().eq('id', id);
+  await window.db.from('receivables').delete().eq('id', id);
   var dlg = document.getElementById('rv-dlg'); if (dlg) dlg.remove();
   await loadData(); renderDebts();
 }
@@ -1394,7 +1394,7 @@ async function logReceivablePayment(id) {
   var payment = parseFloat(amt);
   if (isNaN(payment) || payment <= 0) { alert('Invalid amount'); return; }
   var newBal = Math.max(0, parseFloat(existing.current_balance != null ? existing.current_balance : existing.original_amount) - payment);
-  var res = await supabase.from('debts').update({ current_balance: newBal }).eq('id', id);
+  var res = await window.db.from('receivables').update({ current_balance: newBal }).eq('id', id);
   if (res.error) { alert('Error: ' + res.error.message); return; }
   await loadData(); renderDebts();
 }
