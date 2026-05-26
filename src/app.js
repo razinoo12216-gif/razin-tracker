@@ -3060,101 +3060,102 @@ function openNoteEditor(id) {
 
 // ── AI DAY PLANNER ─────────────────────────────────────────
 async function openPlannerModal() {
-  const old = document.getElementById('planner-dlg'); if (old) old.remove();
-  const overlay = document.createElement('div');
-  overlay.id = 'planner-dlg';
-  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.82);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(6px);padding:16px;box-sizing:border-box';
-  overlay.innerHTML =
-    '<div id="planner-card" style="width:100%;max-width:640px;max-height:92vh;overflow-y:auto;background:#0f1319;border-radius:18px;box-shadow:0 32px 80px rgba(0,0,0,0.8);border:1px solid rgba(255,255,255,0.07)">' +
-    '<div style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:22px 24px;border-radius:18px 18px 0 0;position:sticky;top:0;z-index:2">' +
-    '<div style="display:flex;align-items:center;justify-content:space-between">' +
-    '<div><div style="font-size:1.2rem;font-weight:800;color:#fff;letter-spacing:-.01em">&#9889; AI Day Planner</div>' +
-    '<div id="planner-status" style="font-size:0.82rem;color:rgba(255,255,255,0.65);margin-top:3px">Building your schedule with prayer times...</div></div>' +
-    '<button onclick="document.getElementById('planner-dlg').remove()" style="background:rgba(255,255,255,0.12);border:none;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center">&#x2715;</button>' +
-    '</div></div>' +
-    '<div id="planner-body" style="padding:20px 24px"></div>' +
-    '</div>';
-  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  const old = document.getElementById("planner-dlg"); if (old) old.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "planner-dlg";
+  overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.82);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(6px);padding:16px;box-sizing:border-box";
+  overlay.innerHTML = `<div id="planner-card" style="width:100%;max-width:640px;max-height:92vh;overflow-y:auto;background:#0f1319;border-radius:18px;box-shadow:0 32px 80px rgba(0,0,0,0.8);border:1px solid rgba(255,255,255,0.07)">
+    <div style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:22px 24px;border-radius:18px 18px 0 0;position:sticky;top:0;z-index:2">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-size:1.2rem;font-weight:800;color:#fff;letter-spacing:-.01em">&#9889; AI Day Planner</div>
+          <div id="planner-status" style="font-size:0.82rem;color:rgba(255,255,255,0.65);margin-top:3px">Building your schedule with prayer times...</div>
+        </div>
+        <button onclick="document.getElementById('planner-dlg').remove()" style="background:rgba(255,255,255,0.12);border:none;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center">&#x2715;</button>
+      </div>
+    </div>
+    <div id="planner-body" style="padding:20px 24px"></div>
+  </div>`;
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
   document.body.appendChild(overlay);
 
-  const todayISO = () => new Date().toISOString().split('T')[0];
+  const todayISO = () => new Date().toISOString().split("T")[0];
   const tasks = (entries || []).filter(e => !e.done && (e.date === todayISO() || !e.date)).slice(0, 12).map(e => ({
-    title: e.title || '',
-    priority: e.priority || '',
-    duration: e.duration || '',
-    location: e.location || '',
-    notes: e.notes || ''
+    title: e.title || "",
+    priority: e.priority || "",
+    duration: e.duration || "",
+    location: e.location || "",
+    notes: e.notes || ""
   }));
 
-  let data;
   try {
-    const r = await fetch('/api/plan-day', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tasks }) });
-    data = await r.json();
-  } catch (e) {
-    document.getElementById('planner-body').innerHTML = '<div style="color:#f87171;padding:20px;text-align:center"><div style="font-size:1.5rem;margin-bottom:8px">&#x26A0;</div><div>Failed to load plan.</div><div style="font-size:0.8rem;color:rgba(255,255,255,0.4);margin-top:6px">' + e.message + '</div></div>';
-    return;
+    const resp = await fetch("/api/plan-day", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tasks, date: todayISO() })
+    });
+    if (!resp.ok) throw new Error("API error " + resp.status);
+    const data = await resp.json();
+
+    const prayers = data.prayers || {};
+    const schedule = data.schedule || [];
+
+    const typeConfig = {
+      prayer:   { color: "#34d399", icon: "🕌" },
+      gym:      { color: "#f87171", icon: "💪" },
+      work:     { color: "#60a5fa", icon: "💼" },
+      admin:    { color: "#a78bfa", icon: "📋" },
+      travel:   { color: "#fbbf24", icon: "🚗" },
+      break:    { color: "#94a3b8", icon: "☕" },
+      personal: { color: "#f472b6", icon: "🌿" }
+    };
+
+    const prayerNames = ["Fajr","Dhuhr","Asr","Maghrib","Isha"];
+    const prayerBar = `<div style="margin-bottom:20px">
+      <div style="font-size:0.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;margin-bottom:10px">Prayer Times</div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
+        ${prayerNames.map(p => `<div style="background:#1a2035;border-radius:10px;padding:10px 6px;text-align:center;border:1px solid rgba(52,211,153,0.15)">
+          <div style="font-size:0.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#34d399;margin-bottom:4px">${p}</div>
+          <div style="font-size:0.9rem;font-weight:700;color:#fff">${prayers[p] || "--"}</div>
+        </div>`).join("")}
+      </div>
+    </div>`;
+
+    const today = new Date();
+    const dateLabel = `<div style="font-size:0.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;margin-bottom:10px">
+      ${today.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
+    </div>`;
+
+    const blocks = schedule.map(block => {
+      const cfg = typeConfig[block.type] || { color: "#6b7280", icon: "📌" };
+      const timeStr = block.end ? block.time + " – " + block.end : block.time;
+      return `<div style="display:flex;align-items:stretch;gap:0;margin-bottom:8px;border-radius:12px;overflow:hidden;background:${cfg.color}18">
+        <div style="width:4px;background:${cfg.color};flex-shrink:0"></div>
+        <div style="padding:14px 18px;flex:1">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:1.1rem">${cfg.icon}</span>
+            <span style="font-size:0.97rem;font-weight:600;color:#f1f5f9">${block.label}</span>
+          </div>
+          <div style="font-size:0.8rem;color:#64748b;margin-top:4px">${timeStr}</div>
+        </div>
+      </div>`;
+    }).join("");
+
+    const prayerCount = schedule.filter(b => b.type === "prayer").length;
+    const footer = `<div style="font-size:0.75rem;color:#475569;text-align:center;margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.06)">
+      ${schedule.length} time blocks · ${prayerCount} prayers scheduled
+    </div>`;
+
+    document.getElementById("planner-body").innerHTML = prayerBar + dateLabel + blocks + footer;
+    document.getElementById("planner-status").textContent = "Ready — " + today.toLocaleDateString("en-GB", { weekday: "long" });
+  } catch (err) {
+    document.getElementById("planner-body").innerHTML = `<div style="color:#f87171;padding:20px;text-align:center">
+      <div style="font-size:1.5rem;margin-bottom:8px">&#9888;</div>
+      <div>Error: ${err.message}</div>
+    </div>`;
+    document.getElementById("planner-status").textContent = "Failed to load";
   }
-
-  if (!data || data.error) {
-    document.getElementById('planner-body').innerHTML = '<div style="color:#f87171;padding:20px;text-align:center"><div>Error: ' + (data?.error || 'Unknown') + '</div><div style="font-size:0.8rem;color:rgba(255,255,255,0.4);margin-top:8px">Make sure ANTHROPIC_API_KEY is set in Vercel.</div></div>';
-    return;
-  }
-
-  document.getElementById('planner-status').textContent = 'Ready — ' + new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-
-  const prayers = data.prayers || {};
-  const schedule = data.schedule || [];
-
-  const typeConfig = {
-    prayer:   { color: '#34d399', bg: 'rgba(52,211,153,0.08)',  icon: '&#x1F54C;' },
-    gym:      { color: '#f87171', bg: 'rgba(248,113,113,0.08)', icon: '&#x1F4AA;' },
-    work:     { color: '#60a5fa', bg: 'rgba(96,165,250,0.08)',  icon: '&#x1F4BC;' },
-    admin:    { color: '#a78bfa', bg: 'rgba(167,139,250,0.08)', icon: '&#x1F4CB;' },
-    travel:   { color: '#fbbf24', bg: 'rgba(251,191,36,0.08)',  icon: '&#x1F697;' },
-    break:    { color: '#94a3b8', bg: 'rgba(148,163,184,0.08)', icon: '&#x2615;' },
-    personal: { color: '#f472b6', bg: 'rgba(244,114,182,0.08)', icon: '&#x2B50;' },
-  };
-
-  const prayerBar = Object.keys(prayers).length
-    ? '<div style="display:flex;flex-wrap:wrap;gap:10px;padding:14px 18px;background:rgba(52,211,153,0.06);border:1px solid rgba(52,211,153,0.15);border-radius:12px;margin-bottom:20px">' +
-      Object.entries(prayers).map(([k, v]) =>
-        '<div style="display:flex;flex-direction:column;align-items:center;gap:2px">' +
-        '<span style="font-size:0.68rem;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.06em">' + k + '</span>' +
-        '<span style="font-size:0.95rem;font-weight:700;color:#34d399">' + v + '</span></div>'
-      ).join('') +
-      '</div>'
-    : '';
-
-  const dateLabel = '<div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,0.3);margin-bottom:14px;font-weight:600">' +
-    new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase() + '</div>';
-
-  const blocks = schedule.map(b => {
-    const cfg = typeConfig[b.type] || typeConfig.personal;
-    return '<div style="display:flex;align-items:stretch;gap:0;margin-bottom:8px;border-radius:12px;overflow:hidden;background:' + cfg.bg + ';border:1px solid rgba(255,255,255,0.05)">' +
-      '<div style="width:4px;background:' + cfg.color + ';flex-shrink:0;border-radius:12px 0 0 12px"></div>' +
-      '<div style="display:flex;align-items:center;gap:14px;padding:14px 18px;flex:1;min-width:0">' +
-      '<div style="font-size:0.8rem;color:rgba(255,255,255,0.45);white-space:nowrap;min-width:82px;font-variant-numeric:tabular-nums">' + b.time + '–' + (b.end || '') + '</div>' +
-      '<div style="font-size:1.2rem;flex-shrink:0">' + cfg.icon + '</div>' +
-      '<div style="font-size:0.97rem;font-weight:600;color:#f1f5f9;line-height:1.3">' + esc(b.label) + '</div>' +
-      '</div></div>';
-  }).join('');
-
-  document.getElementById('planner-body').innerHTML = prayerBar + dateLabel + blocks +
-    '<div style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.06);text-align:center;font-size:0.75rem;color:rgba(255,255,255,0.25)">' +
-    schedule.length + ' time blocks &middot; ' + Object.keys(prayers).length + ' prayers scheduled</div>';
-}
-
-// ── Push Notifications ──────────────────────────────────────────────────────
-const VAPID_PUBLIC_KEY = 'BCnB_hxXxjnesi55cjR6P_ghPaoAyEn_-6p-b1UuRjxpAF0TMEt0BFnRVIi_eWpa2bzVoeVs4Pr54vDOz-PJvp8';
-
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = atob(base64);
-  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
-}
-
-async function registerPush() {
+}async function registerPush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
   try {
     const reg = await navigator.serviceWorker.register('/sw.js');
