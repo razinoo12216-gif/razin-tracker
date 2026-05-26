@@ -639,6 +639,7 @@ function renderToday() {
         <h2 class="today-date">${esc(dateLabel)}</h2>
         <div class="today-progress">${total > 0 ? `${done} of ${total} done` : 'No tasks yet'}</div>
         <button onclick="openPlannerModal()" style="display:flex;align-items:center;gap:6px;padding:7px 16px;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:0.82rem;font-weight:700;letter-spacing:.02em;margin-top:8px">&#9889; Plan My Day</button>
+        <button id="notif-btn" onclick="requestNotificationPermission()" style="display:flex;align-items:center;gap:6px;padding:7px 16px;background:#1e293b;color:#fff;border:1px solid rgba(255,255,255,0.12);border-radius:20px;cursor:pointer;font-size:0.82rem;font-weight:700;letter-spacing:.02em;margin-top:8px" onclick="requestNotificationPermission()">🔔 Notifications</button>
         <div class="today-nav">
           <button type="button" class="day-nav" id="day-prev" aria-label="Previous day">←</button>
           <button type="button" class="day-nav today-btn" id="day-today">${isToday ? 'Today' : 'Jump to today'}</button>
@@ -3148,3 +3149,66 @@ async function openPlannerModal() {
       '</div>';
   }
 }
+
+
+// ── Push Notifications ──────────────────────────────────────────────────────
+const VAPID_PUBLIC_KEY = 'BCnB_hxXxjnesi55cjR6P_ghPaoAyEn_-6p-b1UuRjxpAF0TMEt0BFnRVIi_eWpa2bzVoeVs4Pr54vDOz-PJvp8';
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+
+async function registerPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    console.log('[SW] registered', reg.scope);
+
+    // Auto-subscribe if already granted
+    if (Notification.permission === 'granted') {
+      await subscribePush(reg);
+    }
+  } catch (e) {
+    console.warn('[SW] registration failed:', e);
+  }
+}
+
+async function subscribePush(reg) {
+  try {
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    }
+    await fetch('/api/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscription: sub }),
+    });
+    return sub;
+  } catch (e) {
+    console.warn('[Push] subscribe failed:', e);
+    return null;
+  }
+}
+
+async function requestNotificationPermission() {
+  if (!('Notification' in window)) { alert('Notifications not supported in this browser.'); return; }
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') { alert('Notification permission denied. Enable it in browser settings.'); return; }
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await subscribePush(reg);
+  if (sub) {
+    // Update button to show enabled
+    var btn = document.getElementById('notif-btn');
+    if (btn) { btn.textContent = '\u2714 Notifications On'; btn.style.background = '#059669'; btn.disabled = true; }
+  }
+}
+
+// Register SW on load
+registerPush();
