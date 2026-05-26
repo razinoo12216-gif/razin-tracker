@@ -21,6 +21,7 @@ let debts = [];
 let gymSessions = [];
 let dailyMacros = [];
 let receivables = [];
+let userNotes = [];
 const MACRO_TARGETS = {protein:180, carbs:280, fats:70, calories:2500};
 let bodyMetrics = [];
 let roadTrips = [];
@@ -281,6 +282,7 @@ async function loadAll() {
   render();
   try { const {data:_dm} = await window.db.from('daily_macros').select('*').order('date',{ascending:false}); dailyMacros = _dm || []; } catch(_e) {}
   try { const {data:_rv} = await window.db.from('debts').select('*').eq('type','receivable').order('created_at',{ascending:false}); receivables = _rv || []; } catch(_e) {}
+  try { const {data:_nts} = await window.db.from('user_notes').select('*').order('created_at',{ascending:false}); userNotes = _nts || []; } catch(_e) {}
 }
 
 function rebuildMonthSelect() {
@@ -367,7 +369,7 @@ function renderPotentialTotals(potentials) {
 }
 
 function render() {
-  if(!['today','drive','review','invoice','ticket','debt','gym','project','potential','expense'].includes(activeTab))activeTab='today';
+  if(!['today','drive','review','invoice','ticket','debt','gym','project','potential','expense','notes'].includes(activeTab))activeTab='today';
   // Month-scoped entries (projects/expenses use month, potentials/reviews/invoices ignore)
   const moneyEntries = entries.filter((e) => e.type !== 'potential');
   const inMonth = moneyEntries.filter((e) => matchesMonth(e, selectedMonth));
@@ -411,6 +413,7 @@ function render() {
   if (activeTab === 'debt') return renderDebts();
   if (activeTab === 'potential') return renderPotentials(potentials);
   if (activeTab === 'gym') return renderGym();
+  if (activeTab === 'notes') return renderNotes();
 
   const q = $('#search').value.trim().toLowerCase();
   const sf = secondaryFilter.value;
@@ -2945,4 +2948,108 @@ async function lookupTripPostcode() {
     milesEl.value = miles;
     updateTripCalcPreview();
   } catch(e) {}
+}
+
+
+// ── NOTES TAB ──────────────────────────────────────────────
+const NOTE_CATS = ['Business','Personal','Finance','Ideas','Other'];
+const NOTE_CAT_COLORS = {Business:'#7c3aed',Personal:'#2563eb',Finance:'#059669',Ideas:'#d97706',Other:'#6b7280'};
+let _activeNoteCat = 'All';
+
+function renderNotes() {
+  const filtered = _activeNoteCat === 'All' ? userNotes : userNotes.filter(n => n.category === _activeNoteCat);
+  const allCats = ['All', ...NOTE_CATS];
+
+  const catBar = allCats.map(c => {
+    const active = c === _activeNoteCat;
+    const col = c === 'All' ? '#374151' : NOTE_CAT_COLORS[c];
+    return `<button onclick="window._activeNoteCat='${c}';renderNotes()" style="padding:6px 14px;border-radius:20px;border:none;cursor:pointer;font-size:0.8rem;font-weight:600;transition:all .15s;${active ? 'background:'+col+';color:#fff;' : 'background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.6);'}">${c}</button>`;
+  }).join('');
+
+  const cards = filtered.length ? filtered.map(n => {
+    const col = NOTE_CAT_COLORS[n.category] || NOTE_CAT_COLORS.Other;
+    const preview = n.content ? esc(n.content).substring(0,120).replace(/\n/g,'<br>') + (n.content.length > 120 ? '…' : '') : '';
+    return `<div class="card" onclick="openNoteEditor('${n.id}')" style="cursor:pointer;border-left:3px solid ${col};transition:transform .1s" onmouseenter="this.style.transform='translateY(-2px)'" onmouseleave="this.style.transform=''">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">
+        <strong style="font-size:0.95rem;line-height:1.3">${esc(n.title)}</strong>
+        <span style="background:${col};color:#fff;font-size:0.65rem;padding:2px 8px;border-radius:12px;white-space:nowrap;flex-shrink:0">${esc(n.category||'Other')}</span>
+      </div>
+      ${preview ? `<p style="margin:0 0 8px;color:rgba(255,255,255,0.5);font-size:0.82rem;line-height:1.5">${preview}</p>` : ''}
+      <div style="font-size:0.72rem;color:rgba(255,255,255,0.3)">${shortDate(n.updated_at||n.created_at)}</div>
+    </div>`;
+  }).join('') : '<div class="empty-state"><p>No notes here yet.</p></div>';
+
+  list.innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">${catBar}</div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <button class="add-btn" onclick="openNoteEditor(null)">+ New Note</button>
+    </div>
+    <div class="card-grid">${cards}</div>
+  `;
+}
+
+function openNoteEditor(id) {
+  const existing = id ? userNotes.find(n => String(n.id) === String(id)) : null;
+  const old = document.getElementById('note-dlg'); if (old) old.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'note-dlg';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(4px)';
+
+  const catOpts = NOTE_CATS.map(c => `<option value="${c}"${(existing?.category||'Other')===c?' selected':''}>${c}</option>`).join('');
+  const inputStyle = 'width:100%;box-sizing:border-box;background:#0f1319;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px 12px;color:#fff;font-size:0.92rem;outline:none;margin-bottom:14px';
+  const labelStyle = 'display:block;font-size:0.73rem;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px';
+
+  overlay.innerHTML =
+    '<div style="width:520px;max-width:94vw;max-height:88vh;overflow-y:auto;background:#181c28;border-radius:16px;border:1px solid rgba(255,255,255,0.08);box-shadow:0 24px 64px rgba(0,0,0,0.7)">' +
+      '<div style="background:linear-gradient(135deg,#1e3a5f,#2563eb);padding:18px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1">' +
+        '<span style="font-weight:700;font-size:1rem;color:#fff">' + (existing ? 'Edit Note' : '+ New Note') + '</span>' +
+        '<button id="note-close" style="background:rgba(255,255,255,0.15);border:none;color:#fff;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:1.1rem">&#215;</button>' +
+      '</div>' +
+      '<div style="padding:22px 20px 18px">' +
+        '<label style="' + labelStyle + '">Title</label>' +
+        '<input id="note-title" style="' + inputStyle + '" placeholder="Note title..." value="' + (existing ? esc(existing.title) : '') + '">' +
+        '<label style="' + labelStyle + '">Category</label>' +
+        '<select id="note-cat" style="' + inputStyle + '">' + catOpts + '</select>' +
+        '<label style="' + labelStyle + '">Content</label>' +
+        '<textarea id="note-content" rows="9" style="' + inputStyle + 'resize:vertical" placeholder="Write your note...">' + (existing ? esc(existing.content||'') : '') + '</textarea>' +
+        '<div style="display:flex;gap:10px">' +
+          '<button id="note-save" style="flex:1;padding:11px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.95rem">Save</button>' +
+          (existing ? '<button id="note-del" style="padding:11px 18px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3);border-radius:8px;font-weight:600;cursor:pointer">Delete</button>' : '') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+  document.getElementById('note-close').onclick = () => overlay.remove();
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  document.getElementById('note-save').onclick = async function() {
+    const title = (document.getElementById('note-title')||{}).value?.trim();
+    const category = (document.getElementById('note-cat')||{}).value || 'Other';
+    const content = (document.getElementById('note-content')||{}).value || '';
+    if (!title) { alert('Title is required.'); return; }
+    const now = new Date().toISOString();
+    const payload = {title, category, content, updated_at: now};
+    let res;
+    if (id) {
+      res = await window.db.from('user_notes').update(payload).eq('id', id);
+    } else {
+      payload.created_at = now;
+      res = await window.db.from('user_notes').insert([payload]);
+    }
+    if (res.error) { alert('Save failed: ' + res.error.message); return; }
+    overlay.remove();
+    try { const {data:_nts} = await window.db.from('user_notes').select('*').order('created_at',{ascending:false}); userNotes = _nts || []; } catch(_e) {}
+    renderNotes();
+  };
+
+  if (existing) {
+    document.getElementById('note-del').onclick = async function() {
+      if (!confirm('Delete this note?')) return;
+      await window.db.from('user_notes').delete().eq('id', id);
+      overlay.remove();
+      try { const {data:_nts} = await window.db.from('user_notes').select('*').order('created_at',{ascending:false}); userNotes = _nts || []; } catch(_e) {}
+      renderNotes();
+    };
+  }
 }
