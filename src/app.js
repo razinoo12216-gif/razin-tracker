@@ -1373,6 +1373,7 @@ async function saveReceivableEditor() {
     payload.current_balance = Math.max(0, amount - (origAmt - curBal));
     delete payload.type; delete payload.status;
   }
+  if (!id) payload.id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
   var res = id ? await window.db.from('debts').update(payload).eq('id', id) : await window.db.from('debts').insert([payload]);
   if (res.error) { alert('Error: ' + res.error.message); return; }
   var dlg = document.getElementById('rv-dlg'); if (dlg) dlg.remove();
