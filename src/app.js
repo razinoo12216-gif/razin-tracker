@@ -638,6 +638,7 @@ function renderToday() {
       <div class="today-header">
         <h2 class="today-date">${esc(dateLabel)}</h2>
         <div class="today-progress">${total > 0 ? `${done} of ${total} done` : 'No tasks yet'}</div>
+        <button onclick="openPlannerModal()" style="display:flex;align-items:center;gap:6px;padding:7px 16px;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:0.82rem;font-weight:700;letter-spacing:.02em;margin-top:8px">&#9889; Plan My Day</button>
         <div class="today-nav">
           <button type="button" class="day-nav" id="day-prev" aria-label="Previous day">←</button>
           <button type="button" class="day-nav today-btn" id="day-today">${isToday ? 'Today' : 'Jump to today'}</button>
@@ -3052,5 +3053,98 @@ function openNoteEditor(id) {
       try { const {data:_nts} = await window.db.from('user_notes').select('*').order('created_at',{ascending:false}); userNotes = _nts || []; } catch(_e) {}
       renderNotes();
     };
+  }
+}
+
+
+// ── AI DAY PLANNER ─────────────────────────────────────────
+async function openPlannerModal() {
+  const old = document.getElementById('planner-dlg'); if (old) old.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'planner-dlg';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(6px)';
+
+  overlay.innerHTML =
+    '<div style="width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;background:#0f1319;border-radius:18px;border:1px solid rgba(255,255,255,0.1);box-shadow:0 32px 80px rgba(0,0,0,0.8)">' +
+      '<div style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:20px 22px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1;border-radius:18px 18px 0 0">' +
+        '<div>' +
+          '<div style="font-weight:800;font-size:1.1rem;color:#fff">⚡ AI Day Planner</div>' +
+          '<div style="font-size:0.75rem;color:rgba(255,255,255,0.7);margin-top:2px">Building your schedule with prayer times...</div>' +
+        '</div>' +
+        '<button id="planner-close" style="background:rgba(255,255,255,0.15);border:none;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:1.2rem">&#215;</button>' +
+      '</div>' +
+      '<div id="planner-body" style="padding:22px">' +
+        '<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:40px 0;color:rgba(255,255,255,0.5)">' +
+          '<div style="width:40px;height:40px;border:3px solid rgba(124,58,237,0.3);border-top-color:#7c3aed;border-radius:50%;animation:spin 0.8s linear infinite"></div>' +
+          '<div style="font-size:0.9rem">Fetching prayer times + building your plan...</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+  document.getElementById('planner-close').onclick = () => overlay.remove();
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  // Gather today tasks
+  const todayTasks = (entries || []).filter(e => e.date === todayISO() && !e.done).map(e => ({
+    title: e.title || e.name || '',
+    priority: e.priority || '',
+    duration: e.duration || '',
+    location: e.location || '',
+    notes: e.notes || ''
+  }));
+
+  try {
+    const res = await fetch('/api/plan-day', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ tasks: todayTasks, city: 'London', country: 'GB' })
+    });
+    const data = await res.json();
+
+    if (data.error) throw new Error(data.error);
+
+    const schedule = data.schedule || [];
+    const prayers = data.prayers || {};
+
+    const typeColors = {prayer:'#059669',gym:'#dc2626',work:'#2563eb',admin:'#7c3aed',travel:'#d97706',break:'#6b7280',personal:'#db2777'};
+    const typeIcons = {prayer:'🕌',gym:'💪',work:'💼',admin:'📋',travel:'🚗',break:'☕',personal:'⭐'};
+
+    const prayerBar = Object.keys(prayers).length
+      ? '<div style="background:rgba(5,150,105,0.1);border:1px solid rgba(5,150,105,0.25);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:0.78rem;color:rgba(255,255,255,0.6);display:flex;flex-wrap:wrap;gap:8px">' +
+          Object.entries(prayers).map(([k,v]) => `<span><span style="color:#34d399;font-weight:600">${k}</span> ${v}</span>`).join('<span style="opacity:.3">·</span>') +
+        '</div>'
+      : '';
+
+    const blocks = schedule.map(b => {
+      const col = typeColors[b.type] || '#6b7280';
+      const icon = typeIcons[b.type] || '·';
+      return `<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
+        <div style="min-width:90px;font-size:0.78rem;color:rgba(255,255,255,0.4);padding-top:2px">${b.time}–${b.end}</div>
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:3px;height:32px;background:${col};border-radius:2px;flex-shrink:0"></div>
+            <div>
+              <div style="font-size:0.88rem;font-weight:600;color:#fff">${icon} ${esc(b.label)}</div>
+              ${b.note ? `<div style="font-size:0.75rem;color:rgba(255,255,255,0.45);margin-top:2px">${esc(b.note)}</div>` : ''}
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+    document.getElementById('planner-body').innerHTML =
+      prayerBar +
+      '<div style="font-size:0.72rem;color:rgba(255,255,255,0.35);margin-bottom:12px;text-transform:uppercase;letter-spacing:.08em">Today's Schedule — ' + new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'}) + '</div>' +
+      blocks +
+      '<div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.07);font-size:0.72rem;color:rgba(255,255,255,0.3)">Generated by Claude · Prayer times via Aladhan API</div>';
+
+  } catch(err) {
+    document.getElementById('planner-body').innerHTML =
+      '<div style="color:#ef4444;padding:20px;text-align:center">' +
+        '<div style="font-size:1.5rem;margin-bottom:8px">⚠️</div>' +
+        '<div>' + esc(err.message) + '</div>' +
+        '<div style="margin-top:8px;font-size:0.78rem;color:rgba(255,255,255,0.4)">Check that ANTHROPIC_API_KEY is set in Vercel env vars.</div>' +
+      '</div>';
   }
 }
