@@ -1139,7 +1139,7 @@ function renderTicket(t) {
         <div><label>Paid</label><span class="${paid && paid < amount ? 'pos' : ''}">${paid ? fmt(paid) : '—'}</span></div>
         <div><label>Saved</label><span class="${saved > 0 ? 'pos' : ''}">${saved > 0 ? fmt(saved) : '—'}</span></div>
       </div>`}
-      ${t.work_done ? `<div class="block"><label>Notes</label><p>${esc(t.work_done)}</p></div>` : ''}
+      ${t.notes ? `<div class="block"><label>Notes</label><p>${esc(t.notes)}</p></div>` : ''}
       ${t.ticket_kind === 'client'
         ? `<div style='display:flex;gap:5px;padding:5px 10px;flex-wrap:wrap'><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${t.client_paid?'#22c55e':'#d1d5db'};color:${t.client_paid?'#fff':'#555'}'>Client paid</span><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${(t.guy_paid||parseFloat(t.guy_cost)>0)?'#22c55e':'#d1d5db'};color:${(t.guy_paid||parseFloat(t.guy_cost)>0)?'#fff':'#555'}'>Guy paid</span><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:${t.personal_paid?'#22c55e':'#d1d5db'};color:${t.personal_paid?'#fff':'#555'}'>Done</span></div>`
         : t.personal_paid ? `<div style='padding:4px 10px'><span style='font-size:.72rem;padding:2px 8px;border-radius:10px;background:#22c55e;color:#fff'>Paid</span></div>` : ''}
@@ -1158,7 +1158,7 @@ function openTicketEditor(id) {
     ticketForm.amount.value = t.amount || '';
     ticketForm.borough.value = t.borough || '';
     ticketForm.pcn.value = t.pcn || '';
-    ticketForm.work_done.value = t.work_done || '';
+    ticketForm.notes.value = t.notes || '';
     const kv = t.ticket_kind || 'personal';
     ticketForm.ticket_kind.value = kv;
     if (kv === 'personal') {
@@ -1326,14 +1326,21 @@ function openReceivableEditor(id) {
   window._rvEditId = id || null;
   var overlay = document.createElement('div');
   overlay.id = 'rv-dlg';
-  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.65);display:flex;align-items:center;justify-content:center;z-index:9999;';
-  overlay.innerHTML = '<div style="max-width:360px;width:92%;background:#1e1b2e;border-radius:14px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.5)">' +
-    '<div class="modal-header"><span>' + (id ? 'Edit' : 'New') + ' — Owes Me</span>' +
-    '<button id="rv-close" class="modal-close">✕</button></div>' +
-    '<div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px">' +
-    '<label style="font-size:0.85rem;color:rgba(255,255,255,0.6)">Name<input id="rv-name" class="form-input" style="margin-top:4px" placeholder="Who owes you?"></label>' +
-    '<label style="font-size:0.85rem;color:rgba(255,255,255,0.6)">Amount (£)<input id="rv-amount" class="form-input" type="number" step="0.01" style="margin-top:4px" placeholder="0.00"></label>' +
-    '</div><div style="padding:0 20px 16px;display:flex;gap:8px" id="rv-btns"></div></div>';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(4px)';
+  overlay.innerHTML =
+    '<div style="width:400px;max-width:92vw;background:#181c28;border-radius:16px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.08)">' +
+      '<div style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:18px 20px;display:flex;align-items:center;justify-content:space-between">' +
+        '<span style="font-weight:700;font-size:1rem;color:#fff;letter-spacing:.01em">' + (id ? '✏️ Edit — Owes Me' : '+ New — Owes Me') + '</span>' +
+        '<button id="rv-close" style="background:rgba(255,255,255,0.15);border:none;color:#fff;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:1.1rem;line-height:1;display:flex;align-items:center;justify-content:center">×</button>' +
+      '</div>' +
+      '<div style="padding:22px 20px 18px">' +
+        '<label style="display:block;font-size:0.75rem;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">Who owes you?</label>' +
+        '<input id="rv-name" style="width:100%;box-sizing:border-box;background:#0f1319;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:11px 13px;color:#fff;font-size:0.95rem;outline:none;margin-bottom:14px" placeholder="Name or note..." />' +
+        '<label style="display:block;font-size:0.75rem;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">Amount (£)</label>' +
+        '<input id="rv-amount" type="number" step="0.01" min="0" style="width:100%;box-sizing:border-box;background:#0f1319;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:11px 13px;color:#fff;font-size:0.95rem;outline:none;margin-bottom:18px" placeholder="0.00" />' +
+        '<div id="rv-btns" style="display:flex;gap:10px"></div>' +
+      '</div>' +
+    '</div>';
   document.body.appendChild(overlay);
   document.getElementById('rv-close').onclick = function() { overlay.remove(); };
   var btns = document.getElementById('rv-btns');
@@ -1363,7 +1370,7 @@ async function saveReceivableEditor() {
     payload.current_balance = Math.max(0, amount - (origAmt - curBal));
     delete payload.type; delete payload.status;
   }
-  var res = id ? await supabase.from('debts').update(payload).eq('id', id) : await supabase.from('debts').insert([payload]);
+  var res = id ? await window.db.from('debts').update(payload).eq('id', id) : await window.db.from('debts').insert([payload]);
   if (res.error) { alert('Error: ' + res.error.message); return; }
   var dlg = document.getElementById('rv-dlg'); if (dlg) dlg.remove();
   await loadData(); renderDebts();
