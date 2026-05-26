@@ -3059,7 +3059,7 @@ function openNoteEditor(id) {
 
 
 // ── AI DAY PLANNER ─────────────────────────────────────────
-async async function openPlannerModal() {
+async function openPlannerModal() {
   const old = document.getElementById('planner-dlg'); if (old) old.remove();
   const overlay = document.createElement('div');
   overlay.id = 'planner-dlg';
