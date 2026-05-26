@@ -3059,97 +3059,90 @@ function openNoteEditor(id) {
 
 
 // ── AI DAY PLANNER ─────────────────────────────────────────
-async function openPlannerModal() {
+async async function openPlannerModal() {
   const old = document.getElementById('planner-dlg'); if (old) old.remove();
   const overlay = document.createElement('div');
   overlay.id = 'planner-dlg';
-  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(6px)';
-
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.82);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(6px);padding:16px;box-sizing:border-box';
   overlay.innerHTML =
-    '<div style="width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;background:#0f1319;border-radius:18px;border:1px solid rgba(255,255,255,0.1);box-shadow:0 32px 80px rgba(0,0,0,0.8)">' +
-      '<div style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:20px 22px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1;border-radius:18px 18px 0 0">' +
-        '<div>' +
-          '<div style="font-weight:800;font-size:1.1rem;color:#fff">⚡ AI Day Planner</div>' +
-          '<div style="font-size:0.75rem;color:rgba(255,255,255,0.7);margin-top:2px">Building your schedule with prayer times...</div>' +
-        '</div>' +
-        '<button id="planner-close" style="background:rgba(255,255,255,0.15);border:none;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:1.2rem">&#215;</button>' +
-      '</div>' +
-      '<div id="planner-body" style="padding:22px">' +
-        '<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:40px 0;color:rgba(255,255,255,0.5)">' +
-          '<div style="width:40px;height:40px;border:3px solid rgba(124,58,237,0.3);border-top-color:#7c3aed;border-radius:50%;animation:spin 0.8s linear infinite"></div>' +
-          '<div style="font-size:0.9rem">Fetching prayer times + building your plan...</div>' +
-        '</div>' +
-      '</div>' +
+    '<div id="planner-card" style="width:100%;max-width:640px;max-height:92vh;overflow-y:auto;background:#0f1319;border-radius:18px;box-shadow:0 32px 80px rgba(0,0,0,0.8);border:1px solid rgba(255,255,255,0.07)">' +
+    '<div style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:22px 24px;border-radius:18px 18px 0 0;position:sticky;top:0;z-index:2">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between">' +
+    '<div><div style="font-size:1.2rem;font-weight:800;color:#fff;letter-spacing:-.01em">&#9889; AI Day Planner</div>' +
+    '<div id="planner-status" style="font-size:0.82rem;color:rgba(255,255,255,0.65);margin-top:3px">Building your schedule with prayer times...</div></div>' +
+    '<button onclick="document.getElementById('planner-dlg').remove()" style="background:rgba(255,255,255,0.12);border:none;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center">&#x2715;</button>' +
+    '</div></div>' +
+    '<div id="planner-body" style="padding:20px 24px"></div>' +
     '</div>';
-
-  document.body.appendChild(overlay);
-  document.getElementById('planner-close').onclick = () => overlay.remove();
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
 
-  // Gather today tasks
-  const todayTasks = (entries || []).filter(e => e.date === todayISO() && !e.done).map(e => ({
-    title: e.title || e.name || '',
+  const todayISO = () => new Date().toISOString().split('T')[0];
+  const tasks = (entries || []).filter(e => !e.done && (e.date === todayISO() || !e.date)).slice(0, 12).map(e => ({
+    title: e.title || '',
     priority: e.priority || '',
     duration: e.duration || '',
     location: e.location || '',
     notes: e.notes || ''
   }));
 
+  let data;
   try {
-    const res = await fetch('/api/plan-day', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ tasks: todayTasks, city: 'London', country: 'GB' })
-    });
-    const data = await res.json();
-
-    if (data.error) throw new Error(data.error);
-
-    const schedule = data.schedule || [];
-    const prayers = data.prayers || {};
-
-    const typeColors = {prayer:'#059669',gym:'#dc2626',work:'#2563eb',admin:'#7c3aed',travel:'#d97706',break:'#6b7280',personal:'#db2777'};
-    const typeIcons = {prayer:'🕌',gym:'💪',work:'💼',admin:'📋',travel:'🚗',break:'☕',personal:'⭐'};
-
-    const prayerBar = Object.keys(prayers).length
-      ? '<div style="background:rgba(5,150,105,0.1);border:1px solid rgba(5,150,105,0.25);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:0.78rem;color:rgba(255,255,255,0.6);display:flex;flex-wrap:wrap;gap:8px">' +
-          Object.entries(prayers).map(([k,v]) => `<span><span style="color:#34d399;font-weight:600">${k}</span> ${v}</span>`).join('<span style="opacity:.3">·</span>') +
-        '</div>'
-      : '';
-
-    const blocks = schedule.map(b => {
-      const col = typeColors[b.type] || '#6b7280';
-      const icon = typeIcons[b.type] || '·';
-      return `<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
-        <div style="min-width:90px;font-size:0.78rem;color:rgba(255,255,255,0.4);padding-top:2px">${b.time}–${b.end}</div>
-        <div style="flex:1">
-          <div style="display:flex;align-items:center;gap:8px">
-            <div style="width:3px;height:32px;background:${col};border-radius:2px;flex-shrink:0"></div>
-            <div>
-              <div style="font-size:0.88rem;font-weight:600;color:#fff">${icon} ${esc(b.label)}</div>
-              ${b.note ? `<div style="font-size:0.75rem;color:rgba(255,255,255,0.45);margin-top:2px">${esc(b.note)}</div>` : ''}
-            </div>
-          </div>
-        </div>
-      </div>`;
-    }).join('');
-
-    document.getElementById('planner-body').innerHTML =
-      prayerBar +
-      '<div style="font-size:0.72rem;color:rgba(255,255,255,0.35);margin-bottom:12px;text-transform:uppercase;letter-spacing:.08em">Today\'s Schedule — ' + new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'}) + '</div>' +
-      blocks +
-      '<div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.07);font-size:0.72rem;color:rgba(255,255,255,0.3)">Generated by Claude · Prayer times via Aladhan API</div>';
-
-  } catch(err) {
-    document.getElementById('planner-body').innerHTML =
-      '<div style="color:#ef4444;padding:20px;text-align:center">' +
-        '<div style="font-size:1.5rem;margin-bottom:8px">⚠️</div>' +
-        '<div>' + esc(err.message) + '</div>' +
-        '<div style="margin-top:8px;font-size:0.78rem;color:rgba(255,255,255,0.4)">Check that ANTHROPIC_API_KEY is set in Vercel env vars.</div>' +
-      '</div>';
+    const r = await fetch('/api/plan-day', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tasks }) });
+    data = await r.json();
+  } catch (e) {
+    document.getElementById('planner-body').innerHTML = '<div style="color:#f87171;padding:20px;text-align:center"><div style="font-size:1.5rem;margin-bottom:8px">&#x26A0;</div><div>Failed to load plan.</div><div style="font-size:0.8rem;color:rgba(255,255,255,0.4);margin-top:6px">' + e.message + '</div></div>';
+    return;
   }
-}
 
+  if (!data || data.error) {
+    document.getElementById('planner-body').innerHTML = '<div style="color:#f87171;padding:20px;text-align:center"><div>Error: ' + (data?.error || 'Unknown') + '</div><div style="font-size:0.8rem;color:rgba(255,255,255,0.4);margin-top:8px">Make sure ANTHROPIC_API_KEY is set in Vercel.</div></div>';
+    return;
+  }
+
+  document.getElementById('planner-status').textContent = 'Ready — ' + new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  const prayers = data.prayers || {};
+  const schedule = data.schedule || [];
+
+  const typeConfig = {
+    prayer:   { color: '#34d399', bg: 'rgba(52,211,153,0.08)',  icon: '&#x1F54C;' },
+    gym:      { color: '#f87171', bg: 'rgba(248,113,113,0.08)', icon: '&#x1F4AA;' },
+    work:     { color: '#60a5fa', bg: 'rgba(96,165,250,0.08)',  icon: '&#x1F4BC;' },
+    admin:    { color: '#a78bfa', bg: 'rgba(167,139,250,0.08)', icon: '&#x1F4CB;' },
+    travel:   { color: '#fbbf24', bg: 'rgba(251,191,36,0.08)',  icon: '&#x1F697;' },
+    break:    { color: '#94a3b8', bg: 'rgba(148,163,184,0.08)', icon: '&#x2615;' },
+    personal: { color: '#f472b6', bg: 'rgba(244,114,182,0.08)', icon: '&#x2B50;' },
+  };
+
+  const prayerBar = Object.keys(prayers).length
+    ? '<div style="display:flex;flex-wrap:wrap;gap:10px;padding:14px 18px;background:rgba(52,211,153,0.06);border:1px solid rgba(52,211,153,0.15);border-radius:12px;margin-bottom:20px">' +
+      Object.entries(prayers).map(([k, v]) =>
+        '<div style="display:flex;flex-direction:column;align-items:center;gap:2px">' +
+        '<span style="font-size:0.68rem;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.06em">' + k + '</span>' +
+        '<span style="font-size:0.95rem;font-weight:700;color:#34d399">' + v + '</span></div>'
+      ).join('') +
+      '</div>'
+    : '';
+
+  const dateLabel = '<div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,0.3);margin-bottom:14px;font-weight:600">' +
+    new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase() + '</div>';
+
+  const blocks = schedule.map(b => {
+    const cfg = typeConfig[b.type] || typeConfig.personal;
+    return '<div style="display:flex;align-items:stretch;gap:0;margin-bottom:8px;border-radius:12px;overflow:hidden;background:' + cfg.bg + ';border:1px solid rgba(255,255,255,0.05)">' +
+      '<div style="width:4px;background:' + cfg.color + ';flex-shrink:0;border-radius:12px 0 0 12px"></div>' +
+      '<div style="display:flex;align-items:center;gap:14px;padding:14px 18px;flex:1;min-width:0">' +
+      '<div style="font-size:0.8rem;color:rgba(255,255,255,0.45);white-space:nowrap;min-width:82px;font-variant-numeric:tabular-nums">' + b.time + '–' + (b.end || '') + '</div>' +
+      '<div style="font-size:1.2rem;flex-shrink:0">' + cfg.icon + '</div>' +
+      '<div style="font-size:0.97rem;font-weight:600;color:#f1f5f9;line-height:1.3">' + esc(b.label) + '</div>' +
+      '</div></div>';
+  }).join('');
+
+  document.getElementById('planner-body').innerHTML = prayerBar + dateLabel + blocks +
+    '<div style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.06);text-align:center;font-size:0.75rem;color:rgba(255,255,255,0.25)">' +
+    schedule.length + ' time blocks &middot; ' + Object.keys(prayers).length + ' prayers scheduled</div>';
+}
 
 // ── Push Notifications ──────────────────────────────────────────────────────
 const VAPID_PUBLIC_KEY = 'BCnB_hxXxjnesi55cjR6P_ghPaoAyEn_-6p-b1UuRjxpAF0TMEt0BFnRVIi_eWpa2bzVoeVs4Pr54vDOz-PJvp8';
