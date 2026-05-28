@@ -1390,13 +1390,13 @@ async function saveReceivableEditor() {
   var res = id ? await window.db.from('debts').update(payload).eq('id', id) : await window.db.from('debts').insert([payload]);
   if (res.error) { alert('Error: ' + res.error.message); return; }
   var dlg = document.getElementById('rv-dlg'); if (dlg) dlg.remove();
-  await loadData(); renderDebts();
+  await loadAll(); renderDebts();
 }
 async function deleteReceivable(id) {
   if (!confirm('Delete this entry?')) return;
   await window.db.from('debts').delete().eq('id', id);
   var dlg = document.getElementById('rv-dlg'); if (dlg) dlg.remove();
-  await loadData(); renderDebts();
+  await loadAll(); renderDebts();
 }
 async function logReceivablePayment(id) {
   var existing = (receivables || []).find(function(r) { return String(r.id) === String(id); });
@@ -1408,7 +1408,7 @@ async function logReceivablePayment(id) {
   var newBal = Math.max(0, parseFloat(existing.current_balance != null ? existing.current_balance : existing.original_amount) - payment);
   var res = await window.db.from('debts').update({ current_balance: newBal }).eq('id', id);
   if (res.error) { alert('Error: ' + res.error.message); return; }
-  await loadData(); renderDebts();
+  await loadAll(); renderDebts();
 }
 function renderDebts() {
   const sorted = [...debts].sort(debtSort);
