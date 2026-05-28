@@ -1319,6 +1319,9 @@ function renderReceivablesSection() {
     const collected = Math.max(0, orig - remaining);
     const pct = orig > 0 ? Math.min(100, (collected / orig) * 100) : 0;
     const isSettled = remaining <= 0;
+    var rNotes = {}; try { rNotes = JSON.parse(r.notes || '{}'); } catch(_) {}
+    const rPayments = Array.isArray(rNotes.payments) ? rNotes.payments : [];
+    const lastPay = rPayments.length > 0 ? rPayments[rPayments.length - 1] : null;
     return `<div class="card debt ${isSettled ? 'paid' : ''}" onclick="openReceivableEditor('${r.id}')" style="cursor:pointer">
       <div class="card-head">
         <h3>${esc(name)}${isSettled ? ' ✓' : ''}</h3>
@@ -1332,6 +1335,7 @@ function renderReceivablesSection() {
         <div class="debt-progress-bar"><div class="debt-progress-fill" style="width:${pct.toFixed(1)}%;background:linear-gradient(90deg,#34d399,#10b981)"></div></div>
         <div class="debt-progress-text">${pct.toFixed(0)}% collected</div>
       </div>
+      ${rPayments.length > 0 ? `<div class="debt-meta"><span>${rPayments.length} payment${rPayments.length !== 1 ? 's' : ''}</span>${lastPay ? `<span>Last: ${lastPay.date}</span>` : ''}</div>` : ''}
       ${!isSettled ? `<button type="button" class="debt-pay-btn" style="background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.25)" onclick="event.stopPropagation();logReceivablePayment('${r.id}')">+ Log payment received</button>` : ''}
     </div>`;
   }).join('');
@@ -1406,7 +1410,10 @@ async function logReceivablePayment(id) {
   var payment = parseFloat(amt);
   if (isNaN(payment) || payment <= 0) { alert('Invalid amount'); return; }
   var newBal = Math.max(0, parseFloat(existing.current_balance != null ? existing.current_balance : existing.original_amount) - payment);
-  var res = await window.db.from('debts').update({ current_balance: newBal }).eq('id', id);
+  var notesObj = {}; try { notesObj = JSON.parse(existing.notes || '{}'); } catch(_) {}
+  if (!Array.isArray(notesObj.payments)) notesObj.payments = [];
+  notesObj.payments.push({ date: new Date().toISOString().split('T')[0], amount: payment });
+  var res = await window.db.from('debts').update({ current_balance: newBal, notes: JSON.stringify(notesObj) }).eq('id', id);
   if (res.error) { alert('Error: ' + res.error.message); return; }
   await loadAll(); renderDebts();
 }
