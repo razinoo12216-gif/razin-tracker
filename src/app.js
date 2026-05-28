@@ -1304,27 +1304,38 @@ function renderDebtTotals() {
 }
 
 function renderReceivablesSection() {
-  var q = "'";
-  var act = receivables || [];
+  const act = receivables || [];
   if (!act.length) {
     return '<div class="empty-state"><p>No one owes you yet.</p><button class="add-btn" onclick="openReceivableEditor(null)">+ Add</button></div>';
   }
-  var cards = act.map(function(r) {
-    var name = r.creditor || 'Unknown';
-    var orig = parseFloat(r.original_amount) || 0;
-    var remaining = parseFloat(r.current_balance != null ? r.current_balance : orig);
-    var paid = orig - remaining;
-    var pct = orig > 0 ? Math.round((paid / orig) * 100) : 0;
-    return '<div class="debt-card">' +
-      '<div class="debt-card-top"><span class="debt-name">' + name + '</span>' +
-      '<span class="debt-amount">£' + remaining.toFixed(2) + ' left</span></div>' +
-      '<div class="debt-meta">Original: £' + orig.toFixed(2) + ' · Paid: £' + paid.toFixed(2) + ' (' + pct + '%)</div>' +
-      '<div class="debt-actions">' +
-      '<button class="btn-sm" onclick="openReceivableEditor(' + q + r.id + q + ')">Edit</button> ' +
-      '<button class="btn-sm btn-green" onclick="logReceivablePayment(' + q + r.id + q + ')">Log Payment</button>' +
-      '</div></div>';
+  const totalOwed = act.reduce((s,r) => s + parseNum(r.current_balance), 0);
+  const totalOrig = act.reduce((s,r) => s + parseNum(r.original_amount), 0);
+  const totalCollected = Math.max(0, totalOrig - totalOwed);
+  const summary = `<div class="debt-summary-card"><span class="debt-summary-total">${fmt(totalOwed)}</span> outstanding across ${act.length} entr${act.length===1?'y':'ies'}<br><span style="color:#34d399">£${totalCollected.toFixed(2)} collected so far</span></div>`;
+  const cards = act.map(r => {
+    const name = r.creditor || 'Unknown';
+    const orig = parseNum(r.original_amount);
+    const remaining = parseNum(r.current_balance != null ? r.current_balance : orig);
+    const collected = Math.max(0, orig - remaining);
+    const pct = orig > 0 ? Math.min(100, (collected / orig) * 100) : 0;
+    const isSettled = remaining <= 0;
+    return `<div class="card debt ${isSettled ? 'paid' : ''}" onclick="openReceivableEditor('${r.id}')" style="cursor:pointer">
+      <div class="card-head">
+        <h3>${esc(name)}${isSettled ? ' ✓' : ''}</h3>
+        <span class="status" style="background:rgba(52,211,153,0.15);color:#34d399;border-color:rgba(52,211,153,0.3)">OWES YOU</span>
+      </div>
+      <div class="debt-balance">
+        <div class="debt-balance-numbers">
+          <span class="debt-current" style="color:#34d399">${fmt(remaining)}</span>
+          <span class="debt-of">of ${fmt(orig)}${orig > 0 ? ' · £' + collected.toFixed(2) + ' collected' : ''}</span>
+        </div>
+        <div class="debt-progress-bar"><div class="debt-progress-fill" style="width:${pct.toFixed(1)}%;background:linear-gradient(90deg,#34d399,#10b981)"></div></div>
+        <div class="debt-progress-text">${pct.toFixed(0)}% collected</div>
+      </div>
+      ${!isSettled ? `<button type="button" class="debt-pay-btn" style="background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.25)" onclick="event.stopPropagation();logReceivablePayment('${r.id}')">+ Log payment received</button>` : ''}
+    </div>`;
   }).join('');
-  return cards + '<button class="add-btn" style="margin-top:12px" onclick="openReceivableEditor(null)">+ Add</button>';
+  return summary + cards + '<button class="add-btn" style="margin-top:12px" onclick="openReceivableEditor(null)">+ Add</button>';
 }
 function openReceivableEditor(id) {
   var existing = id ? (receivables || []).find(function(r) { return String(r.id) === String(id); }) : null;
@@ -1376,14 +1387,14 @@ async function saveReceivableEditor() {
     delete payload.type; delete payload.status;
   }
   if (!id) payload.id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
-  var res = id ? await window.db.from('receivables').update(payload).eq('id', id) : await window.db.from('receivables').insert([payload]);
+  var res = id ? await window.db.from('debts').update(payload).eq('id', id) : await window.db.from('debts').insert([payload]);
   if (res.error) { alert('Error: ' + res.error.message); return; }
   var dlg = document.getElementById('rv-dlg'); if (dlg) dlg.remove();
   await loadData(); renderDebts();
 }
 async function deleteReceivable(id) {
   if (!confirm('Delete this entry?')) return;
-  await window.db.from('receivables').delete().eq('id', id);
+  await window.db.from('debts').delete().eq('id', id);
   var dlg = document.getElementById('rv-dlg'); if (dlg) dlg.remove();
   await loadData(); renderDebts();
 }
@@ -1395,7 +1406,7 @@ async function logReceivablePayment(id) {
   var payment = parseFloat(amt);
   if (isNaN(payment) || payment <= 0) { alert('Invalid amount'); return; }
   var newBal = Math.max(0, parseFloat(existing.current_balance != null ? existing.current_balance : existing.original_amount) - payment);
-  var res = await window.db.from('receivables').update({ current_balance: newBal }).eq('id', id);
+  var res = await window.db.from('debts').update({ current_balance: newBal }).eq('id', id);
   if (res.error) { alert('Error: ' + res.error.message); return; }
   await loadData(); renderDebts();
 }
