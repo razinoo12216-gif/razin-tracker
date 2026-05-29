@@ -1220,6 +1220,7 @@ ticketForm.addEventListener('submit', async (e) => {
   for (const k of ['personal_paid','client_paid','guy_paid']) payload[k] = !!(payload[k]);
   for (const k of ['amount','paid','client_revenue','guy_cost']) { if (payload[k] === '' || payload[k] === undefined) payload[k] = null; else { const n = parseFloat(payload[k]); payload[k] = isNaN(n) ? null : n; } }
 
+  ticketEditor.close();
   if (editingTicketId) {
     const t = tickets.find((x) => x.id === editingTicketId);
     if (t) Object.assign(t, payload);
@@ -1239,7 +1240,6 @@ ticketForm.addEventListener('submit', async (e) => {
       alert('Save failed: ' + error.message);
     } else { await upsertTicketExpense(newTicket); await upsertTicketProject(newTicket); }
   }
-  ticketEditor.close();
 });
 
 $('#ticket-cancel-btn').addEventListener('click', () => ticketEditor.close());
