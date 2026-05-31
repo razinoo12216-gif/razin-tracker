@@ -2560,9 +2560,9 @@ function renderGym() {
   const todayTotals = todayEntries.reduce(function(acc,m){return{p:acc.p+(m.protein||0),c:acc.c+(m.carbs||0),f:acc.f+(m.fats||0)};},{p:0,c:0,f:0});
   const macroHtml = true
   ? '<div class="gym-macro-targets">'
-    + '<div class="gym-macro-row"><span class="gym-macro-label">Protein</span><span class="gym-macro-val">'+Math.round(todayTotals.p)+'g / ${MACRO_TARGETS.protein}g</span><div class="gym-macro-bar"><div class="gym-macro-fill" style="width:'+Math.min(100,+(todayTotals.p/180*100).toFixed(1))+'%"></div></div></div>'
-    + '<div class="gym-macro-row"><span class="gym-macro-label">Carbs</span><span class="gym-macro-val">'+Math.round(todayTotals.c)+'g / ${MACRO_TARGETS.carbs}g</span><div class="gym-macro-bar"><div class="gym-macro-fill" style="width:'+Math.min(100,+(todayTotals.c/280*100).toFixed(1))+'%"></div></div></div>'
-    + '<div class="gym-macro-row"><span class="gym-macro-label">Fats</span><span class="gym-macro-val">'+Math.round(todayTotals.f)+'g / ${MACRO_TARGETS.fats}g</span><div class="gym-macro-bar"><div class="gym-macro-fill" style="width:'+Math.min(100,+(todayTotals.f/70*100).toFixed(1))+'%"></div></div></div>'
+    + '<div class="gym-macro-row"><span class="gym-macro-label">Protein</span><span class="gym-macro-val">'+Math.round(todayTotals.p)+'g / ' + MACRO_TARGETS.protein + 'g</span><div class="gym-macro-bar"><div class="gym-macro-fill" style="width:'+Math.min(100,+(todayTotals.p/180*100).toFixed(1))+'%"></div></div></div>'
+    + '<div class="gym-macro-row"><span class="gym-macro-label">Carbs</span><span class="gym-macro-val">'+Math.round(todayTotals.c)+'g / ' + MACRO_TARGETS.carbs   + 'g</span><div class="gym-macro-bar"><div class="gym-macro-fill" style="width:'+Math.min(100,+(todayTotals.c/280*100).toFixed(1))+'%"></div></div></div>'
+    + '<div class="gym-macro-row"><span class="gym-macro-label">Fats</span><span class="gym-macro-val">'+Math.round(todayTotals.f)+'g / ' + MACRO_TARGETS.fats    + 'g</span><div class="gym-macro-bar"><div class="gym-macro-fill" style="width:'+Math.min(100,+(todayTotals.f/70*100).toFixed(1))+'%"></div></div></div>'
     + '</div>'
     + todayEntries.map(function(m){
         return '<div class="gym-macros-entry">'
