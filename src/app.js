@@ -38,7 +38,9 @@ let editingWorkCompanyId = null;
 let editingDebtId = null;
 let selectedDebtForPayment = null;
 let currentInvoiceSections = [];
-let currentRecurrenceDays = new Set();
+let currentRecurrenceDays = new Set()
+let currentMonthlyMode=false;
+let currentMonthlyDay=1;;
 let selectedMonth = currentMonth();
 let selectedDay = todayISO();
 let selectedYear = new Date().getFullYear();
@@ -597,9 +599,13 @@ function formatDayLabel(iso) {
 
 function recurrenceMatches(recurrence, dayISO) {
   if (!recurrence || recurrence === 'none') return false;
-  const [y, m, d] = dayISO.split('-').map(Number);
-  const dow = new Date(y, m - 1, d).getDay();
-  return recurrence.split(',').map(Number).includes(dow);
+  if (recurrence.startsWith('monthly-')) {
+    var dayNum = parseInt(dayISO.split('-')[2], 10);
+    return dayNum === parseInt(recurrence.split('-')[1], 10);
+  }
+  var rParts = dayISO.split('-');
+  var dow = new Date(parseInt(rParts[0], 10), parseInt(rParts[1], 10) - 1, parseInt(rParts[2], 10)).getDay();
+  return recurrence.split(' ').map(Number).includes(dow);
 }
 
 function buildDayTasks(dayISO) {
@@ -786,18 +792,33 @@ async function copyYesterdayTasks() {
 }
 
 function setRecurrenceUI(str) {
-  currentRecurrenceDays = new Set();
-  if (str && str !== 'none') {
-    str.split(',').map((s) => parseInt(s, 10)).filter((n) => !isNaN(n)).forEach((n) => currentRecurrenceDays.add(n));
+  currentMonthlyMode = false;
+  var mp = document.getElementById('task-monthly-picker');
+  if (str && str.startsWith('monthly-')) {
+    currentMonthlyMode = true;
+    currentMonthlyDay = parseInt(str.split('-')[1], 10) || 1;
+    currentRecurrenceDays = new Set();
+    document.querySelectorAll('#task-form .day-toggle').forEach(function(b) { b.classList.remove('active'); });
+    if (mp) mp.style.display = 'block';
+    var mdi = document.getElementById('task-month-day');
+    if (mdi) mdi.value = currentMonthlyDay;
+    return;
   }
-  document.querySelectorAll('#task-form .day-toggle').forEach((btn) => {
-    const d = parseInt(btn.dataset.day, 10);
-    btn.classList.toggle('active', currentRecurrenceDays.has(d));
+  if (mp) mp.style.display = 'none';
+  currentRecurrenceDays = (!str || str === 'none') ? new Set() : new Set(str.split(' ').map(Number));
+  document.querySelectorAll('#task-form .day-toggle').forEach(function(b) {
+    b.classList.toggle('active', currentRecurrenceDays.has(parseInt(b.dataset.day, 10)));
   });
 }
+
 function getRecurrenceStr() {
+  if (currentMonthlyMode) {
+    var mi = document.getElementById('task-month-day');
+    if (mi) currentMonthlyDay = parseInt(mi.value, 10) || 1;
+    return 'monthly-' + currentMonthlyDay;
+  }
   if (currentRecurrenceDays.size === 0) return 'none';
-  return [...currentRecurrenceDays].sort((a, b) => a - b).join(',');
+  return [...currentRecurrenceDays].sort(function(a,b){return a-b;}).join(' ');
 }
 
 function openTaskEditor(id) {
@@ -819,6 +840,8 @@ function openTaskEditor(id) {
     taskForm.time.value = t.time || '';
     taskForm.notes.value = t.notes || '';
     setRecurrenceUI(t.recurrence || 'none');
+    var catEl=document.getElementById('task-category');
+    if(catEl) catEl.value=(t&&t.category)?t.category:'admin';
   } else {
     setRecurrenceUI('none');
   }
@@ -836,16 +859,27 @@ document.querySelectorAll('#task-form .day-toggle').forEach((btn) => {
   });
 });
 
-document.querySelectorAll('#task-form .recurrence-quick-btn').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    const preset = btn.dataset.preset;
-    if (preset === 'off') currentRecurrenceDays = new Set();
-    else if (preset === 'daily') currentRecurrenceDays = new Set([0, 1, 2, 3, 4, 5, 6]);
-    else if (preset === 'weekdays') currentRecurrenceDays = new Set([1, 2, 3, 4, 5]);
-    document.querySelectorAll('#task-form .day-toggle').forEach((b) => {
-      const d = parseInt(b.dataset.day, 10);
-      b.classList.toggle('active', currentRecurrenceDays.has(d));
+document.querySelectorAll('#document.querySelectorAll('#task-form .recurrence-quick-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var p = btn.dataset.preset;
+    currentMonthlyMode = false;
+    var mp = document.getElementById('task-monthly-picker');
+    if (p==='off') currentRecurrenceDays=new Set();
+    else if(p==='daily') currentRecurrenceDays=new Set([0,1,2,3,4,5,6]);
+    else if(p==='weekdays') currentRecurrenceDays=new Set([1,2,3,4,5]);
+    else if(p==='weekly') { currentRecurrenceDays=new Set(); }
+    else if(p==='monthly') {
+      currentMonthlyMode=true; currentRecurrenceDays=new Set();
+      if(mp) mp.style.display='block';
+      document.querySelectorAll('#task-form .day-toggle').forEach(function(b){b.classList.remove('active');});
+      return;
+    }
+    if(mp) mp.style.display='none';
+    document.querySelectorAll('#task-form .day-toggle').forEach(function(b){
+      b.classList.toggle('active', currentRecurrenceDays.has(parseInt(b.dataset.day,10)));
     });
+  });
+});
   });
 });
 
@@ -870,6 +904,7 @@ taskForm.addEventListener('submit', async (e) => {
       notes: payload.notes || '',
       done: false,
       recurrence: 'none',
+      category: payload.category||'admin',
       template_id: templateId,
     };
     tasks.push({ ...newTask, created_at: new Date().toISOString() });
@@ -901,6 +936,7 @@ taskForm.addEventListener('submit', async (e) => {
       notes: payload.notes || '',
       done: false,
       recurrence: payload.recurrence,
+      category: payload.category||'admin',
     };
     tasks.push({ ...newTask, created_at: new Date().toISOString() });
     render();
