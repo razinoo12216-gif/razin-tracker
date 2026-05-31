@@ -395,56 +395,72 @@
 
   <!-- Gym session editor -->
   <dialog id="gym-editor">
-    <form id="gym-form">
-      <input type="hidden" id="gym-session-id">
-      <h2 id="gym-editor-title">Log Session</h2>
-      <div class="row">
-        <label>Date<input name="date" type="date" required /></label>
-        <label>Type
-          <select name="type">
-            <option value="weights">Weights</option>
-            <option value="cardio">Cardio</option>
-            <option value="hiit">HIIT</option>
-            <option value="sport">Sport</option>
-            <option value="other">Other</option>
-          </select>
-        </label>
-      </div>
-      <label>Duration
-        <div class="duration-btns">
-          <button type="button" class="dur-btn" data-mins="30">30m</button>
-          <button type="button" class="dur-btn" data-mins="45">45m</button>
-          <button type="button" class="dur-btn" data-mins="60">60m</button>
-          <button type="button" class="dur-btn" data-mins="90">90m</button>
+      <form id="gym-form">
+        <input type="hidden" id="gym-session-id">
+        <h2 id="gym-editor-title">Log Session</h2>
+        <div class="row">
+          <label>Date<input name="date" type="date" required /></label>
+          <label>Type
+            <select name="type">
+              <option value="push">Push</option>
+              <option value="pull">Pull</option>
+              <option value="legs">Legs</option>
+              <option value="upper">Upper Body</option>
+              <option value="lower">Lower Body</option>
+              <option value="full">Full Body</option>
+              <option value="cardio">Cardio</option>
+              <option value="hiit">HIIT</option>
+              <option value="sport">Sport</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
         </div>
-        <input name="duration" type="number" id="gym-duration" placeholder="or enter mins" inputmode="numeric" />
-      </label>
-      <label>Notes (optional)<textarea name="notes" placeholder="What did you work on?" rows="2"></textarea></label>
-      <label class="gym-completed-row"><input type="checkbox" name="completed" checked /> Completed this session</label>
-      <input type="hidden" name="id" id="gym-session-id" />
-  <div class="muscle-tag-row">
-    <div class="muscle-label">Muscles worked</div>
-    <div class="muscle-btns" id="muscle-btns">
-      <button type="button" class="muscle-btn" data-m="Chest">Chest</button>
-      <button type="button" class="muscle-btn" data-m="Back">Back</button>
-      <button type="button" class="muscle-btn" data-m="Shoulders">Shoulders</button>
-      <button type="button" class="muscle-btn" data-m="Biceps">Biceps</button>
-      <button type="button" class="muscle-btn" data-m="Triceps">Triceps</button>
-      <button type="button" class="muscle-btn" data-m="Core">Core</button>
-      <button type="button" class="muscle-btn" data-m="Quads">Quads</button>
-      <button type="button" class="muscle-btn" data-m="Hams">Hams</button>
-      <button type="button" class="muscle-btn" data-m="Glutes">Glutes</button>
-      <button type="button" class="muscle-btn" data-m="Calves">Calves</button>
-    </div>
-    <input type="hidden" id="gym-muscles-val" name="muscles" />
-  </div>
-      <div class="row">
-        <button type="button" id="gym-delete-btn" style="display:none">Delete</button>
-        <button type="button" id="gym-cancel-btn">Cancel</button>
-        <button type="submit">Save</button>
-      </div>
-    </form>
-  </dialog>
+        <div class="row">
+          <label>Duration (min)
+            <div class="duration-btns">
+              <button type="button" class="dur-btn" data-mins="30">30</button>
+              <button type="button" class="dur-btn" data-mins="45">45</button>
+              <button type="button" class="dur-btn" data-mins="60">60</button>
+              <button type="button" class="dur-btn" data-mins="90">90</button>
+              <button type="button" class="dur-btn" data-mins="120">2h</button>
+            </div>
+            <input name="duration" type="number" id="gym-duration" placeholder="or enter mins" inputmode="numeric" />
+          </label>
+          <label>Bodyweight (kg)<input name="bodyweight" type="number" id="gym-bodyweight" placeholder="e.g. 85" step="0.1" inputmode="decimal" /></label>
+        </div>
+        <div class="muscle-tag-row">
+          <div class="muscle-label">Muscles worked</div>
+          <div class="muscle-btns" id="muscle-btns">
+            <button type="button" class="muscle-btn" data-m="Chest">Chest</button>
+            <button type="button" class="muscle-btn" data-m="Back">Back</button>
+            <button type="button" class="muscle-btn" data-m="Shoulders">Shoulders</button>
+            <button type="button" class="muscle-btn" data-m="Biceps">Biceps</button>
+            <button type="button" class="muscle-btn" data-m="Triceps">Triceps</button>
+            <button type="button" class="muscle-btn" data-m="Core">Core</button>
+            <button type="button" class="muscle-btn" data-m="Quads">Quads</button>
+            <button type="button" class="muscle-btn" data-m="Hams">Hams</button>
+            <button type="button" class="muscle-btn" data-m="Glutes">Glutes</button>
+            <button type="button" class="muscle-btn" data-m="Calves">Calves</button>
+          </div>
+          <input type="hidden" id="gym-muscles-val" name="muscles" />
+        </div>
+        <div class="gym-exercises-section">
+          <div class="gym-exercises-hdr">
+            <span class="gym-exercises-title">Exercises</span>
+            <button type="button" class="gym-add-ex-btn" onclick="addExerciseRow()">+ Add Exercise</button>
+          </div>
+          <div class="gym-ex-header-row"><span>Exercise</span><span>Sets</span><span>Reps</span><span>kg</span><span></span></div>
+          <div id="gym-exercises-list"></div>
+        </div>
+        <label>Notes<textarea name="notes" placeholder="How did it go?" rows="2"></textarea></label>
+        <label class="gym-completed-row"><input type="checkbox" name="completed" checked /> Completed</label>
+        <div class="actions">
+          <button type="button" id="gym-delete-btn" style="display:none">Delete</button>
+          <button type="button" id="gym-cancel-btn">Cancel</button>
+          <button type="submit">Save</button>
+        </div>
+      </form>
+    </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="src/supabase.js"></script
