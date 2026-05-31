@@ -880,8 +880,6 @@ document.querySelectorAll('#task-form .recurrence-quick-btn').forEach(function(b
     });
   });
 });
-  });
-});
 
 taskForm.addEventListener('submit', async (e) => {
   e.preventDefault();
