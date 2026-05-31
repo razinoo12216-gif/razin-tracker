@@ -2497,8 +2497,8 @@ function renderSessionsList() {
   }).join('');
 }
 function renderGym() {
-  const typeColors = { weights: '#ef4444', cardio: '#f97316', hiit: '#8b5cf6', sport: '#3b82f6', other: '#6b7280' };
-  const typeLabels = { weights: 'Weights', cardio: 'Cardio', hiit: 'HIIT', sport: 'Sport', other: 'Other' };
+  const typeColors = { push:'#ef4444', pull:'#f97316', legs:'#22c55e', upper:'#a78bfa', lower:'#ec4899', full:'#14b8a6', cardio:'#3b82f6', hiit:'#8b5cf6', sport:'#f59e0b', weights:'#ef4444', other:'#6b7280' };
+  const typeLabels = { push:'Push', pull:'Pull', legs:'Legs', upper:'Upper', lower:'Lower', full:'Full Body', cardio:'Cardio', hiit:'HIIT', sport:'Sport', weights:'Weights', other:'Other' };
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
   const monthStr = selectedMonth || now.toISOString().slice(0, 7);
@@ -2513,6 +2513,7 @@ function renderGym() {
 
   let streak = 0;
   const sd = new Date(todayStr);
+  if (!sessionByDate[todayStr]) sd.setDate(sd.getDate()-1);
   while (true) { const ds = sd.toISOString().slice(0,10); if (!sessionByDate[ds]) break; streak++; sd.setDate(sd.getDate()-1); }
 
   const sortedDates = gymSessions.filter(s=>s.date).map(s=>s.date).sort();
@@ -2559,9 +2560,9 @@ function renderGym() {
   const todayTotals = todayEntries.reduce(function(acc,m){return{p:acc.p+(m.protein||0),c:acc.c+(m.carbs||0),f:acc.f+(m.fats||0)};},{p:0,c:0,f:0});
   const macroHtml = true
   ? '<div class="gym-macro-targets">'
-    + '<div class="gym-macro-row"><span class="gym-macro-label">Protein</span><span class="gym-macro-val">'+Math.round(todayTotals.p)+'g / 180g</span><div class="gym-macro-bar"><div class="gym-macro-fill" style="width:'+Math.min(100,+(todayTotals.p/180*100).toFixed(1))+'%"></div></div></div>'
-    + '<div class="gym-macro-row"><span class="gym-macro-label">Carbs</span><span class="gym-macro-val">'+Math.round(todayTotals.c)+'g / 280g</span><div class="gym-macro-bar"><div class="gym-macro-fill" style="width:'+Math.min(100,+(todayTotals.c/280*100).toFixed(1))+'%"></div></div></div>'
-    + '<div class="gym-macro-row"><span class="gym-macro-label">Fats</span><span class="gym-macro-val">'+Math.round(todayTotals.f)+'g / 70g</span><div class="gym-macro-bar"><div class="gym-macro-fill" style="width:'+Math.min(100,+(todayTotals.f/70*100).toFixed(1))+'%"></div></div></div>'
+    + '<div class="gym-macro-row"><span class="gym-macro-label">Protein</span><span class="gym-macro-val">'+Math.round(todayTotals.p)+'g / ${MACRO_TARGETS.protein}g</span><div class="gym-macro-bar"><div class="gym-macro-fill" style="width:'+Math.min(100,+(todayTotals.p/180*100).toFixed(1))+'%"></div></div></div>'
+    + '<div class="gym-macro-row"><span class="gym-macro-label">Carbs</span><span class="gym-macro-val">'+Math.round(todayTotals.c)+'g / ${MACRO_TARGETS.carbs}g</span><div class="gym-macro-bar"><div class="gym-macro-fill" style="width:'+Math.min(100,+(todayTotals.c/280*100).toFixed(1))+'%"></div></div></div>'
+    + '<div class="gym-macro-row"><span class="gym-macro-label">Fats</span><span class="gym-macro-val">'+Math.round(todayTotals.f)+'g / ${MACRO_TARGETS.fats}g</span><div class="gym-macro-bar"><div class="gym-macro-fill" style="width:'+Math.min(100,+(todayTotals.f/70*100).toFixed(1))+'%"></div></div></div>'
     + '</div>'
     + todayEntries.map(function(m){
         return '<div class="gym-macros-entry">'
@@ -2584,10 +2585,48 @@ function renderGym() {
       <div class="gym-cal-grid">${cells}</div>
     </div>
     <div class="gym-legend">${legendHtml}</div>
-    <div class="gym-macros-section"><div class="gym-macros-hdr"><button class="gym-date-nav" onclick="gymShiftDate(-1)">&#8592;</button><span class="gym-macros-title">${gymViewDate}</span><button class="gym-date-nav" onclick="gymShiftDate(1)">&#8594;</button><button class="add-btn" onclick="openMacrosEditor('${gymViewDate}')">+ Log</button></div>${macroHtml}</div>}</div>
+    <div class="gym-macros-section"><div class="gym-macros-hdr"><button class="gym-date-nav" onclick="gymShiftDate(-1)">&#8592;</button><span class="gym-macros-title">${gymViewDate}</span><button class="gym-date-nav" onclick="gymShiftDate(1)">&#8594;</button><button class="add-btn" onclick="openMacrosEditor('${gymViewDate}')">+ Log</button></div>${macroHtml}</div></div>
+    <div class="gym-sessions-section"><div class="gym-sessions-title">Recent Sessions</div>${renderGymSessionsList(gymSessions)}</div>
   `;
 }
 
+function addExerciseRow(name, sets, reps, weight) {
+  const list = document.getElementById('gym-exercises-list');
+  if (!list) return;
+  const row = document.createElement('div');
+  row.className = 'gym-ex-row';
+  row.innerHTML = `
+    <input class="gym-ex-name" type="text" placeholder="Exercise" value="${name||''}" />
+    <input class="gym-ex-sets" type="number" placeholder="3" value="${sets||''}" min="1" inputmode="numeric" />
+    <input class="gym-ex-reps" type="number" placeholder="10" value="${reps||''}" min="1" inputmode="numeric" />
+    <input class="gym-ex-weight" type="number" placeholder="kg" value="${weight||''}" min="0" step="0.5" inputmode="decimal" />
+    <button type="button" class="gym-ex-remove" onclick="this.parentElement.remove()">&#x2715;</button>
+  `;
+  list.appendChild(row);
+}
+function getExercises() {
+  const rows = document.querySelectorAll('#gym-exercises-list .gym-ex-row');
+  const result = [];
+  rows.forEach(row => {
+    const name = row.querySelector('.gym-ex-name').value.trim();
+    if (!name) return;
+    result.push({ name, sets: parseInt(row.querySelector('.gym-ex-sets').value)||null, reps: parseInt(row.querySelector('.gym-ex-reps').value)||null, weight: parseFloat(row.querySelector('.gym-ex-weight').value)||null });
+  });
+  return result;
+}
+function renderGymSessionsList(sessions) {
+  if (!sessions || !sessions.length) return '<p class="gym-empty">No sessions logged yet.</p>';
+  const tc = { push:'#ef4444', pull:'#f97316', legs:'#22c55e', upper:'#a78bfa', lower:'#ec4899', full:'#14b8a6', cardio:'#3b82f6', hiit:'#8b5cf6', sport:'#f59e0b', weights:'#ef4444', other:'#6b7280' };
+  const tl = { push:'Push', pull:'Pull', legs:'Legs', upper:'Upper', lower:'Lower', full:'Full Body', cardio:'Cardio', hiit:'HIIT', sport:'Sport', weights:'Weights', other:'Other' };
+  return [...sessions].sort((a,b) => b.date.localeCompare(a.date)).slice(0,10).map(s => {
+    const color = tc[s.type]||'#6b7280', label = tl[s.type]||s.type;
+    const exArr = Array.isArray(s.exercises) ? s.exercises : (s.exercises ? (()=>{try{return JSON.parse(s.exercises);}catch(e){return [];}})() : []);
+    const exHtml = exArr.length ? '<div class="gym-sc-exercises">'+exArr.map(e=>'<span class="gym-ex-chip">'+e.name+(e.sets?' '+e.sets+'×'+(e.reps||'?'):'')+( e.weight?' @'+e.weight+'kg':'')+  '</span>').join('')+'</div>' : '';
+    const muscleHtml = s.muscles ? '<div class="gym-sc-muscles">'+s.muscles.split(',').map(m=>'<span class="muscle-chip">'+m.trim()+'</span>').join('')+'</div>' : '';
+    const bwHtml = s.bodyweight ? '<span class="gym-sc-bw">⚖️ '+s.bodyweight+'kg</span>' : '';
+    return '<div class="gym-session-card" onclick="openGymEditor(''+s.id+'')"><div class="gym-sc-top"><span class="gym-sc-date">'+s.date+'</span><span class="gym-sc-type" style="background:'+color+'">'+label+'</span><span class="gym-sc-dur">'+(s.duration||'?')+' min</span>'+bwHtml+'</div>'+muscleHtml+exHtml+(s.notes?'<div class="gym-sc-notes">'+s.notes+'</div>':'')+'</div>';
+  }).join('');
+}
 function openGymEditor(id) {
   const dlg = document.getElementById('gym-editor');
   const form = document.getElementById('gym-form');
@@ -2604,10 +2643,10 @@ function openGymEditor(id) {
       if (form.elements['notes']) { form.elements['notes'].value = s.notes || ''; }
     const _mv = document.getElementById('gym-muscles-val');
     document.querySelectorAll('#muscle-btns .muscle-btn').forEach(b => b.classList.remove('active'));
-    if (sess && sess.muscles && _mv) {
-      const _mArr = sess.muscles.split(',').map(s=>s.trim());
+    if (s && s.muscles && _mv) {
+      const _mArr = s.muscles.split(',').map(s=>s.trim());
       document.querySelectorAll('#muscle-btns .muscle-btn').forEach(b => { if(_mArr.includes(b.dataset.m)) b.classList.add('active'); });
-      _mv.value = sess.muscles;
+      _mv.value = s.muscles;
     } else if (_mv) { _mv.value = ''; }
       const cb = form.elements['completed'];
       if (cb) { cb.checked = s.completed !== false; }
@@ -2616,7 +2655,17 @@ function openGymEditor(id) {
     if (form.elements['date']) { form.elements['date'].value = new Date().toISOString().slice(0, 10); }
     const cb = form.elements['completed'];
     if (cb) { cb.checked = true; }
-  }
+  
+    // Populate bodyweight + exercises
+    const _bwEl = document.getElementById('gym-bodyweight');
+    if (_bwEl) _bwEl.value = s.bodyweight || '';
+    const _exList = document.getElementById('gym-exercises-list');
+    if (_exList) {
+      _exList.innerHTML = '';
+      const _exArr = Array.isArray(s.exercises) ? s.exercises : (s.exercises ? (()=>{try{return JSON.parse(s.exercises);}catch(e){return [];}})() : []);
+      _exArr.forEach(ex => addExerciseRow(ex.name, ex.sets, ex.reps, ex.weight));
+    }
+}
   dlg.showModal();
 }
 
@@ -2648,7 +2697,10 @@ document.getElementById('gym-form').addEventListener('submit', async function(e)
     date: form.elements['date'] ? form.elements['date'].value : new Date().toISOString().slice(0, 10),
     duration: form.elements['duration'] && form.elements['duration'].value ? parseInt(form.elements['duration'].value) : null,
     notes: form.elements['notes'] ? (form.elements['notes'].value.trim() || null) : null,
-    completed: cb ? cb.checked : true
+    completed: cb ? cb.checked : true,
+    muscles: (document.getElementById('gym-muscles-val') || {}).value || '',
+    bodyweight: form.elements['bodyweight'] ? (parseFloat(form.elements['bodyweight'].value) || null) : null,
+    exercises: getExercises()
   };
     const _mv = document.getElementById('gym-muscles-val'); if (_mv && _mv.value) payload.muscles = _mv.value;
   if (id) {
