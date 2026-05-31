@@ -659,6 +659,7 @@ function renderToday() {
       <div class="task-add-bar">
         <input id="task-quick-input" type="text" placeholder="Add task…" autocomplete="off" />
         <input id="task-quick-time" type="time" />
+        <select id="task-quick-cat" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.82rem;"><option value="admin">Admin</option><option value="deep-work">Deep Work</option><option value="call">Call</option><option value="finance">Finance</option><option value="errand">Errand</option><option value="travel">Travel</option><option value="personal">Personal</option><option value="reminders">Reminders</option></select>
         <button id="task-quick-btn" type="button">Add</button>
       </div>
       <div class="today-actions">
@@ -750,14 +751,15 @@ async function toggleTask(id) {
 async function quickAddTask() {
   const titleInput = $('#task-quick-input');
   const timeInput = $('#task-quick-time');
+  const catInput = $('#task-quick-cat');
   const title = titleInput.value.trim();
   if (!title) return;
   const time = timeInput.value || '';
   const id = (crypto.randomUUID && crypto.randomUUID()) || Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  const newTask = { id, day: selectedDay, title, time, icon: '', notes: '', done: false };
+  const newTask = { id, day: selectedDay, title, time, icon: '', notes: '', done: false, category: catInput ? catInput.value : 'admin' };
   tasks.push({ ...newTask, created_at: new Date().toISOString() });
   titleInput.value = '';
-  timeInput.value = '';
+  timeInput.value = ''; if(catInput) catInput.value='admin';
   render();
   setTimeout(() => $('#task-quick-input')?.focus(), 30);
 
