@@ -2622,7 +2622,7 @@ function renderGym() {
     </div>
     <div class="gym-legend">${legendHtml}</div>
     <div class="gym-macros-section"><div class="gym-macros-hdr"><button class="gym-date-nav" onclick="gymShiftDate(-1)">&#8592;</button><span class="gym-macros-title">${gymViewDate}</span><button class="gym-date-nav" onclick="gymShiftDate(1)">&#8594;</button><button class="add-btn" onclick="openMacrosEditor('${gymViewDate}')">+ Log</button></div>${macroHtml}</div></div>
-    <div class="gym-sessions-section"><div class="gym-sessions-title">Recent Sessions</div>${renderGymSessionsList(gymSessions)}</div>
+    
   `;
 }
 
@@ -2649,28 +2649,6 @@ function getExercises() {
     result.push({ name, sets: parseInt(row.querySelector('.gym-ex-sets').value)||null, reps: parseInt(row.querySelector('.gym-ex-reps').value)||null, weight: parseFloat(row.querySelector('.gym-ex-weight').value)||null });
   });
   return result;
-}
-function renderGymSessionsList(sessions) {
-  if (!sessions || !sessions.length) return '<p class="gym-empty">No sessions logged yet.</p>';
-  var tc = { push:'#ef4444', pull:'#f97316', legs:'#22c55e', upper:'#a78bfa', lower:'#ec4899', full:'#14b8a6', cardio:'#3b82f6', hiit:'#8b5cf6', sport:'#f59e0b', weights:'#ef4444', other:'#6b7280' };
-  var tl = { push:'Push', pull:'Pull', legs:'Legs', upper:'Upper', lower:'Lower', full:'Full Body', cardio:'Cardio', hiit:'HIIT', sport:'Sport', weights:'Weights', other:'Other' };
-  var recent = sessions.slice().sort(function(a,b){return b.date.localeCompare(a.date);}).slice(0,10);
-  return recent.map(function(s) {
-    var color = tc[s.type] || '#6b7280';
-    var label = tl[s.type] || s.type;
-    var exArr = Array.isArray(s.exercises) ? s.exercises : (s.exercises ? (function(){try{return JSON.parse(s.exercises);}catch(e){return [];}})() : []);
-    var exHtml = exArr.length ? '<div class="gym-sc-exercises">' + exArr.map(function(e){return '<span class="gym-ex-chip">' + e.name + (e.sets ? ' ' + e.sets + '×' + (e.reps||'?') : '') + (e.weight ? ' @' + e.weight + 'kg' : '') + '</span>';}).join('') + '</div>' : '';
-    var muscleHtml = s.muscles ? '<div class="gym-sc-muscles">' + s.muscles.split(',').map(function(m){return '<span class="muscle-chip">' + m.trim() + '</span>';}).join('') + '</div>' : '';
-    var bwHtml = s.bodyweight ? '<span class="gym-sc-bw">⚖️ ' + s.bodyweight + 'kg</span>' : '';
-    var notesHtml = s.notes ? '<div class="gym-sc-notes">' + s.notes + '</div>' : '';
-    return '<div class="gym-session-card" data-sid="' + s.id + '" onclick="openGymEditor(this.dataset.sid)">' +
-      '<div class="gym-sc-top">' +
-        '<span class="gym-sc-date">' + s.date + '</span>' +
-        '<span class="gym-sc-type" style="background:' + color + '">' + label + '</span>' +
-        '<span class="gym-sc-dur">' + (s.duration||'?') + ' min</span>' +
-        bwHtml +
-      '</div>' + muscleHtml + exHtml + notesHtml + '</div>';
-  }).join('');
 }
 
 function openGymEditor(id) {
