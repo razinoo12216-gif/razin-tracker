@@ -1672,3 +1672,29 @@ dialog .actions {
 .btn-sm:hover { background: rgba(255,255,255,0.18); color: #fff; }
 .btn-sm.btn-green { background: rgba(52,199,89,0.18); color: #34c759; }
 .btn-sm.btn-green:hover { background: rgba(52,199,89,0.32); }
+
+/* ── Gym: Exercises section ─────────────────────────── */
+.gym-exercises-section { margin: 12px 0; }
+.gym-exercises-hdr { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+.gym-exercises-title { font-size:.85rem; font-weight:600; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.04em; }
+.gym-add-ex-btn { font-size:.8rem; padding:4px 10px; border-radius:6px; background:var(--accent); color:#fff; border:none; cursor:pointer; }
+.gym-ex-header-row { display:grid; grid-template-columns:1fr 52px 52px 60px 28px; gap:4px; font-size:.72rem; color:var(--text-secondary); padding:0 2px 4px; font-weight:600; text-transform:uppercase; }
+.gym-ex-row { display:grid; grid-template-columns:1fr 52px 52px 60px 28px; gap:4px; margin-bottom:6px; align-items:center; }
+.gym-ex-name { font-size:.85rem; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text); width:100%; }
+.gym-ex-sets,.gym-ex-reps,.gym-ex-weight { font-size:.85rem; padding:6px 4px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text); text-align:center; width:100%; }
+.gym-ex-remove { background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:.9rem; padding:0; display:flex; align-items:center; justify-content:center; }
+.gym-ex-chip { display:inline-block; font-size:.75rem; background:rgba(255,255,255,.06); border:1px solid var(--border); border-radius:4px; padding:2px 6px; margin:2px 2px 0; color:var(--text-secondary); }
+/* ── Gym: Recent sessions list ──────────────────────── */
+.gym-sessions-section { margin-top:20px; }
+.gym-sessions-title { font-size:.85rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.05em; margin-bottom:10px; }
+.gym-session-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:8px; cursor:pointer; transition:border-color .15s; }
+.gym-session-card:hover { border-color:var(--accent); }
+.gym-sc-top { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:6px; }
+.gym-sc-date { font-size:.85rem; color:var(--text-secondary); }
+.gym-sc-type { font-size:.75rem; font-weight:700; color:#fff; border-radius:5px; padding:2px 8px; text-transform:uppercase; letter-spacing:.03em; }
+.gym-sc-dur { font-size:.82rem; color:var(--text-secondary); }
+.gym-sc-bw { font-size:.82rem; color:var(--text-secondary); }
+.gym-sc-muscles { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:4px; }
+.gym-sc-exercises { display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; }
+.gym-sc-notes { font-size:.82rem; color:var(--text-secondary); margin-top:6px; font-style:italic; }
+.gym-empty { color:var(--text-secondary); font-size:.9rem; text-align:center; padding:20px 0; }
