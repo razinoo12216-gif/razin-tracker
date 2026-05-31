@@ -3175,8 +3175,39 @@ function openNoteEditor(id) {
 
 
 // ── AI DAY PLANNER ─────────────────────────────────────────
+function showUncatModal(uncatTasks) {
+  const oldDlg = document.getElementById('uncat-dlg'); if (oldDlg) oldDlg.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'uncat-dlg';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  const catOptions = [['admin','Admin'],['deep-work','Deep Work'],['call','Call'],['finance','Finance'],['errand','Errand'],['travel','Travel'],['personal','Personal'],['reminders','Reminders']];
+  const optHtml = catOptions.map(([v,l])=>'<option value="'+v+'">'+l+'</option>').join('');
+  const rowsHtml = uncatTasks.map(t=>'<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;"><span style="flex:1;font-size:0.9rem;color:var(--text);">'+t.title+'</span><select data-tid="'+t.id+'" style="padding:5px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2,#2a2a2a);color:var(--text);font-size:0.82rem;">'+optHtml+'</select></div>').join('');
+  overlay.innerHTML = '<div style="background:var(--surface);border-radius:16px;padding:24px 24px 20px;max-width:460px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5);"><h3 style="margin:0 0 6px;font-size:1.05rem;color:var(--text);">Categorise before planning</h3><p style="margin:0 0 16px;font-size:0.83rem;color:var(--text-muted,#999);">'+uncatTasks.length+' task'+(uncatTasks.length>1?'s':'')+' without a category — set them so your plan is accurate.</p>'+rowsHtml+'<div style="display:flex;gap:10px;margin-top:16px;"><button id="uncat-confirm" style="flex:1;padding:10px;border-radius:10px;background:var(--accent,#6c63ff);color:#fff;border:none;cursor:pointer;font-weight:600;font-size:0.9rem;">Done — Generate Plan</button><button id="uncat-skip" style="padding:10px 14px;border-radius:10px;background:var(--surface-2,#333);color:var(--text);border:none;cursor:pointer;font-size:0.9rem;">Skip</button></div></div>';
+  document.body.appendChild(overlay);
+  document.getElementById('uncat-confirm').addEventListener('click', async () => {
+    const sels = overlay.querySelectorAll('select[data-tid]');
+    for (const sel of sels) {
+      const task = tasks.find(t => t.id === sel.dataset.tid);
+      if (task) {
+        task.category = sel.value;
+        await window.db.from('tasks').update({ category: sel.value }).eq('id', task.id);
+      }
+    }
+    overlay.remove();
+    openPlannerModal();
+  });
+  document.getElementById('uncat-skip').addEventListener('click', () => { overlay.remove(); openPlannerModal(); });
+  overlay.addEventListener('click', e => { if (e.target === overlay) { overlay.remove(); } });
+}
+
 async function openPlannerModal() {
   const old = document.getElementById("planner-dlg"); if (old) old.remove();
+  // --- UNCAT CHECK ---
+  const _todayTasks = buildDayTasks(todayISO());
+  const _uncatTasks = _todayTasks.filter(t => !t.category || t.category === '');
+  if (_uncatTasks.length > 0) { showUncatModal(_uncatTasks); return; }
+  // --- END CHECK ---
   const overlay = document.createElement("div");
   overlay.id = "planner-dlg";
   overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.82);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(6px);padding:16px;box-sizing:border-box";
