@@ -66,7 +66,7 @@ export default async function handler(req, res) {
     '- ~13:00: Lunch 30 min. Type: "break"\n' +
     '- After Isha: Plan tomorrow + wind-down. Type: "personal"\n' +
     '- ' + bedTime + ': Sleep\n\n' +
-    'TODAY's TASK LIST (' + tasks.length + ' tasks — EVERY task MUST appear in the schedule):\n' +
+    "TODAY's TASK LIST (" + tasks.length + " tasks — EVERY task MUST appear in the schedule):\n" +
     taskList + '\n\n' +
     'SCHEDULING RULES:\n' +
     '1. HIGH PRIORITY tasks go in 09:00-12:00 morning peak\n' +
