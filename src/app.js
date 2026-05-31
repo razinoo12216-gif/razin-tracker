@@ -3172,7 +3172,7 @@ async function openPlannerModal() {
     const resp = await fetch("/api/plan-day", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tasks: tasks.filter(function(t){return !t.done;}).map(function(t){return {title:t.title, priority:t.priority||'normal', notes:t.notes||''};}).slice(0,40), date: todayISO() })
+      body: JSON.stringify({ tasks: (function(){ var dayT = (typeof buildDayTasks === 'function' ? buildDayTasks(todayISO()) : []).filter(function(t){return !t.done;}); if (!dayT.length) dayT = tasks.filter(function(t){return !t.done;}).slice(0,30); return dayT.map(function(t){return {title:t.title, priority:t.priority||'normal', notes:t.notes||''};});})(), date: todayISO() })
     });
     if (!resp.ok) throw new Error("API error " + resp.status);
     const data = await resp.json();
