@@ -31,13 +31,13 @@ export default async function handler(req, res) {
     );
     const pData = await pRes.json();
     const t = pData && pData.data && pData.data.timings || {};
-    prayers = { Fajr: t.Fajr, Dhuhr: t.Dhuhr, Asr: t.Asr, Maghrib: t.Maghrib, Isha: t.Isha };
+    prayers = { Fajr: t.Fajr, Sunrise: t.Sunrise, Dhuhr: t.Dhuhr, Asr: t.Asr, Maghrib: t.Maghrib, Isha: t.Isha };
   } catch (e) {
     console.error('Prayer times fetch failed:', e);
   }
 
   // 2. Compute wake time (25 min before Fajr) and bedtime
-  const wakeTime = subtractMinutes(prayers.Fajr, 25);
+  const wakeTime = subtractMinutes(prayers.Sunrise, 25);
   const bedTime = '22:30';
 
   // 3. Format task list — high priority first
