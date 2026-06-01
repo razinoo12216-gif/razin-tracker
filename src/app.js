@@ -372,10 +372,10 @@ function renderPotentialTotals(potentials) {
 
 function render() {
   if(!['today','drive','review','invoice','ticket','debt','gym','project','potential','expense','notes'].includes(activeTab))activeTab='today';
-  // Month-scoped entries (projects/expenses use month, potentials/reviews/invoices ignore)
+  // Month-scoped: expenses use month filter; projects are ongoing (not month-scoped)
   const moneyEntries = entries.filter((e) => e.type !== 'potential');
   const inMonth = moneyEntries.filter((e) => matchesMonth(e, selectedMonth));
-  const projectsInMonth = inMonth.filter((e) => e.type === 'project');
+  const projectsInMonth = entries.filter((e) => e.type === 'project');
   const expensesInMonth = inMonth.filter((e) => e.type === 'expense');
   const potentials = entries.filter((e) => e.type === 'potential');
 
