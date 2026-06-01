@@ -3308,10 +3308,22 @@ async function openPlannerModal() {
     const reg = await navigator.serviceWorker.register('/sw.js');
     console.log('[SW] registered', reg.scope);
 
-    // Auto-subscribe if already granted
+    const updateBtn = () => {
+      const btn = document.getElementById('notif-btn');
+      if (btn) { btn.textContent = '\u2714 Notifications On'; btn.style.background = '#059669'; btn.disabled = true; }
+    };
+
     if (Notification.permission === 'granted') {
       await subscribePush(reg);
+      updateBtn();
+    } else if (Notification.permission === 'default') {
+      const perm = await Notification.requestPermission();
+      if (perm === 'granted') {
+        await subscribePush(reg);
+        updateBtn();
+      }
     }
+    // 'denied' — skip silently
   } catch (e) {
     console.warn('[SW] registration failed:', e);
   }
