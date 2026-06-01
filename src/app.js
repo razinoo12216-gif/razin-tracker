@@ -381,8 +381,6 @@ function render() {
 
   if (activeTab === 'potential') {
     renderPotentialTotals(potentials);
-  } else if (activeTab === 'project') {
-    renderMoneyTotals(projectsInMonth);
   } else {
     renderMoneyTotals(inMonth);
   }
