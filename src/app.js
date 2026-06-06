@@ -1319,24 +1319,44 @@ function debtSort(a, b) {
 }
 
 function renderDebtTotals() {
-  setTotalsLabels(['Total owed', 'Monthly out', 'Paid lifetime', 'Active']);
   clearTotalSpanClasses();
-  const active = debts.filter((d) => d.status !== 'paid');
-  const owed = active.reduce((s, d) => s + parseNum(d.current_balance), 0);
-  const monthly = active.reduce((s, d) => s + parseNum(d.monthly_payment), 0);
-  const paidLifetime = debts.reduce((s, d) => s + Math.max(0, parseNum(d.original_amount) - parseNum(d.current_balance)), 0);
+  if (window._debtView === 'owed') {
+    setTotalsLabels(['Total owed to me', 'Collected', 'Outstanding', 'Active']);
+    const act = (receivables || []).filter((r) => r.status !== 'paid');
+    const totalOwed = act.reduce((s, r) => s + parseNum(r.original_amount), 0);
+    const collected = act.reduce((s, r) => s + Math.max(0, parseNum(r.original_amount) - parseNum(r.current_balance)), 0);
+    const outstanding = act.reduce((s, r) => s + parseNum(r.current_balance), 0);
 
-  const owedEl = $('#t-rev');
-  owedEl.textContent = fmt(owed);
-  if (owed > 0) owedEl.classList.add('neg');
+    const owedEl = $('#t-rev');
+    owedEl.textContent = fmt(totalOwed);
+    if (totalOwed > 0) owedEl.classList.add('pos');
 
-  $('#t-exp').textContent = fmt(monthly);
+    $('#t-exp').textContent = fmt(collected);
 
-  const lifetime = $('#t-net');
-  lifetime.textContent = fmt(paidLifetime);
-  if (paidLifetime > 0) lifetime.classList.add('pos');
+    const outEl = $('#t-net');
+    outEl.textContent = fmt(outstanding);
+    if (outstanding > 0) outEl.classList.add('neg');
 
-  $('#t-count').textContent = String(active.length);
+    $('#t-count').textContent = String(act.length);
+  } else {
+    setTotalsLabels(['Total owed', 'Monthly out', 'Paid lifetime', 'Active']);
+    const active = debts.filter((d) => d.status !== 'paid');
+    const owed = active.reduce((s, d) => s + parseNum(d.current_balance), 0);
+    const monthly = active.reduce((s, d) => s + parseNum(d.monthly_payment), 0);
+    const paidLifetime = debts.reduce((s, d) => s + Math.max(0, parseNum(d.original_amount) - parseNum(d.current_balance)), 0);
+
+    const owedEl = $('#t-rev');
+    owedEl.textContent = fmt(owed);
+    if (owed > 0) owedEl.classList.add('neg');
+
+    $('#t-exp').textContent = fmt(monthly);
+
+    const lifetime = $('#t-net');
+    lifetime.textContent = fmt(paidLifetime);
+    if (paidLifetime > 0) lifetime.classList.add('pos');
+
+    $('#t-count').textContent = String(active.length);
+  }
 }
 
 function renderReceivablesSection() {
@@ -1503,7 +1523,7 @@ function renderDebts() {
       btn.textContent = pair[0];
       btn.style.cssText = 'flex:1;padding:9px 0;border:none;border-radius:10px;font-size:0.9rem;font-weight:600;cursor:pointer;letter-spacing:0.01em;' +
         (_dv === pair[1] ? 'background:#7c6cfc;color:#fff;' : 'background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.5);');
-      btn.onclick = (function(v){ return function(){ window._debtView=v; renderDebts(); }; })(pair[1]);
+      btn.onclick = (function(v){ return function(){ window._debtView=v; renderDebtTotals(); renderDebts(); }; })(pair[1]);
       _stEl.appendChild(btn);
     });
     var _rvEl = list.querySelector('.receivables-section');
