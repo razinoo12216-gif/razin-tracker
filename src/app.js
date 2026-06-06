@@ -659,7 +659,7 @@ function renderToday() {
       <div class="task-add-bar">
         <input id="task-quick-input" type="text" placeholder="Add task…" autocomplete="off" />
         <input id="task-quick-time" type="time" />
-        <select id="task-quick-cat" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.82rem;"><option value="admin">Admin</option><option value="deep-work">Deep Work</option><option value="call">Call</option><option value="finance">Finance</option><option value="errand">Errand</option><option value="travel">Travel</option><option value="personal">Personal</option><option value="reminders">Reminders</option></select>
+        <select id="task-quick-cat" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.82rem;"><option value="admin">Admin</option><option value="deep-work">Deep Work</option><option value="call">Call</option><option value="finance">Finance</option><option value="errand">Errand</option><option value="travel">Travel</option><option value="personal">Personal</option><option value="reminders">Reminders</option><option value="meeting">Meeting</option></select>
         <button id="task-quick-btn" type="button">Add</button>
       </div>
       <div class="today-actions">
@@ -690,11 +690,17 @@ function renderTask(t) {
   const timeHtml = t.time ? esc(t.time) : '';
   const isRecurring = (t.recurrence && t.recurrence !== 'none') || t.template_id;
   const recurringIcon = isRecurring ? '<span class="task-recurring" title="Recurring">↻</span>' : '';
+  const isMeeting = (t.category || '').toLowerCase() === 'meeting';
+  const catSlug = t.category ? t.category.toLowerCase().replace(/\s+/g, '-') : '';
+  const catBadge = t.category ? `<span class="task-cat-badge cat-${esc(catSlug)}">${esc(t.category)}</span>` : '';
   return `
-    <div class="task-row ${t.done ? 'done' : ''}" data-id="${esc(t.id)}">
+    <div class="task-row ${t.done ? 'done' : ''}${isMeeting ? ' task-row--meeting' : ''}" data-id="${esc(t.id)}">
       <button type="button" class="task-check" data-id="${esc(t.id)}" aria-label="Toggle done">${t.done ? '✓' : ''}</button>
       <div class="task-time">${timeHtml}</div>
-      <div class="task-title">${esc(t.title)}${recurringIcon}</div>
+      <div class="task-body">
+        <div class="task-title">${esc(t.title)}${recurringIcon}</div>
+        ${catBadge}
+      </div>
     </div>`;
 }
 
