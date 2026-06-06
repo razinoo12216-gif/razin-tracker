@@ -802,11 +802,15 @@ dialog .actions {
   color: #a78bfa;
   min-width: 52px;
 }
-.task-cat-badge.cat-meeting {
-  background: rgba(139,92,246,0.25);
-  color: #a78bfa;
-  border: 1px solid rgba(139,92,246,0.4);
-}
+.task-cat-badge.cat-meeting    { background: rgba(139,92,246,0.25); color: #a78bfa;  border: 1px solid rgba(139,92,246,0.4); }
+.task-cat-badge.cat-admin      { background: rgba(100,116,139,0.25); color: #94a3b8; border: 1px solid rgba(100,116,139,0.4); }
+.task-cat-badge.cat-deep-work  { background: rgba(59,130,246,0.25);  color: #60a5fa; border: 1px solid rgba(59,130,246,0.4); }
+.task-cat-badge.cat-call       { background: rgba(16,185,129,0.25);  color: #34d399; border: 1px solid rgba(16,185,129,0.4); }
+.task-cat-badge.cat-finance    { background: rgba(245,158,11,0.25);  color: #fbbf24; border: 1px solid rgba(245,158,11,0.4); }
+.task-cat-badge.cat-errand     { background: rgba(249,115,22,0.25);  color: #fb923c; border: 1px solid rgba(249,115,22,0.4); }
+.task-cat-badge.cat-travel     { background: rgba(6,182,212,0.25);   color: #22d3ee; border: 1px solid rgba(6,182,212,0.4); }
+.task-cat-badge.cat-personal   { background: rgba(236,72,153,0.25);  color: #f472b6; border: 1px solid rgba(236,72,153,0.4); }
+.task-cat-badge.cat-reminders  { background: rgba(234,179,8,0.25);   color: #facc15; border: 1px solid rgba(234,179,8,0.4); }
 .task-check {
   width: 24px;
   height: 24px;
