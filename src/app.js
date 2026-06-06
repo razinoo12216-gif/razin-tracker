@@ -1340,10 +1340,11 @@ function renderDebtTotals() {
     $('#t-count').textContent = String(act.length);
   } else {
     setTotalsLabels(['Total owed', 'Monthly out', 'Paid lifetime', 'Active']);
-    const active = debts.filter((d) => d.status !== 'paid');
+    const myDebts = debts.filter((d) => d.type !== 'receivable');
+    const active = myDebts.filter((d) => d.status !== 'paid');
     const owed = active.reduce((s, d) => s + parseNum(d.current_balance), 0);
     const monthly = active.reduce((s, d) => s + parseNum(d.monthly_payment), 0);
-    const paidLifetime = debts.reduce((s, d) => s + Math.max(0, parseNum(d.original_amount) - parseNum(d.current_balance)), 0);
+    const paidLifetime = myDebts.reduce((s, d) => s + Math.max(0, parseNum(d.original_amount) - parseNum(d.current_balance)), 0);
 
     const owedEl = $('#t-rev');
     owedEl.textContent = fmt(owed);
