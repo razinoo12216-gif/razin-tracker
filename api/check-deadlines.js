@@ -83,7 +83,7 @@ export default async function handler(req, res) {
       const mins = (parseInt(hm[0], 10) * 60 + parseInt(hm[1], 10)) - nowMinutes;
       return mins >= 55 && mins < 60;
     });
-    if (due.length === 0) return res.status(200).json({ message: 'Nothing due', todayStr, nowMinutes });
+    if (due.length === 0) return res.status(200).json({ message: 'Nothing due', todayStr, nowMinutes, taskCount: allTasks.length, timedToday: timedToday.length });
     const subs = await getSubs(supabaseUrl, headers);
     if (!subs.length) return res.status(200).json({ message: 'No subscribers' });
     let sent = 0;
@@ -97,7 +97,7 @@ export default async function handler(req, res) {
   }
 
   // agenda mode
-  if (timedToday.length === 0) return res.status(200).json({ message: 'No timed tasks today', date: todayStr });
+  if (timedToday.length === 0) return res.status(200).json({ message: 'No timed tasks today', date: todayStr, taskCount: allTasks.length });
   const lines = timedToday.sort((a, b) => a.time.localeCompare(b.time)).map((t) => t.time + '  ' + t.title);
   const title = "Today's plan — " + lines.length + ' timed task' + (lines.length > 1 ? 's' : '');
   const body = lines.slice(0, 6).join('\n') + (lines.length > 6 ? '\n+' + (lines.length - 6) + ' more' : '');
