@@ -283,7 +283,7 @@ async function loadAll() {
   rebuildSecondaryFilter();
   render();
   try { const {data:_dm} = await window.db.from('daily_macros').select('*').order('date',{ascending:false}); dailyMacros = _dm || []; } catch(_e) {}
-  try { const {data:_rv} = await window.db.from('debts').select('*').eq('type','receivable').order('created_at',{ascending:false}); receivables = _rv || []; } catch(_e) {}
+  try { const {data:_rv} = await window.db.from('debts').select('*').or('type.eq.receivable,type.is.null').order('created_at',{ascending:false}); receivables = _rv || []; } catch(_e) {}
   try { const {data:_nts} = await window.db.from('user_notes').select('*').order('created_at',{ascending:false}); userNotes = _nts || []; } catch(_e) {}
 }
 
@@ -1642,11 +1642,11 @@ debtForm.addEventListener('submit', async (e) => {
     if (!_rPay.creditor || !_rPay.creditor.trim()) { window._receivableMode = false; return; }
     var _rvId = editingDebtId;
     if (_rvId) {
-      await window.db.from('debts').update({creditor:_rPay.creditor,original_amount:parseNum(_rPay.original_amount)||0,current_balance:parseNum(_rPay.current_balance)||0,notes:_rPay.notes||null,status:_rPay.status||'active'}).eq('id',_rvId);
+      await window.db.from('debts').update({creditor:_rPay.creditor,original_amount:parseNum(_rPay.original_amount)||0,current_balance:parseNum(_rPay.current_balance)||0,notes:_rPay.notes||null,status:_rPay.status||'active',type:'receivable'}).eq('id',_rvId);
       var _ri = receivables.findIndex(function(x){ return x.id===_rvId; });
       if (_ri>=0) receivables[_ri] = Object.assign({},receivables[_ri],{creditor:_rPay.creditor,original_amount:parseNum(_rPay.original_amount)||0,current_balance:parseNum(_rPay.current_balance)||0,notes:_rPay.notes||null,status:_rPay.status||'active'});
     } else {
-      var _ins = await window.db.from('debts').insert({creditor:_rPay.creditor,original_amount:parseNum(_rPay.original_amount)||0,current_balance:parseNum(_rPay.current_balance)||0,notes:_rPay.notes||null,status:_rPay.status||'active'}).select().single();
+      var _ins = await window.db.from('debts').insert({creditor:_rPay.creditor,original_amount:parseNum(_rPay.original_amount)||0,current_balance:parseNum(_rPay.current_balance)||0,notes:_rPay.notes||null,status:_rPay.status||'active',type:'receivable'}).select().single();
       if (_ins && _ins.data) receivables.push(_ins.data);
     }
     window._receivableMode = false;
