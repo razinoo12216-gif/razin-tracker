@@ -32,7 +32,7 @@ let editingInvoiceId = null;
 let editingTaskId = null;
 let editingTicketId = null;
 let ticketKindView = 'personal';
-let workView = 'tasks';
+let workView = 'companies';
 let editingWorkTaskId = null;
 let editingWorkCompanyId = null;
 let editingDebtId = null;
@@ -375,7 +375,7 @@ function render() {
   // Month-scoped: expenses use month filter; projects are ongoing (not month-scoped)
   const moneyEntries = entries.filter((e) => e.type !== 'potential');
   const inMonth = moneyEntries.filter((e) => matchesMonth(e, selectedMonth));
-  const projectsInMonth = entries.filter((e) => e.type === 'project');
+  const projectsInMonth = entries.filter((e) => e.type === 'project' && matchesMonth(e, selectedMonth));
   const expensesInMonth = inMonth.filter((e) => e.type === 'expense');
   const potentials = entries.filter((e) => e.type === 'potential');
 
@@ -621,6 +621,7 @@ function buildDayTasks(dayISO) {
       id: 'virtual:' + tpl.id + ':' + dayISO,
       day: dayISO,
       title: tpl.title,
+      category: tpl.category || '',
       time: tpl.time || '',
       notes: tpl.notes || '',
       done: false,
@@ -650,6 +651,7 @@ function renderToday() {
           <button type="button" class="day-nav" id="day-prev" aria-label="Previous day">←</button>
           <button type="button" class="day-nav today-btn" id="day-today">${isToday ? 'Today' : 'Jump to today'}</button>
           <button type="button" class="day-nav" id="day-next" aria-label="Next day">→</button>
+          <input type="date" id="day-picker" value="${esc(selectedDay)}" aria-label="Pick a date" style="background:#1e293b;color:#fff;border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:5px 10px;font-size:0.8rem;color-scheme:dark;cursor:pointer;margin-top:6px" />
         </div>
       </div>
       <div class="today-list">
@@ -670,6 +672,7 @@ function renderToday() {
   $('#day-prev').addEventListener('click', () => { selectedDay = shiftISO(selectedDay, -1); render(); });
   $('#day-next').addEventListener('click', () => { selectedDay = shiftISO(selectedDay, 1); render(); });
   $('#day-today').addEventListener('click', () => { selectedDay = todayISO(); render(); });
+  { const _dp = $('#day-picker'); if (_dp) _dp.addEventListener('change', (e) => { if (e.target.value) { selectedDay = e.target.value; render(); } }); }
 
   list.querySelectorAll('.task-check').forEach((el) => {
     el.addEventListener('click', (e) => { e.stopPropagation(); toggleTask(el.dataset.id); });
@@ -1839,14 +1842,14 @@ function renderWorkTasksView(tasks, companies) {
 
 // PATCH C: updated companies toggle — 3 buttons
 function renderWorkCompaniesView(companies) {
-  const toggle = `<div class="ticket-type-filter"><button class="ticket-filter" onclick="workView='tasks';renderWork()">Tasks</button><button class="ticket-filter active" onclick="workView='companies';renderWork()">Companies</button><button class="ticket-filter" onclick="workView='invoices';renderWork()">Invoices</button><button class="ticket-filter" onclick="workView='travel';renderWork()">Travel</button></div>`;
+  const toggle = `<div class="ticket-type-filter"><button class="ticket-filter active" onclick="workView='companies';renderWork()">Companies</button><button class="ticket-filter" onclick="workView='invoices';renderWork()">Invoices</button><button class="ticket-filter" onclick="workView='travel';renderWork()">Travel</button></div>`;
   const chKey  = localStorage.getItem('ch_api_key') || '';
   list.innerHTML = `<div class="work-header-bar">${toggle}<button class="work-fab" onclick="openWorkCompanyEditor()">+ Company</button></div><div class="work-ch-bar"><span class="work-ch-label">CH API Key</span><input type="password" id="ch-key-input" value="${esc(chKey)}" placeholder="Your Companies House API key"/><button class="work-ch-save" onclick="saveCHKey()">Save</button></div>${companies.length === 0 ? '<div class="empty">No companies yet. Hit <strong>+ Company</strong> to add one.</div>' : ''}<div class="work-companies-grid">${companies.map(c => renderWorkCompanyCard(c)).join('')}</div>`;
 }
 
 // PATCH D: new invoices view
 function renderWorkInvoicesView() {
-  const toggle = `<div class="ticket-type-filter"><button class="ticket-filter" onclick="workView='tasks';renderWork()">Tasks</button><button class="ticket-filter" onclick="workView='companies';renderWork()">Companies</button><button class="ticket-filter active" onclick="workView='invoices';renderWork()">Invoices</button><button class="ticket-filter" onclick="workView='travel';renderWork()">Travel</button></div>`;
+  const toggle = `<div class="ticket-type-filter"><button class="ticket-filter" onclick="workView='companies';renderWork()">Companies</button><button class="ticket-filter active" onclick="workView='invoices';renderWork()">Invoices</button><button class="ticket-filter" onclick="workView='travel';renderWork()">Travel</button></div>`;
   if (invoices.length === 0) {
     list.innerHTML = `<div class="work-header-bar">${toggle}<button class="work-fab" onclick="openInvoiceEditor()">+ Invoice</button></div><div class="empty">No invoices yet. Hit <strong>+ Invoice</strong> to draft one.</div>`;
     return;
@@ -2649,7 +2652,7 @@ function renderGym() {
     </div>
     <div class="gym-legend">${legendHtml}</div>
     <div class="gym-macros-section"><div class="gym-macros-hdr"><button class="gym-date-nav" onclick="gymShiftDate(-1)">&#8592;</button><span class="gym-macros-title">${gymViewDate}</span><button class="gym-date-nav" onclick="gymShiftDate(1)">&#8594;</button><button class="add-btn" onclick="openMacrosEditor('${gymViewDate}')">+ Log</button></div>${macroHtml}</div></div>
-    <div class="gym-sessions-section"><div class="gym-sessions-title">Recent Sessions</div>${renderGymSessionsList(gymSessions)}</div>
+    
   `;
 }
 
@@ -2731,12 +2734,11 @@ function openGymEditor(id) {
   
     // Populate bodyweight + exercises
     const _bwEl = document.getElementById('gym-bodyweight');
-    if (_bwEl) _bwEl.value = s.bodyweight || '';
+    if (_bwEl) _bwEl.value = '';
     const _exList = document.getElementById('gym-exercises-list');
     if (_exList) {
       _exList.innerHTML = '';
-      const _exArr = Array.isArray(s.exercises) ? s.exercises : (s.exercises ? (()=>{try{return JSON.parse(s.exercises);}catch(e){return [];}})() : []);
-      _exArr.forEach(ex => addExerciseRow(ex.name, ex.sets, ex.reps, ex.weight));
+      const _exArr = [];
     }
 }
   dlg.showModal();
@@ -2874,7 +2876,6 @@ function renderWorkTravelView() {
   renderTravel();
   var list = document.getElementById('list');
   var nav = '<div class="ticket-type-filter">' +
-    '<button class="ticket-filter" onclick="workView=\'tasks\';renderWork()">Tasks</button>' +
     '<button class="ticket-filter" onclick="workView=\'companies\';renderWork()">Companies</button>' +
     '<button class="ticket-filter active" onclick="workView=\'travel\';renderWork()">Travel</button>' +
     '<button class="ticket-filter" onclick="workView=\'invoices\';renderWork()">Invoices</button>' +
