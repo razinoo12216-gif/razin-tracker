@@ -605,7 +605,7 @@ function recurrenceMatches(recurrence, dayISO) {
   }
   var rParts = dayISO.split('-');
   var dow = new Date(parseInt(rParts[0], 10), parseInt(rParts[1], 10) - 1, parseInt(rParts[2], 10)).getDay();
-  return recurrence.split(' ').map(Number).includes(dow);
+  return recurrence.split(/[ ,]+/).map(Number).includes(dow);
 }
 
 function buildDayTasks(dayISO) {
@@ -614,9 +614,11 @@ function buildDayTasks(dayISO) {
   const templates = tasks.filter((t) =>
     t.recurrence && t.recurrence !== 'none' && t.day && t.day < dayISO
   );
+  const _seen = new Set(realTasks.map((r) => (r.title || '') + '|' + (r.time || '')));
   const virtualTasks = templates
     .filter((tpl) => recurrenceMatches(tpl.recurrence, dayISO))
     .filter((tpl) => !realTasks.some((r) => r.template_id === tpl.id))
+    .filter((tpl) => { const _k = (tpl.title || '') + '|' + (tpl.time || ''); if (_seen.has(_k)) return false; _seen.add(_k); return true; })
     .map((tpl) => ({
       id: 'virtual:' + tpl.id + ':' + dayISO,
       day: dayISO,
