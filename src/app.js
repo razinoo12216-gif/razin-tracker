@@ -3292,7 +3292,6 @@ async function openPlannerModal() {
   overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
   document.body.appendChild(overlay);
 
-  const todayISO = () => new Date().toISOString().split("T")[0];
   const tasks = (entries || []).filter(e => !e.done && (e.date === todayISO() || !e.date)).slice(0, 12).map(e => ({
     title: e.title || "",
     priority: e.priority || "",
