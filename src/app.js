@@ -656,6 +656,10 @@ function renderToday() {
           <input type="date" id="day-picker" value="${esc(selectedDay)}" aria-label="Pick a date" style="background:#1e293b;color:#fff;border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:5px 10px;font-size:0.8rem;color-scheme:dark;cursor:pointer;margin-top:6px" />
         </div>
       </div>
+      <div class="task-search-bar" style="margin:10px 0;">
+        <input id="task-search" type="text" placeholder="\u{1F50D} Search all tasks across every day\u2026" autocomplete="off" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#10151c;color:#fff;border:1px solid rgba(255,255,255,0.12);border-radius:12px;font-size:0.9rem" />
+        <div id="task-search-results" style="margin-top:6px;"></div>
+      </div>
       <div class="today-list">
         ${dayTasks.length === 0 ? `<div class="today-empty">Empty list. Add your first task below, or tap "Copy yesterday".</div>` : ''}
         ${dayTasks.map(renderTask).join('')}
@@ -675,6 +679,38 @@ function renderToday() {
   $('#day-next').addEventListener('click', () => { selectedDay = shiftISO(selectedDay, 1); render(); });
   $('#day-today').addEventListener('click', () => { selectedDay = todayISO(); render(); });
   { const _dp = $('#day-picker'); if (_dp) _dp.addEventListener('change', (e) => { if (e.target.value) { selectedDay = e.target.value; render(); } }); }
+  {
+    const _tsd = (iso) => { if (!iso) return 'repeats'; const p = iso.split('-'); const dd = new Date(+p[0], +p[1]-1, +p[2]); const W=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return W[dd.getDay()]+' '+(+p[2])+' '+M[dd.getMonth()]+' '+p[0]; };
+    const _ts = $('#task-search');
+    if (_ts) _ts.addEventListener('input', (e) => {
+      const q = e.target.value.trim().toLowerCase();
+      const box = $('#task-search-results');
+      if (!box) return;
+      if (!q) { box.innerHTML = ''; return; }
+      const seen = new Set();
+      const matches = tasks.filter((t) => {
+        if (!(t.title || '').toLowerCase().includes(q)) return false;
+        const k = (t.title || '') + '|' + (t.day || '') + '|' + (t.time || '');
+        if (seen.has(k)) return false; seen.add(k); return true;
+      }).slice(0, 40);
+      if (!matches.length) { box.innerHTML = '<div style="padding:8px 4px;color:#8a93a3;font-size:0.85rem">No matching tasks</div>'; return; }
+      box.innerHTML = matches.map((t) => {
+        const rec = t.recurrence && t.recurrence !== 'none';
+        const dateLabel = rec ? 'repeats' : _tsd(t.day);
+        const jumpDay = rec ? todayISO() : (t.day || '');
+        const doneCss = t.done ? 'opacity:0.5;text-decoration:line-through;' : '';
+        const time = t.time ? (esc(t.time) + ' \u00b7 ') : '';
+        return '<div class="ts-result" data-day="' + esc(jumpDay) + '" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 12px;background:#10151c;border:1px solid rgba(255,255,255,0.07);border-radius:10px;margin-bottom:5px;cursor:pointer;' + doneCss + '">'
+          + '<span style="font-weight:600;font-size:0.88rem">' + esc(t.title) + '</span>'
+          + '<span style="white-space:nowrap;color:#7c8696;font-size:0.78rem">' + time + dateLabel + '</span>'
+          + '</div>';
+      }).join('');
+      box.querySelectorAll('.ts-result').forEach((el) => el.addEventListener('click', () => {
+        const day = el.getAttribute('data-day');
+        if (day) { selectedDay = day; render(); }
+      }));
+    });
+  }
 
   list.querySelectorAll('.task-check').forEach((el) => {
     el.addEventListener('click', (e) => { e.stopPropagation(); toggleTask(el.dataset.id); });
