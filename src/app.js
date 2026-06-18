@@ -350,16 +350,16 @@ function renderExpenseTotals(projects, expenses) {
   const projectNet = projRev - projExp;
   let monthly = 0;
   for (const e of expenses) { monthly += parseNum(e.expenses); }
-  const profit = projectNet - monthly;
+  const net = projectNet - monthly;
   const profitEl = $('#t-rev');
-  profitEl.textContent = fmt(profit);
-  profitEl.classList.toggle('neg', profit < 0);
-  profitEl.classList.toggle('pos', profit > 0);
+  profitEl.textContent = fmt(projectNet);
+  profitEl.classList.toggle('neg', projectNet < 0);
+  profitEl.classList.toggle('pos', projectNet > 0);
   $('#t-exp').textContent = fmt(monthly);
   const netEl = $('#t-net');
-  netEl.textContent = fmt(profit);
-  netEl.classList.toggle('neg', profit < 0);
-  netEl.classList.toggle('pos', profit > 0);
+  netEl.textContent = fmt(net);
+  netEl.classList.toggle('neg', net < 0);
+  netEl.classList.toggle('pos', net > 0);
   $('#t-count').textContent = String(expenses.length);
 }
 
