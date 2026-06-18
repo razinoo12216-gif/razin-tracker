@@ -243,6 +243,52 @@ function isStalePotential(p) {
   return false;
 }
 
+function saveLocalBackup() {
+  try {
+    var KEY = '12w_backup_good';
+    var prev = {};
+    try { prev = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
+    var sets = { entries: entries, tasks: tasks, tickets: tickets, debts: debts, receivables: receivables, debtPayments: debtPayments, reviews: reviews, invoices: invoices, gymSessions: gymSessions, bodyMetrics: bodyMetrics, roadTrips: roadTrips, dailyMacros: dailyMacros, userNotes: userNotes };
+    Object.keys(sets).forEach(function (k) { var a = sets[k]; if (Array.isArray(a) && a.length > 0) prev[k] = a; });
+    prev.ts = new Date().toISOString();
+    localStorage.setItem(KEY, JSON.stringify(prev));
+  } catch (e) {}
+}
+
+var _BACKUP_TABLE_MAP = { entries: 'projects', tasks: 'tasks', tickets: 'tickets', debts: 'debts', receivables: 'debts', debtPayments: 'debt_payments', reviews: 'reviews', invoices: 'invoices', gymSessions: 'gym_sessions', bodyMetrics: 'body_metrics', roadTrips: 'road_trips', dailyMacros: 'daily_macros', userNotes: 'user_notes' };
+
+async function restore12World(which) {
+  var backup = {};
+  try { backup = JSON.parse(localStorage.getItem('12w_backup_good') || '{}'); } catch (e) { alert('No backup found on this device.'); return; }
+  var live = { entries: entries, tasks: tasks, tickets: tickets, debts: debts, receivables: receivables, debtPayments: debtPayments, reviews: reviews, invoices: invoices, gymSessions: gymSessions, bodyMetrics: bodyMetrics, roadTrips: roadTrips, dailyMacros: dailyMacros, userNotes: userNotes };
+  var names = which ? [which] : Object.keys(_BACKUP_TABLE_MAP);
+  var restored = 0;
+  for (var n = 0; n < names.length; n++) {
+    var name = names[n];
+    var rows = backup[name];
+    if (!Array.isArray(rows) || !rows.length) continue;
+    var liveArr = live[name] || [];
+    var liveIds = {};
+    liveArr.forEach(function (r) { liveIds[r.id] = true; });
+    var missing = rows.filter(function (r) { return !liveIds[r.id]; });
+    if (!missing.length) continue;
+    try { var res = await window.db.from(_BACKUP_TABLE_MAP[name]).insert(missing); if (!res.error) restored += missing.length; } catch (e) {}
+  }
+  await loadAll();
+  alert(restored > 0 ? ('Restored ' + restored + ' entries from your device backup.') : 'Nothing to restore.');
+}
+
+function checkBackupRestore() {
+  try {
+    var backup = JSON.parse(localStorage.getItem('12w_backup_good') || '{}');
+    var lostRecv = (!receivables || receivables.length === 0) && backup.receivables && backup.receivables.length > 0;
+    var lostDebts = (!debts || debts.length === 0) && backup.debts && backup.debts.length > 0;
+    if (lostRecv || lostDebts) {
+      if (confirm('Some of your saved data (Owes Me / Debts) is missing, but a backup exists on this device. Restore it now?')) { restore12World(); }
+    }
+  } catch (e) {}
+}
+
 async function loadAll() {
   if (!window.SUPABASE_CONFIGURED) {
     list.innerHTML = '<div class="empty error">Supabase keys not set.</div>';
@@ -285,6 +331,8 @@ async function loadAll() {
   try { const {data:_dm} = await window.db.from('daily_macros').select('*').order('date',{ascending:false}); dailyMacros = _dm || []; } catch(_e) {}
   try { const {data:_rv} = await window.db.from('debts').select('*').or('type.eq.receivable,type.is.null').order('created_at',{ascending:false}); receivables = _rv || []; } catch(_e) {}
   try { const {data:_nts} = await window.db.from('user_notes').select('*').order('created_at',{ascending:false}); userNotes = _nts || []; } catch(_e) {}
+  try { saveLocalBackup(); } catch(_e) {}
+  try { checkBackupRestore(); } catch(_e) {}
 }
 
 function rebuildMonthSelect() {
