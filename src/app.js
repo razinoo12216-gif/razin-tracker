@@ -482,7 +482,7 @@ function render() {
   const ticketCountEl = $('#tc-ticket');
   if (ticketCountEl) ticketCountEl.textContent = String(tickets.filter(t => (t.ticket_kind || 'personal') === 'personal').length);
   const debtCountEl = $('#tc-debt');
-  if (debtCountEl) debtCountEl.textContent = String(debts.filter(d => d.status !== 'paid').length);
+  if (debtCountEl) debtCountEl.textContent = String(debts.filter(d => d.type !== 'receivable' && d.status !== 'paid').length);
 
   // Hide/show header bits based on tab
   const totalsEl = document.querySelector('.totals');
@@ -1623,7 +1623,7 @@ function renderDebts() {
       ${active.length > 0 ? `
         <div class="debt-strategy">
           <div class="debt-strategy-line"><strong>${fmt(totalOwed)}</strong> across ${active.length} active debt${active.length !== 1 ? 's' : ''}</div>
-          ${totalMonthly > 0 ? `<div class="debt-strategy-line">At ${fmt(totalMonthly)}/mo current pace → debt-free in <strong>~${monthsToFreedom} month${monthsToFreedom !== 1 ? 's' : ''}</strong> (${Math.ceil(monthsToFreedom / 12)} year${monthsToFreedom > 12 ? 's' : ''})</div>` : '<div class="debt-strategy-line muted">Set monthly payments on each debt to see projected payoff.</div>'}
+          ${totalMonthly > 0 ? `<div class="debt-strategy-line">At ${fmt(totalMonthly)}/mo current pace → debt-free in <strong>~${monthsToFreedom} month${monthsToFreedom !== 1 ? 's' : ''}</strong>${monthsToFreedom >= 12 ? ' (' + (monthsToFreedom / 12).toFixed(1) + ' years)' : ''}</div>` : '<div class="debt-strategy-line muted">Set monthly payments on each debt to see projected payoff.</div>'}
         </div>
       ` : ''}
       <div class="debt-list">
