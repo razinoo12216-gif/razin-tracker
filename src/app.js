@@ -1611,7 +1611,7 @@ async function logReceivablePayment(id) {
   await loadAll(); renderDebts();
 }
 function renderDebts() {
-  const sorted = [...debts].sort(debtSort);
+  const sorted = [...debts].filter((d) => d.type !== 'receivable').sort(debtSort);
   const active = sorted.filter((d) => d.status !== 'paid');
   const paid = sorted.filter((d) => d.status === 'paid');
   const totalOwed = active.reduce((s, d) => s + parseNum(d.current_balance), 0);
