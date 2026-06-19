@@ -1174,7 +1174,7 @@ async function upsertTicketExpense(ticket) {
   const month = (ticket.date || todayISO()).substring(0, 7);
   const label = 'Ticket – ' + (ticket.type || 'fine') + (ticket.pcn ? ' (' + ticket.pcn + ')' : '') + (ticket.borough ? ', ' + ticket.borough : '');
   const amount = parseNum(ticket.paid) || parseNum(ticket.amount) || 0;
-  const existing = projects.find((p) => p.source_ticket_id === ticket.id && p.type === 'expense');
+  const existing = entries.find((p) => p.source_ticket_id === ticket.id && p.type === 'expense');
   if (existing) {
     Object.assign(existing, { name: label, expenses: amount, month });
     render();
@@ -1182,7 +1182,7 @@ async function upsertTicketExpense(ticket) {
   } else {
     const nid = (crypto.randomUUID && crypto.randomUUID()) || Date.now().toString(36) + Math.random().toString(36).slice(2);
     const ne = { id: nid, type: 'expense', name: label, expenses: amount, month, source_ticket_id: ticket.id };
-    projects.unshift({ ...ne, created_at: new Date().toISOString() });
+    entries.unshift({ ...ne, created_at: new Date().toISOString() });
     render();
     await window.db.from('projects').insert(ne);
   }
@@ -1193,7 +1193,7 @@ async function upsertTicketProject(ticket) {
   if (!ticket.client_paid || !ticket.work_done) return;
   const month = (ticket.date || todayISO()).substring(0, 7);
   const label = 'Client ticket – ' + (ticket.client_name || 'client') + ' (' + (ticket.type || 'fine') + ')';
-  const existing = projects.find((p) => p.source_ticket_id === ticket.id && p.type === 'project');
+  const existing = entries.find((p) => p.source_ticket_id === ticket.id && p.type === 'project');
   const data = { name: label, revenue: parseNum(ticket.client_revenue) || 0, expenses: parseNum(ticket.guy_cost) || 0, status: 'done', month, source_ticket_id: ticket.id };
   if (existing) {
     Object.assign(existing, data);
@@ -1202,7 +1202,7 @@ async function upsertTicketProject(ticket) {
   } else {
     const nid = (crypto.randomUUID && crypto.randomUUID()) || Date.now().toString(36) + Math.random().toString(36).slice(2);
     const np = { id: nid, type: 'project', ...data };
-    projects.unshift({ ...np, created_at: new Date().toISOString() });
+    entries.unshift({ ...np, created_at: new Date().toISOString() });
     render();
     await window.db.from('projects').insert(np);
   }
