@@ -22,6 +22,8 @@ let gymSessions = [];
 let dailyMacros = [];
 let receivables = [];
 let userNotes = [];
+let pots = [];
+let potSettings = { bank_balance: 0 };
 const MACRO_TARGETS = {protein:180, carbs:280, fats:70, calories:2500};
 let bodyMetrics = [];
 let roadTrips = [];
@@ -332,6 +334,8 @@ async function loadAll() {
   try { const {data:_dm} = await window.db.from('daily_macros').select('*').order('date',{ascending:false}); dailyMacros = _dm || []; } catch(_e) {}
   try { const {data:_rv} = await window.db.from('debts').select('*').or('type.eq.receivable,type.is.null').order('created_at',{ascending:false}); receivables = _rv || []; } catch(_e) {}
   try { const {data:_nts} = await window.db.from('user_notes').select('*').order('created_at',{ascending:false}); userNotes = _nts || []; } catch(_e) {}
+  try { const {data:_pots} = await window.db.from('pots').select('*').order('priority',{ascending:true}); pots = _pots || []; } catch(_e) {}
+  try { const {data:_ps} = await window.db.from('pot_settings').select('*').eq('id',1).single(); if (_ps) potSettings = _ps; } catch(_e) {}
   try { saveLocalBackup(); } catch(_e) {}
   try { checkBackupRestore(); } catch(_e) {}
 }
@@ -456,7 +460,7 @@ function renderPotentialTotals(potentials) {
 }
 
 function render() {
-  if(!['today','drive','review','invoice','ticket','debt','gym','project','potential','expense','notes'].includes(activeTab))activeTab='today';
+  if(!['today','drive','review','invoice','ticket','debt','gym','project','potential','expense','notes','pots'].includes(activeTab))activeTab='today';
   // Month-scoped: expenses use month filter; projects are ongoing (not month-scoped)
   const moneyEntries = entries.filter((e) => e.type !== 'potential');
   const inMonth = moneyEntries.filter((e) => matchesMonth(e, selectedMonth));
@@ -483,6 +487,8 @@ function render() {
   if (ticketCountEl) ticketCountEl.textContent = String(tickets.filter(t => (t.ticket_kind || 'personal') === 'personal').length);
   const debtCountEl = $('#tc-debt');
   if (debtCountEl) debtCountEl.textContent = String(debts.filter(d => d.type !== 'receivable' && d.status !== 'paid').length);
+  const potCountEl = $('#tc-pots');
+  if (potCountEl) potCountEl.textContent = String((pots || []).filter(p => !p.archived).length);
 
   // Hide/show header bits based on tab
   const totalsEl = document.querySelector('.totals');
@@ -490,12 +496,14 @@ function render() {
   const addBtnEl = $('#add-btn');
   const hideContext = activeTab === 'drive' || activeTab === 'today';
   if (totalsEl) totalsEl.style.display = hideContext ? 'none' : '';
-  if (monthSelEl) monthSelEl.style.display = (hideContext || activeTab === 'ticket' || activeTab === 'debt') ? 'none' : '';
-  if (addBtnEl) addBtnEl.style.display = activeTab === 'today' ? 'none' : '';
+  if (monthSelEl) monthSelEl.style.display = (hideContext || activeTab === 'ticket' || activeTab === 'debt' || activeTab === 'pots') ? 'none' : '';
+  if (addBtnEl) addBtnEl.style.display = (activeTab === 'today' || activeTab === 'pots') ? 'none' : '';
 
   if (activeTab === 'ticket') renderTicketTotals();
   if (activeTab === 'debt') renderDebtTotals();
+  if (activeTab === 'pots') renderPotTotals();
 
+  if (activeTab === 'pots') return renderPots();
   if (activeTab === 'today') return renderToday();
   if (activeTab === 'drive') return renderDrive();
   if (activeTab === 'review') return renderReviews();
@@ -2609,6 +2617,7 @@ $('#add-btn').addEventListener('click', () => {
   else if (activeTab === 'invoice') openInvoiceEditor(null);
   else if (activeTab === 'ticket') openTicketEditor(null);
   else if (activeTab === 'debt') openDebtEditor(null);
+  else if (activeTab === 'pots') openPotEditor(null);
   else openEditor(null, activeTab);
 });
 
@@ -3519,3 +3528,378 @@ async function requestNotificationPermission() {
 
 // Register SW on load
 registerPush();
+
+
+// ─── POTS (money allocation / envelopes) ───────────────────────────────
+// Priority-waterfall allocation reconciled to a real bank balance.
+// pots[]  and  potSettings  are loaded in loadAll().
+
+function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+
+function potActive() {
+  return (pots || []).filter((p) => !p.archived)
+    .sort((a, b) => (a.priority - b.priority) || (a.sort_order - b.sort_order));
+}
+
+function potDebtMonthly() {
+  return (debts || [])
+    .filter((d) => d.type !== 'receivable' && d.status !== 'paid')
+    .reduce((s, d) => s + parseNum(d.monthly_payment), 0);
+}
+
+function potMonthlyTarget(p) {
+  if (p.kind !== 'monthly') return 0;
+  return p.auto_debt ? potDebtMonthly() : parseNum(p.monthly);
+}
+
+function potAllocated() {
+  return potActive().reduce((s, p) => s + parseNum(p.balance), 0);
+}
+function potBank() { return parseNum((potSettings || {}).bank_balance); }
+function potUnallocated() { return round2(potBank() - potAllocated()); }
+
+function potSubtitle(p) {
+  if (p.kind === 'percent') {
+    const pct = parseNum(p.rate) * 100;
+    return (Number.isInteger(pct) ? pct : pct.toFixed(1)) + '% of income';
+  }
+  if (p.kind === 'monthly') {
+    return fmt(potMonthlyTarget(p)) + ' / mo' + (p.auto_debt ? ' · auto from debts' : '');
+  }
+  return 'Goal ' + fmt(parseNum(p.target));
+}
+
+function potProgressPct(p) {
+  if (p.kind === 'goal') { const t = parseNum(p.target); return t > 0 ? Math.min(100, parseNum(p.balance) / t * 100) : 0; }
+  if (p.kind === 'monthly') { const m = potMonthlyTarget(p); return m > 0 ? Math.min(100, parseNum(p.balance) / m * 100) : 0; }
+  return null; // percent pots accumulate without a cap
+}
+
+// Want = how much this pot would take from an allocation of `amount`.
+function potWant(p, amount) {
+  if (p.kind === 'percent') return round2(amount * parseNum(p.rate));
+  if (p.kind === 'monthly') return Math.max(0, round2(potMonthlyTarget(p) - parseNum(p.balance)));
+  return Math.max(0, round2(parseNum(p.target) - parseNum(p.balance))); // goal
+}
+
+// Run the priority waterfall over `amount`. skimPercent=true treats it as new
+// income (Tax/Zakat skim off the top); false = distributing spare cash.
+function runWaterfall(amount, skimPercent) {
+  amount = round2(amount);
+  let remaining = amount;
+  const lines = [];
+  for (const p of potActive()) {
+    let want;
+    if (p.kind === 'percent') {
+      if (!skimPercent) continue;
+      want = round2(amount * parseNum(p.rate)); // % of gross income
+    } else {
+      want = potWant(p, amount);
+    }
+    const amt = round2(Math.min(want, remaining));
+    if (amt > 0) {
+      remaining = round2(remaining - amt);
+      lines.push({ id: p.id, name: p.name, emoji: p.emoji, amt: amt, newBal: round2(parseNum(p.balance) + amt) });
+    }
+  }
+  return { lines: lines, leftover: round2(remaining) };
+}
+
+async function applyAllocation(lines) {
+  if (!lines || !lines.length) return;
+  await Promise.all(lines.map((l) => window.db.from('pots').update({ balance: l.newBal }).eq('id', l.id)));
+  await loadAll();
+}
+
+// ── Totals header ──
+function renderPotTotals() {
+  clearTotalSpanClasses();
+  setTotalsLabels(['Bank balance', 'Allocated', 'Safe to spend', 'Pots']);
+  const bank = potBank();
+  const allocated = potAllocated();
+  const safe = round2(bank - allocated);
+  $('#t-rev').textContent = fmt(bank);
+  $('#t-exp').textContent = fmt(allocated);
+  const safeEl = $('#t-net');
+  safeEl.textContent = fmt(safe);
+  safeEl.classList.add(safe < 0 ? 'neg' : 'pos');
+  $('#t-count').textContent = String(potActive().length);
+}
+
+// ── Main page ──
+function renderPots() {
+  if (!window.SUPABASE_CONFIGURED) return;
+  const active = potActive();
+  const bank = potBank();
+  const allocated = potAllocated();
+  const unalloc = round2(bank - allocated);
+  const over = unalloc < 0;
+
+  const reconcile = `
+    <div class="pot-reconcile">
+      <div class="pot-recon-row">
+        <div class="pot-recon-cell">
+          <span class="pot-recon-label">In the bank</span>
+          <span class="pot-recon-val">${fmt(bank)}</span>
+        </div>
+        <div class="pot-recon-cell">
+          <span class="pot-recon-label">Earmarked</span>
+          <span class="pot-recon-val">${fmt(allocated)}</span>
+        </div>
+        <div class="pot-recon-cell">
+          <span class="pot-recon-label">${over ? 'Over-allocated' : 'Free to assign'}</span>
+          <span class="pot-recon-val ${over ? 'neg' : 'pos'}">${fmt(unalloc)}</span>
+        </div>
+      </div>
+      ${over ? `<div class="pot-warn">⚠ Your pots claim ${fmt(-unalloc)} more than you hold. Top your balance up or trim a pot.</div>` : ''}
+      <div class="pot-actions">
+        <button class="pot-btn-primary" onclick="openAllocateModal()">⚡ Allocate</button>
+        <button class="pot-btn-ghost" onclick="updateBankBalance()">Update balance</button>
+        <button class="pot-btn-ghost" onclick="openPotEditor(null)">+ New pot</button>
+      </div>
+    </div>`;
+
+  const cards = active.length
+    ? active.map(renderPotCard).join('')
+    : '<div class="empty">No pots yet. Run the SQL setup, then refresh — or hit <strong>+ New pot</strong>.</div>';
+
+  list.innerHTML = `<div class="pots-page">${reconcile}<div class="pot-list">${cards}</div></div>`;
+}
+
+function renderPotCard(p) {
+  const bal = parseNum(p.balance);
+  const pct = potProgressPct(p);
+  const col = p.color || '#7c6cfc';
+  let goalLine = '';
+  if (p.kind === 'goal') {
+    const t = parseNum(p.target);
+    const left = Math.max(0, round2(t - bal));
+    goalLine = left > 0 ? `${fmt(left)} to go` : 'Funded ✓';
+  } else if (p.kind === 'monthly') {
+    const m = potMonthlyTarget(p);
+    const left = Math.max(0, round2(m - bal));
+    goalLine = m > 0 ? (left > 0 ? `${fmt(left)} left this month` : "This month's set-aside is covered ✓") : 'Set a monthly amount';
+  } else {
+    goalLine = 'Accumulating';
+  }
+  const bar = pct === null ? '' :
+    `<div class="pot-bar"><div class="pot-bar-fill" style="width:${pct.toFixed(1)}%;background:${col}"></div></div>`;
+  return `
+    <div class="card pot-card" onclick="openPotEditor('${p.id}')" style="cursor:pointer;border-left:3px solid ${col}">
+      <div class="pot-card-top">
+        <div class="pot-card-id">
+          <span class="pot-emoji">${esc(p.emoji || '💰')}</span>
+          <div>
+            <h3>${esc(p.name)}</h3>
+            <span class="pot-sub">${esc(potSubtitle(p))}</span>
+          </div>
+        </div>
+        <span class="pot-bal">${fmt(bal)}</span>
+      </div>
+      ${bar}
+      <div class="pot-card-foot">
+        <span class="pot-goal-line">${goalLine}</span>
+        <span class="pot-mini-btns">
+          <button class="pot-mini" onclick="event.stopPropagation();potTopUp('${p.id}')">+ Add</button>
+          <button class="pot-mini" onclick="event.stopPropagation();potWithdraw('${p.id}')">− Take out</button>
+        </span>
+      </div>
+    </div>`;
+}
+
+// ── Bank balance ──
+async function updateBankBalance() {
+  const cur = potBank();
+  const v = prompt('Total cash in your account right now (£):', cur ? String(cur) : '');
+  if (v === null) return;
+  const n = parseFloat(String(v).replace(/[^0-9.\-]/g, ''));
+  if (isNaN(n)) { alert('Enter a number.'); return; }
+  const res = await window.db.from('pot_settings').update({ bank_balance: round2(n), updated_at: new Date().toISOString() }).eq('id', 1);
+  if (res.error) { alert('Error: ' + res.error.message); return; }
+  await loadAll();
+}
+
+// ── Top up / withdraw a single pot ──
+async function potTopUp(id) {
+  const p = (pots || []).find((x) => String(x.id) === String(id));
+  if (!p) return;
+  const v = prompt('Add to "' + p.name + '" (£):');
+  if (v === null) return;
+  const n = parseFloat(String(v).replace(/[^0-9.\-]/g, ''));
+  if (isNaN(n) || n <= 0) { alert('Enter a positive amount.'); return; }
+  const res = await window.db.from('pots').update({ balance: round2(parseNum(p.balance) + n) }).eq('id', id);
+  if (res.error) { alert('Error: ' + res.error.message); return; }
+  await loadAll();
+}
+async function potWithdraw(id) {
+  const p = (pots || []).find((x) => String(x.id) === String(id));
+  if (!p) return;
+  const v = prompt('Take out of "' + p.name + '" (£):\n(use when you actually pay it out — e.g. paid HMRC, gave zakat, made a debt payment)');
+  if (v === null) return;
+  const n = parseFloat(String(v).replace(/[^0-9.\-]/g, ''));
+  if (isNaN(n) || n <= 0) { alert('Enter a positive amount.'); return; }
+  const res = await window.db.from('pots').update({ balance: round2(Math.max(0, parseNum(p.balance) - n)) }).eq('id', id);
+  if (res.error) { alert('Error: ' + res.error.message); return; }
+  await loadAll();
+}
+
+// ── Allocate modal (waterfall with live preview) ──
+function openAllocateModal() {
+  const unalloc = Math.max(0, potUnallocated());
+  const overlay = document.createElement('div');
+  overlay.id = 'alloc-dlg';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(4px)';
+  overlay.innerHTML =
+    '<div style="width:420px;max-width:92vw;background:#181c28;border-radius:16px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.08)">' +
+      '<div style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:18px 20px;display:flex;align-items:center;justify-content:space-between">' +
+        '<span style="font-weight:700;font-size:1rem;color:#fff">⚡ Allocate money</span>' +
+        '<button id="alloc-close" style="background:rgba(255,255,255,0.15);border:none;color:#fff;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:1.1rem">×</button>' +
+      '</div>' +
+      '<div style="padding:20px">' +
+        '<label style="display:block;font-size:0.72rem;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">Amount to allocate (£)</label>' +
+        '<input id="alloc-amt" type="number" step="0.01" min="0" value="' + (unalloc || '') + '" style="width:100%;box-sizing:border-box;background:#0f1319;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:11px 13px;color:#fff;font-size:1.05rem;outline:none;margin-bottom:14px" placeholder="0.00" />' +
+        '<label style="display:flex;align-items:center;gap:9px;cursor:pointer;margin-bottom:16px;color:rgba(255,255,255,0.8);font-size:0.9rem">' +
+          '<input id="alloc-income" type="checkbox" checked style="width:17px;height:17px;accent-color:#7c6cfc" /> This is new income — skim Tax & Zakat off the top' +
+        '</label>' +
+        '<div style="font-size:0.72rem;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Where it goes</div>' +
+        '<div id="alloc-preview" style="background:#0f1319;border-radius:10px;padding:6px 4px;max-height:230px;overflow:auto"></div>' +
+        '<div id="alloc-btns" style="display:flex;gap:10px;margin-top:16px"></div>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  document.getElementById('alloc-close').onclick = function () { overlay.remove(); };
+
+  function refresh() {
+    const amt = parseFloat((document.getElementById('alloc-amt') || {}).value) || 0;
+    const income = document.getElementById('alloc-income').checked;
+    const res = runWaterfall(amt, income);
+    const rows = res.lines.map(function (l) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.05)">' +
+        '<span style="color:#fff;font-size:0.9rem">' + esc(l.emoji || '💰') + ' ' + esc(l.name) + '</span>' +
+        '<span style="color:#34d399;font-weight:600">' + fmt(l.amt) + '</span></div>';
+    }).join('');
+    const leftRow = '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 10px;margin-top:2px">' +
+      '<span style="color:rgba(255,255,255,0.55);font-size:0.9rem">Left free to spend</span>' +
+      '<span style="color:' + (res.leftover > 0 ? '#fbbf24' : 'rgba(255,255,255,0.4)') + ';font-weight:700">' + fmt(res.leftover) + '</span></div>';
+    document.getElementById('alloc-preview').innerHTML = (rows || '<div style="padding:12px;color:rgba(255,255,255,0.4);font-size:0.85rem">Nothing to allocate yet.</div>') + leftRow;
+    window._allocLines = res.lines;
+  }
+  document.getElementById('alloc-amt').addEventListener('input', refresh);
+  document.getElementById('alloc-income').addEventListener('change', refresh);
+  refresh();
+
+  const btns = document.getElementById('alloc-btns');
+  const apply = document.createElement('button');
+  apply.className = 'btn-primary'; apply.style.flex = '1'; apply.textContent = 'Apply';
+  apply.onclick = async function () {
+    const lines = window._allocLines || [];
+    if (!lines.length) { alert('Nothing to allocate.'); return; }
+    apply.disabled = true; apply.textContent = 'Saving…';
+    await applyAllocation(lines);
+    overlay.remove();
+  };
+  btns.appendChild(apply);
+}
+
+// ── Pot editor ──
+function openPotEditor(id) {
+  const existing = id ? (pots || []).find((x) => String(x.id) === String(id)) : null;
+  window._potEditId = id || null;
+  const overlay = document.createElement('div');
+  overlay.id = 'pot-dlg';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(4px)';
+  const inp = 'width:100%;box-sizing:border-box;background:#0f1319;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px 12px;color:#fff;font-size:0.95rem;outline:none';
+  const lab = 'display:block;font-size:0.72rem;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.07em;margin:12px 0 5px';
+  overlay.innerHTML =
+    '<div style="width:420px;max-width:92vw;max-height:92vh;overflow:auto;background:#181c28;border-radius:16px;box-shadow:0 24px 64px rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.08)">' +
+      '<div style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:18px 20px;display:flex;align-items:center;justify-content:space-between">' +
+        '<span style="font-weight:700;font-size:1rem;color:#fff">' + (id ? '✏️ Edit pot' : '+ New pot') + '</span>' +
+        '<button id="pot-close" style="background:rgba(255,255,255,0.15);border:none;color:#fff;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:1.1rem">×</button>' +
+      '</div>' +
+      '<div style="padding:8px 20px 20px">' +
+        '<div style="display:flex;gap:10px">' +
+          '<div style="width:64px"><label style="' + lab + '">Icon</label><input id="pot-emoji" style="' + inp + ';text-align:center" maxlength="2" /></div>' +
+          '<div style="flex:1"><label style="' + lab + '">Name</label><input id="pot-name" style="' + inp + '" placeholder="Pot name" /></div>' +
+        '</div>' +
+        '<label style="' + lab + '">Type</label>' +
+        '<select id="pot-kind" style="' + inp + '">' +
+          '<option value="goal">Savings goal (fill to a target)</option>' +
+          '<option value="monthly">Monthly set-aside (recurring £/mo)</option>' +
+          '<option value="percent">% of income (skimmed off the top)</option>' +
+        '</select>' +
+        '<div id="pot-goal-f"><label style="' + lab + '">Target (£)</label><input id="pot-target" type="number" step="0.01" min="0" style="' + inp + '" /></div>' +
+        '<div id="pot-monthly-f"><label style="' + lab + '">Amount per month (£)</label><input id="pot-monthly" type="number" step="0.01" min="0" style="' + inp + '" />' +
+          '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;color:rgba(255,255,255,0.75);font-size:0.85rem;cursor:pointer"><input id="pot-autodebt" type="checkbox" style="width:16px;height:16px;accent-color:#7c6cfc" /> Auto-pull from my total monthly debt payments</label></div>' +
+        '<div id="pot-pct-f"><label style="' + lab + '">Percent of income (%)</label><input id="pot-rate" type="number" step="0.1" min="0" max="100" style="' + inp + '" /></div>' +
+        '<label style="' + lab + '">Priority (lower = funded first)</label><input id="pot-priority" type="number" step="1" style="' + inp + '" />' +
+        '<label style="' + lab + '">Balance now (£)</label><input id="pot-balance" type="number" step="0.01" style="' + inp + '" />' +
+        '<div id="pot-btns" style="display:flex;gap:10px;margin-top:18px"></div>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  document.getElementById('pot-close').onclick = function () { overlay.remove(); };
+
+  const kindSel = document.getElementById('pot-kind');
+  function syncKind() {
+    const k = kindSel.value;
+    document.getElementById('pot-goal-f').style.display = k === 'goal' ? '' : 'none';
+    document.getElementById('pot-monthly-f').style.display = k === 'monthly' ? '' : 'none';
+    document.getElementById('pot-pct-f').style.display = k === 'percent' ? '' : 'none';
+  }
+  kindSel.addEventListener('change', syncKind);
+
+  // defaults / existing
+  document.getElementById('pot-emoji').value = existing ? (existing.emoji || '💰') : '💰';
+  document.getElementById('pot-name').value = existing ? (existing.name || '') : '';
+  kindSel.value = existing ? (existing.kind || 'goal') : 'goal';
+  document.getElementById('pot-target').value = existing ? (existing.target || '') : '';
+  document.getElementById('pot-monthly').value = existing ? (existing.monthly || '') : '';
+  document.getElementById('pot-autodebt').checked = existing ? !!existing.auto_debt : false;
+  document.getElementById('pot-rate').value = existing && existing.rate ? round2(parseNum(existing.rate) * 100) : '';
+  document.getElementById('pot-priority').value = existing ? (existing.priority != null ? existing.priority : 100) : 100;
+  document.getElementById('pot-balance').value = existing ? (existing.balance || 0) : 0;
+  syncKind();
+
+  const btns = document.getElementById('pot-btns');
+  const save = document.createElement('button');
+  save.className = 'btn-primary'; save.style.flex = '1'; save.textContent = 'Save';
+  save.onclick = savePotEditor; btns.appendChild(save);
+  if (id) {
+    const del = document.createElement('button');
+    del.className = 'btn-danger'; del.textContent = 'Delete';
+    del.onclick = function () { deletePot(id); };
+    btns.appendChild(del);
+  }
+}
+
+async function savePotEditor() {
+  const name = (document.getElementById('pot-name') || {}).value || '';
+  if (!name.trim()) { alert('Give the pot a name.'); return; }
+  const kind = document.getElementById('pot-kind').value;
+  const payload = {
+    name: name.trim(),
+    emoji: (document.getElementById('pot-emoji').value || '💰').trim() || '💰',
+    kind: kind,
+    priority: parseInt(document.getElementById('pot-priority').value, 10) || 100,
+    target: kind === 'goal' ? (parseFloat(document.getElementById('pot-target').value) || 0) : 0,
+    monthly: kind === 'monthly' ? (parseFloat(document.getElementById('pot-monthly').value) || 0) : 0,
+    auto_debt: kind === 'monthly' ? document.getElementById('pot-autodebt').checked : false,
+    rate: kind === 'percent' ? round2((parseFloat(document.getElementById('pot-rate').value) || 0) / 100) : 0,
+    balance: round2(parseFloat(document.getElementById('pot-balance').value) || 0),
+  };
+  const id = window._potEditId;
+  const res = id
+    ? await window.db.from('pots').update(payload).eq('id', id)
+    : await window.db.from('pots').insert([payload]);
+  if (res.error) { alert('Error: ' + res.error.message); return; }
+  const dlg = document.getElementById('pot-dlg'); if (dlg) dlg.remove();
+  await loadAll();
+}
+
+async function deletePot(id) {
+  if (!confirm('Delete this pot? The money it held just returns to "free to assign".')) return;
+  const res = await window.db.from('pots').delete().eq('id', id);
+  if (res.error) { alert('Error: ' + res.error.message); return; }
+  const dlg = document.getElementById('pot-dlg'); if (dlg) dlg.remove();
+  await loadAll();
+}
