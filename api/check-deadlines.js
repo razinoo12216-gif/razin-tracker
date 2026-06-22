@@ -78,22 +78,31 @@ export default async function handler(req, res) {
   );
 
   if (mode === 'reminders') {
-    const due = timedToday.filter((t) => {
+    // Two pings per timed task: a heads-up `lead` minutes before (default 10, ?lead=0 to disable)
+    // and a `now` ping at the task time. Window W=6 tolerates a ~5-min cron + jitter so nothing is missed.
+    const leadQ = req.query && req.query.lead;
+    const LEAD = (leadQ != null && leadQ !== '') ? parseInt(leadQ, 10) : 10;
+    const W = 6;
+    const events = [];
+    for (const t of timedToday) {
       const hm = t.time.split(':');
       const mins = (parseInt(hm[0], 10) * 60 + parseInt(hm[1], 10)) - nowMinutes;
-      return mins >= 55 && mins < 60;
-    });
-    if (due.length === 0) return res.status(200).json({ message: 'Nothing due', todayStr, nowMinutes, taskCount: allTasks.length, timedToday: timedToday.length });
+      if (LEAD > 0 && mins >= LEAD && mins < LEAD + W) events.push({ t, kind: 'pre' });
+      if (mins >= 0 && mins < W) events.push({ t, kind: 'now' });
+    }
+    if (events.length === 0) return res.status(200).json({ message: 'Nothing due', todayStr, nowMinutes, taskCount: allTasks.length, timedToday: timedToday.length });
     const subs = await getSubs(supabaseUrl, headers);
     if (!subs.length) return res.status(200).json({ message: 'No subscribers' });
     let sent = 0;
     const stale = [];
-    for (const t of due) {
-      const payload = JSON.stringify({ title: 'In 1 hour — ' + t.title, body: t.time + ' · ' + t.title, url: '/?tab=today', tag: 'task-' + t.id });
+    for (const e of events) {
+      const t = e.t;
+      const title = e.kind === 'pre' ? ('In ' + LEAD + ' min — ' + t.title) : ('Now — ' + t.title);
+      const payload = JSON.stringify({ title, body: t.time + ' · ' + t.title, url: '/?tab=today', tag: 'task-' + t.id + '-' + e.kind });
       sent += await sendAll(subs, payload, stale);
     }
     await cleanStale(supabaseUrl, headers, stale);
-    return res.status(200).json({ sent, reminders: due.length, tasks: due.map((t) => t.title) });
+    return res.status(200).json({ sent, reminders: events.length, lead: LEAD, tasks: events.map((e) => e.kind + ':' + e.t.title) });
   }
 
   // agenda mode
