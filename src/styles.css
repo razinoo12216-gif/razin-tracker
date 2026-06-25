@@ -1843,3 +1843,33 @@ dialog .actions {
   font-size: 0.76rem; font-weight: 600; cursor: pointer;
 }
 .pot-mini:active { transform: scale(0.96); }
+
+/* Inline card notes (added so notes show on card face without opening) */
+.task-notes {
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: pre-wrap;
+  line-height: 1.35;
+  margin-top: 1px;
+  word-break: break-word;
+}
+.task-row.done .task-notes { text-decoration: line-through; }
+.work-card-notes {
+  margin-top: 8px;
+  padding-left: 32px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: pre-wrap;
+  line-height: 1.35;
+  word-break: break-word;
+}
+.card-notes {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: pre-wrap;
+  line-height: 1.4;
+  word-break: break-word;
+}
