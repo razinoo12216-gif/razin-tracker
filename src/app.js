@@ -336,6 +336,7 @@ async function loadAll() {
   try { const {data:_nts} = await window.db.from('user_notes').select('*').order('created_at',{ascending:false}); userNotes = _nts || []; } catch(_e) {}
   try { const {data:_pots} = await window.db.from('pots').select('*').order('priority',{ascending:true}); pots = _pots || []; } catch(_e) {}
   try { const {data:_ps} = await window.db.from('pot_settings').select('*').eq('id',1).single(); if (_ps) potSettings = _ps; } catch(_e) {}
+  render(); // re-render once trailing loads (pots, receivables, notes, macros) are in — fixes stale header/sections on first load
   try { saveLocalBackup(); } catch(_e) {}
   try { checkBackupRestore(); } catch(_e) {}
 }
@@ -838,6 +839,7 @@ function renderTask(t) {
       <div class="task-body">
         <div class="task-title">${esc(t.title)}${recurringIcon}</div>
         ${catBadge}
+        ${t.notes ? `<div class="task-notes">${esc(t.notes)}</div>` : ''}
       </div>
     </div>`;
 }
@@ -1716,6 +1718,7 @@ function renderDebt(d) {
         ${paymentCount > 0 ? `<span>${paymentCount} payment${paymentCount !== 1 ? 's' : ''}</span>` : ''}
       </div>
       ${!isPaid ? `<button type="button" class="debt-pay-btn" data-id="${esc(d.id)}">+ Log payment</button>` : ''}
+      ${(d.notes && !d.notes.trim().startsWith('{')) ? `<div class="card-notes">${esc(d.notes)}</div>` : ''}
     </div>
   `;
 }
@@ -1943,6 +1946,7 @@ function renderReview(r) {
         <span class="review-score ${avgClass}">${avg.toFixed(1)}<small>/10</small></span>
       </div>
       ${winsPreview ? `<div class="review-snippet"><label>Wins</label><p>${esc(winsPreview)}</p></div>` : ''}
+      ${r.notes && r.notes.trim() ? `<div class="review-snippet"><label>Notes</label><p>${esc(r.notes.trim())}</p></div>` : ''}
       <div class="review-scores">
         <span>Prayer ${scores[0]}</span>
         <span>Gym ${scores[1]}</span>
@@ -2006,6 +2010,7 @@ function renderInvoiceCard(inv) {
     </div>
     ${sectionsHtml}
     <div class="inv-card-total"><span>Total</span><span class="inv-total-num">£${total.toLocaleString()}</span></div>
+    ${inv.notes ? `<div class="card-notes">${esc(inv.notes)}</div>` : ''}
     <div class="inv-card-actions">
       <button class="work-btn-ghost inv-copy-btn" onclick="event.stopPropagation();copyInvoiceText('${inv.id}')">Copy text</button>
     </div>
@@ -2020,7 +2025,7 @@ function renderWorkTaskCard(t, companies) {
   const isDone   = t.status === 'done';
   const dueBadge = meta.due ? workDaysBadge(meta.due) : '';
   const priCls   = {high:'work-pri-high',medium:'work-pri-med',low:'work-pri-low'}[meta.priority] || 'work-pri-med';
-  return `<div class="card work-task-card${isDone?' work-task-done':''}" onclick="openWorkTaskEditor('${t.id}')"><div class="work-task-row"><button class="work-check${isDone?' checked':''}" onclick="event.stopPropagation();toggleWorkTaskDone('${t.id}',${isDone})">${isDone?'&#10003;':''}</button><span class="work-task-name">${esc(t.name)}</span>${dueBadge}</div>${(co||meta.category||meta.priority)?`<div class="work-task-tags">${co?`<span class="work-tag">${co}</span>`:''} ${meta.category?`<span class="work-tag">${esc(meta.category)}</span>`:''} ${meta.priority?`<span class="work-tag ${priCls}">${esc(meta.priority)}</span>`:''}</div>`:''}</div>`;
+  return `<div class="card work-task-card${isDone?' work-task-done':''}" onclick="openWorkTaskEditor('${t.id}')"><div class="work-task-row"><button class="work-check${isDone?' checked':''}" onclick="event.stopPropagation();toggleWorkTaskDone('${t.id}',${isDone})">${isDone?'&#10003;':''}</button><span class="work-task-name">${esc(t.name)}</span>${dueBadge}</div>${(co||meta.category||meta.priority)?`<div class="work-task-tags">${co?`<span class="work-tag">${co}</span>`:''} ${meta.category?`<span class="work-tag">${esc(meta.category)}</span>`:''} ${meta.priority?`<span class="work-tag ${priCls}">${esc(meta.priority)}</span>`:''}</div>`:''}${meta.notes?`<div class="work-card-notes">${esc(meta.notes)}</div>`:''}</div>`;
 }
 
 function renderWorkCompanyCard(c) {
@@ -2031,7 +2036,7 @@ function renderWorkCompanyCard(c) {
   const owner  = {raz:'Raz',partial:'Partial',other:'Other'}[status] || 'Other';
   const accBdg = meta.accounts_due     ? workDaysBadge(meta.accounts_due)     : '<span class="work-na">—</span>';
   const conBdg = meta.confirmation_due ? workDaysBadge(meta.confirmation_due) : '<span class="work-na">—</span>';
-  return `<div class="card work-company-card" style="border-left:3px solid ${col}" onclick="openWorkCompanyEditor('${c.id}')"><div class="work-co-head"><span class="work-co-name">${esc(c.name)}</span><span class="work-owner-badge" style="color:${col};border-color:${col}">${owner}</span></div>${meta.company_number?`<div class="work-ch-ref">CH: ${esc(meta.company_number)}</div>`:''}<div class="work-due-row"><span class="work-due-lbl">Accounts due</span>${accBdg}</div><div class="work-due-row"><span class="work-due-lbl">Conf. statement</span>${conBdg}</div>${meta.rent?`<div class="work-due-row"><span class="work-due-lbl">Rent</span><span class="work-days-badge work-badge-ok">£${esc(String(meta.rent))}</span></div>`:``}${meta.salary?`<div class="work-due-row"><span class="work-due-lbl">Salary</span><span class="work-days-badge work-badge-ok">£${esc(String(meta.salary))}</span></div>`:``}</div>`;
+  return `<div class="card work-company-card" style="border-left:3px solid ${col}" onclick="openWorkCompanyEditor('${c.id}')"><div class="work-co-head"><span class="work-co-name">${esc(c.name)}</span><span class="work-owner-badge" style="color:${col};border-color:${col}">${owner}</span></div>${meta.company_number?`<div class="work-ch-ref">CH: ${esc(meta.company_number)}</div>`:''}<div class="work-due-row"><span class="work-due-lbl">Accounts due</span>${accBdg}</div><div class="work-due-row"><span class="work-due-lbl">Conf. statement</span>${conBdg}</div>${meta.rent?`<div class="work-due-row"><span class="work-due-lbl">Rent</span><span class="work-days-badge work-badge-ok">£${esc(String(meta.rent))}</span></div>`:``}${meta.salary?`<div class="work-due-row"><span class="work-due-lbl">Salary</span><span class="work-days-badge work-badge-ok">£${esc(String(meta.salary))}</span></div>`:``}${meta.notes?`<div class="work-card-notes">${esc(meta.notes)}</div>`:``}</div>`;
 }
 
 function workDaysBadge(dateStr) {
@@ -3048,11 +3053,14 @@ function renderTravel() {
     var total = trips.reduce(function(acc, t) { return acc + parseFloat(t.total_cost || 0); }, 0);
     var label = new Date(m + '-02').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
     var tripRows = trips.map(function(t) {
-      return '<div onclick="openTripEditor(window._ttm[\'' + t.id + '\'])" style="display:flex;align-items:center;padding:11px 16px;border-bottom:1px solid #111;cursor:pointer;gap:12px">'
+      var tNotes = t.notes ? '<div style="color:#888;font-size:12px;padding:0 16px 9px;white-space:pre-wrap;line-height:1.35">' + esc(t.notes) + '</div>' : '';
+      return '<div onclick="openTripEditor(window._ttm[\'' + t.id + '\'])" style="border-bottom:1px solid #111;cursor:pointer">'
+        + '<div style="display:flex;align-items:center;padding:11px 16px;gap:12px">'
         + '<span style="font-weight:600;color:#fff;min-width:100px">' + t.postcode + '</span>'
         + '<span style="color:#666;font-size:13px;flex:1">' + t.miles + ' mi &middot; ' + t.hours + 'h</span>'
         + '<span style="color:#666;font-size:12px">' + t.date + '</span>'
         + '<span style="color:#c9a84c;font-weight:700;min-width:65px;text-align:right">&pound;' + parseFloat(t.total_cost).toFixed(2) + '</span>'
+        + '</div>' + tNotes
         + '</div>';
     }).join('');
     return '<div style="background:#1a1a1a;border-radius:10px;margin-bottom:12px;overflow:hidden">'
