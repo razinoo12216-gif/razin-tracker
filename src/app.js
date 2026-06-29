@@ -47,6 +47,9 @@ let selectedMonth = currentMonth();
 let selectedDay = todayISO();
 let selectedYear = new Date().getFullYear();
 let activeTab = 'today';
+let incomeEntries = [];
+let incomeView = 'month';
+let incomeRef = todayISO();
 let ticketTypeFilter = 'all';
 
 const taskEditor = $('#task-editor');
@@ -336,6 +339,7 @@ async function loadAll() {
   try { const {data:_nts} = await window.db.from('user_notes').select('*').order('created_at',{ascending:false}); userNotes = _nts || []; } catch(_e) {}
   try { const {data:_pots} = await window.db.from('pots').select('*').order('priority',{ascending:true}); pots = _pots || []; } catch(_e) {}
   try { const {data:_ps} = await window.db.from('pot_settings').select('*').eq('id',1).single(); if (_ps) potSettings = _ps; } catch(_e) {}
+  try { const {data:_inc} = await window.db.from('income_entries').select('*').order('date',{ascending:false}); incomeEntries = _inc || []; } catch(_e) {}
   render(); // re-render once trailing loads (pots, receivables, notes, macros) are in — fixes stale header/sections on first load
   try { saveLocalBackup(); } catch(_e) {}
   try { checkBackupRestore(); } catch(_e) {}
@@ -461,7 +465,7 @@ function renderPotentialTotals(potentials) {
 }
 
 function render() {
-  if(!['today','drive','review','invoice','ticket','debt','gym','project','potential','expense','notes','pots'].includes(activeTab))activeTab='today';
+  if(!['today','drive','review','invoice','ticket','debt','gym','project','potential','expense','notes','pots','income'].includes(activeTab))activeTab='today';
   // Month-scoped: expenses use month filter; projects are ongoing (not month-scoped)
   const moneyEntries = entries.filter((e) => e.type !== 'potential');
   const inMonth = moneyEntries.filter((e) => matchesMonth(e, selectedMonth));
@@ -490,21 +494,24 @@ function render() {
   if (debtCountEl) debtCountEl.textContent = String(debts.filter(d => d.type !== 'receivable' && d.status !== 'paid').length);
   const potCountEl = $('#tc-pots');
   if (potCountEl) potCountEl.textContent = String((pots || []).filter(p => !p.archived).length);
+  const incCountEl = $('#tc-income');
+  if (incCountEl) incCountEl.textContent = String((incomeEntries || []).length);
 
   // Hide/show header bits based on tab
   const totalsEl = document.querySelector('.totals');
   const monthSelEl = $('#month-select');
   const addBtnEl = $('#add-btn');
   const hideContext = activeTab === 'drive' || activeTab === 'today';
-  if (totalsEl) totalsEl.style.display = hideContext ? 'none' : '';
-  if (monthSelEl) monthSelEl.style.display = (hideContext || activeTab === 'ticket' || activeTab === 'debt' || activeTab === 'pots') ? 'none' : '';
-  if (addBtnEl) addBtnEl.style.display = (activeTab === 'today' || activeTab === 'pots') ? 'none' : '';
+  if (totalsEl) totalsEl.style.display = (hideContext || activeTab === 'income') ? 'none' : '';
+  if (monthSelEl) monthSelEl.style.display = (hideContext || activeTab === 'ticket' || activeTab === 'debt' || activeTab === 'pots' || activeTab === 'income') ? 'none' : '';
+  if (addBtnEl) addBtnEl.style.display = (activeTab === 'today' || activeTab === 'pots' || activeTab === 'income') ? 'none' : '';
 
   if (activeTab === 'ticket') renderTicketTotals();
   if (activeTab === 'debt') renderDebtTotals();
   if (activeTab === 'pots') renderPotTotals();
 
   if (activeTab === 'pots') return renderPots();
+  if (activeTab === 'income') return renderIncome();
   if (activeTab === 'today') return renderToday();
   if (activeTab === 'drive') return renderDrive();
   if (activeTab === 'review') return renderReviews();
@@ -3925,3 +3932,147 @@ async function deletePot(id) {
   const dlg = document.getElementById('pot-dlg'); if (dlg) dlg.remove();
   await loadAll();
 }
+
+/* ===== Income ledger — actual earnings (incl. costs/net) across all streams, daily/weekly/monthly ===== */
+function incomeISO(d){ return d.toISOString().slice(0,10); }
+function incomeMondayOf(iso){ const d=new Date(iso+'T00:00:00'); const dow=(d.getDay()+6)%7; d.setDate(d.getDate()-dow); return d; }
+function incomePeriodBounds(){
+  const ref = incomeRef || todayISO();
+  if (incomeView === 'day') return [ref, ref];
+  if (incomeView === 'week'){ const mon=incomeMondayOf(ref); const sun=new Date(mon); sun.setDate(mon.getDate()+6); return [incomeISO(mon), incomeISO(sun)]; }
+  const ym = ref.slice(0,7); return [ym+'-01', ym+'-31'];
+}
+function incomePeriodLabel(){
+  const [s,e]=incomePeriodBounds();
+  if (incomeView==='day') return new Date(s+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+  if (incomeView==='week') return new Date(s+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' – '+new Date(e+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  return new Date((incomeRef||todayISO())+'T00:00:00').toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+}
+function incomeSetView(v){ incomeView=v; incomeRef=todayISO(); render(); }
+function incomeShift(dir){
+  const d=new Date((incomeRef||todayISO())+'T00:00:00');
+  if (incomeView==='day') d.setDate(d.getDate()+dir);
+  else if (incomeView==='week') d.setDate(d.getDate()+dir*7);
+  else d.setMonth(d.getMonth()+dir);
+  incomeRef=incomeISO(d); render();
+}
+function incomeJumpToday(){ incomeRef=todayISO(); render(); }
+
+function renderIncome(){
+  if (!window.SUPABASE_CONFIGURED) { list.innerHTML='<div class="empty error">Supabase not configured.</div>'; return; }
+  const [start,end]=incomePeriodBounds();
+  const rows=(incomeEntries||[]).filter(x=>x.date>=start && x.date<=end)
+    .sort((a,b)=> (b.date===a.date ? String(b.created_at||'').localeCompare(String(a.created_at||'')) : b.date.localeCompare(a.date)));
+  let inc=0,cost=0;
+  rows.forEach(r=>{ inc+=parseNum(r.amount); cost+=parseNum(r.cost); });
+  const net=round2(inc-cost);
+
+  const cats={};
+  rows.forEach(r=>{ const k=((r.category||'').trim())||'Uncategorised'; if(!cats[k]) cats[k]={inc:0,cost:0}; cats[k].inc+=parseNum(r.amount); cats[k].cost+=parseNum(r.cost); });
+  const catArr=Object.keys(cats).map(k=>({name:k,inc:cats[k].inc,cost:cats[k].cost,net:round2(cats[k].inc-cats[k].cost)})).sort((a,b)=>b.net-a.net);
+
+  const toggle = [['day','Day'],['week','Week'],['month','Month']].map(([v,l])=>`<button class="inc-tg${incomeView===v?' active':''}" onclick="incomeSetView('${v}')">${l}</button>`).join('');
+
+  const totals = `
+    <div class="inc-totals">
+      <div class="inc-tot-cell"><span class="inc-tot-lbl">Income</span><span class="inc-tot-val pos">${fmt(inc)}</span></div>
+      <div class="inc-tot-cell"><span class="inc-tot-lbl">Costs</span><span class="inc-tot-val">${fmt(cost)}</span></div>
+      <div class="inc-tot-cell inc-tot-net"><span class="inc-tot-lbl">Net profit</span><span class="inc-tot-val ${net<0?'neg':'pos'}">${fmt(net)}</span></div>
+    </div>`;
+
+  const breakdown = catArr.length ? `
+    <div class="inc-section-title">By stream</div>
+    <div class="inc-cats">${catArr.map(c=>`
+      <div class="inc-cat-row">
+        <span class="inc-cat-name">${esc(c.name)}</span>
+        <span class="inc-cat-nums"><span class="pos">${fmt(c.inc)}</span>${c.cost?` <span class="inc-cat-cost">− ${fmt(c.cost)}</span>`:''} <span class="inc-cat-net ${c.net<0?'neg':'pos'}">${fmt(c.net)}</span></span>
+      </div>`).join('')}</div>` : '';
+
+  const entriesHtml = rows.length ? rows.map(r=>{
+    const n=round2(parseNum(r.amount)-parseNum(r.cost));
+    const dlabel=new Date(r.date+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    return `<div class="inc-entry" onclick="openIncomeEditor('${r.id}')">
+      <div class="inc-entry-main">
+        <span class="inc-entry-cat">${esc((r.category||'').trim()||'Uncategorised')}</span>
+        ${r.note?`<span class="inc-entry-note">${esc(r.note)}</span>`:''}
+      </div>
+      <div class="inc-entry-right">
+        <span class="inc-entry-net ${n<0?'neg':'pos'}">${fmt(n)}</span>
+        <span class="inc-entry-sub">+${fmt(parseNum(r.amount))}${parseNum(r.cost)?` · −${fmt(parseNum(r.cost))}`:''} · ${dlabel}</span>
+      </div>
+    </div>`;
+  }).join('') : '<div class="empty">No income logged for this period. Hit <strong>+ Add income</strong>.</div>';
+
+  list.innerHTML = `
+    <div class="inc-page">
+      <div class="inc-bar">
+        <div class="inc-toggle">${toggle}</div>
+        <div class="inc-nav">
+          <button class="inc-navbtn" onclick="incomeShift(-1)" aria-label="Previous">‹</button>
+          <button class="inc-period" onclick="incomeJumpToday()">${esc(incomePeriodLabel())}</button>
+          <button class="inc-navbtn" onclick="incomeShift(1)" aria-label="Next">›</button>
+        </div>
+      </div>
+      ${totals}
+      <div class="inc-actions"><button class="inc-add" onclick="openIncomeEditor(null)">+ Add income</button></div>
+      ${breakdown}
+      <div class="inc-section-title">Entries</div>
+      <div class="inc-entries">${entriesHtml}</div>
+    </div>`;
+}
+
+function openIncomeEditor(id){
+  window._editingIncomeId = id || null;
+  const e = id ? (incomeEntries||[]).find(x=>String(x.id)===String(id)) : null;
+  const cats=[...new Set((incomeEntries||[]).map(x=>(x.category||'').trim()).filter(Boolean))];
+  const dl = cats.map(c=>`<option value="${esc(c)}"></option>`).join('');
+  showWorkModal(`
+    <h3 class="work-modal-title">${e?'Edit income':'Add income'}</h3>
+    <form id="income-form" onsubmit="return saveIncome(event)">
+      <label class="work-lbl">Date</label>
+      <input class="work-input" type="date" id="inc-date" value="${e?esc(e.date):todayISO()}" required/>
+      <label class="work-lbl">Stream / label</label>
+      <input class="work-input" id="inc-cat" list="inc-cat-list" placeholder="e.g. Company formations" value="${e?esc(e.category||''):''}"/>
+      <datalist id="inc-cat-list">${dl}</datalist>
+      <div class="work-row-2">
+        <div><label class="work-lbl">Income (£)</label><input class="work-input" type="number" step="any" inputmode="decimal" id="inc-amt" placeholder="0" value="${e?esc(e.amount):''}"/></div>
+        <div><label class="work-lbl">Cost (£)</label><input class="work-input" type="number" step="any" inputmode="decimal" id="inc-cost" placeholder="0" value="${e?esc(e.cost):''}"/></div>
+      </div>
+      <label class="work-lbl">Note</label>
+      <textarea class="work-input" id="inc-note" rows="2" placeholder="What was this? e.g. set up 3 companies for X">${e?esc(e.note||''):''}</textarea>
+      <div class="work-modal-actions">
+        ${e?`<button type="button" class="work-btn-danger" onclick="deleteIncomeEntry('${e.id}')">Delete</button>`:'<span></span>'}
+        <div class="work-modal-right">
+          <button type="button" class="work-btn-ghost" onclick="closeWorkModal()">Cancel</button>
+          <button type="submit" class="work-btn-primary">Save</button>
+        </div>
+      </div>
+    </form>`);
+  setTimeout(()=>{ const el=document.getElementById('inc-amt'); if(el) el.focus(); },50);
+}
+
+async function saveIncome(ev){
+  ev.preventDefault();
+  const date=(document.getElementById('inc-date').value)||todayISO();
+  const category=(document.getElementById('inc-cat').value||'').trim();
+  const amount=parseNum(document.getElementById('inc-amt').value);
+  const cost=parseNum(document.getElementById('inc-cost').value);
+  const note=(document.getElementById('inc-note').value||'').trim();
+  if (!amount && !cost){ alert('Enter an income or cost amount.'); return false; }
+  const editing = window._editingIncomeId || null;
+  const payload={ date, category: category||null, amount, cost, note: note||null };
+  const res = editing
+    ? await window.db.from('income_entries').update(payload).eq('id', editing)
+    : await window.db.from('income_entries').insert([payload]);
+  if (res.error){ alert('Error: '+res.error.message); return false; }
+  closeWorkModal(); window._editingIncomeId=null; await loadAll();
+  return false;
+}
+
+async function deleteIncomeEntry(id){
+  if (!confirm('Delete this income entry?')) return;
+  const res=await window.db.from('income_entries').delete().eq('id', id);
+  if (res.error){ alert('Error: '+res.error.message); return; }
+  closeWorkModal(); window._editingIncomeId=null; await loadAll();
+}
+
