@@ -1916,3 +1916,80 @@ dialog .actions {
 .inc-entry-net.neg { color: #f87171; }
 .inc-entry-sub { font-size: 0.7rem; color: var(--muted); }
 .work-modal-right { display: flex; gap: 8px; }
+
+/* ===== Life Progress ===== */
+.life-page { display:flex; flex-direction:column; gap:14px; }
+.life-subnav { display:flex; gap:6px; background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:4px; }
+.life-subtab { flex:1; padding:9px 0; border:none; background:transparent; color:var(--muted); font-size:0.9rem; font-weight:700; border-radius:7px; cursor:pointer; }
+.life-subtab.active { background:var(--gold); color:#1a1500; }
+.life-body { display:flex; flex-direction:column; gap:14px; }
+.life-actions { display:flex; }
+.life-add { flex:1; padding:11px; border:1px solid rgba(251,191,36,0.5); background:rgba(251,191,36,0.12); color:var(--gold); font-size:0.88rem; font-weight:700; border-radius:10px; cursor:pointer; }
+.life-add:hover { background:rgba(251,191,36,0.2); }
+.life-empty-sm { color:var(--muted); font-size:0.82rem; padding:10px 2px; }
+.life-section-title { font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); font-weight:700; margin:4px 2px -2px; display:flex; justify-content:space-between; align-items:center; }
+.life-hint { font-size:0.7rem; color:var(--muted); text-transform:none; letter-spacing:0; font-weight:500; }
+.life-range-val { text-align:center; color:var(--text); font-weight:700; font-size:0.85rem; margin-top:2px; }
+.work-row-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+
+/* progress bar */
+.life-bar { height:7px; background:var(--panel-3); border-radius:6px; overflow:hidden; }
+.life-bar-fill { height:100%; background:linear-gradient(90deg,var(--gold),#fde68a); border-radius:6px; transition:width .25s; }
+.life-bar-fill.bad { background:var(--danger); }
+
+/* domain tags */
+.life-dom { display:inline-block; font-size:0.62rem; font-weight:800; text-transform:uppercase; letter-spacing:0.05em; padding:2px 7px; border-radius:20px; background:rgba(255,255,255,0.07); color:var(--muted); }
+.life-dom.dom-money { background:rgba(34,197,94,0.16); color:#34d399; }
+.life-dom.dom-health { background:rgba(59,130,246,0.16); color:#60a5fa; }
+.life-dom.dom-faith { background:rgba(251,191,36,0.16); color:var(--gold); }
+.life-dom.dom-sales-skills { background:rgba(168,85,247,0.18); color:#c084fc; }
+.life-dom.dom-network { background:rgba(20,184,166,0.18); color:#2dd4bf; }
+.life-dom.dom-discipline { background:rgba(239,68,68,0.16); color:#f87171; }
+
+/* goals */
+.life-goal-group { display:flex; flex-direction:column; gap:8px; }
+.life-group-head { font-size:0.95rem; font-weight:800; color:var(--text); margin-top:4px; }
+.life-group-count { color:var(--muted); font-weight:600; font-size:0.8rem; }
+.life-goal-card { background:var(--panel-2); border:1px solid var(--border); border-radius:12px; padding:13px 14px; display:flex; flex-direction:column; gap:8px; cursor:pointer; }
+.life-goal-card:hover { border-color:var(--border-2); }
+.life-goal-card.done { opacity:0.6; }
+.life-goal-card.paused { opacity:0.75; }
+.life-goal-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.life-goal-title { font-size:0.98rem; font-weight:700; color:var(--text); }
+.life-goal-why { font-size:0.8rem; color:var(--muted); }
+.life-goal-metric { font-size:0.82rem; color:var(--text); }
+.life-arrow { color:var(--muted); }
+.life-goal-foot { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.life-goal-pct { font-size:0.9rem; font-weight:800; color:var(--gold); }
+.life-goal-meta { font-size:0.72rem; color:var(--muted); }
+
+/* daily targets */
+.life-day-bar { display:flex; align-items:center; gap:8px; }
+.life-ring-row { display:flex; }
+.life-ring-cell { flex:1; background:var(--panel-2); border:1px solid rgba(251,191,36,0.4); border-radius:12px; padding:12px; text-align:center; display:flex; flex-direction:column; gap:3px; }
+.life-ring-pct { font-size:1.6rem; font-weight:800; color:var(--gold); }
+.life-ring-lbl { font-size:0.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; }
+.life-targets { display:flex; flex-direction:column; gap:8px; }
+.life-target-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 13px; background:var(--panel-2); border:1px solid var(--border); border-radius:10px; cursor:pointer; }
+.life-target-row.met { border-color:rgba(34,197,94,0.4); background:rgba(34,197,94,0.06); }
+.life-target-main { display:flex; flex-direction:column; gap:4px; min-width:0; flex:1; }
+.life-target-title { font-size:0.92rem; font-weight:600; color:var(--text); }
+.life-target-sub { display:flex; align-items:center; gap:8px; }
+.life-streak { font-size:0.72rem; color:#fb923c; font-weight:700; }
+.life-target-ctl { flex-shrink:0; }
+.life-check { width:34px; height:34px; border-radius:9px; border:2px solid var(--border-2); background:transparent; color:#fff; font-size:1.1rem; cursor:pointer; }
+.life-check.on { background:var(--green); border-color:var(--green); color:#04210f; }
+.life-counter { display:flex; align-items:center; gap:8px; }
+.life-cbtn { width:32px; height:32px; border-radius:8px; border:1px solid var(--border-2); background:var(--panel-3); color:var(--text); font-size:1.2rem; line-height:1; cursor:pointer; }
+.life-cval { min-width:42px; text-align:center; font-weight:800; color:var(--text); }
+.life-ctar { color:var(--muted); font-weight:600; font-size:0.85rem; }
+
+/* weekly */
+.life-weeks { display:flex; flex-direction:column; gap:10px; }
+.life-week-row { background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:11px 13px; display:flex; flex-direction:column; gap:8px; cursor:pointer; }
+.life-week-top { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.life-week-count { font-weight:800; color:var(--text); font-size:0.9rem; }
+.life-week-count.pos { color:#34d399; }
+.life-week-ctl { display:flex; gap:8px; justify-content:flex-end; }
+.life-week-pct { color:var(--gold); font-weight:800; }
+.life-check-inline { display:flex; align-items:center; gap:8px; color:var(--text); font-size:0.88rem; margin-top:10px; cursor:pointer; }

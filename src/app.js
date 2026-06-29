@@ -50,6 +50,13 @@ let activeTab = 'today';
 let incomeEntries = [];
 let incomeView = 'month';
 let incomeRef = todayISO();
+let lifeGoals = [];
+let dailyTargets = [];
+let dailyLogs = [];
+let weeklyTargets = [];
+let weeklyLogs = [];
+let lifeSubTab = 'goals';
+let lifeDay = todayISO();
 let ticketTypeFilter = 'all';
 
 const taskEditor = $('#task-editor');
@@ -340,6 +347,11 @@ async function loadAll() {
   try { const {data:_pots} = await window.db.from('pots').select('*').order('priority',{ascending:true}); pots = _pots || []; } catch(_e) {}
   try { const {data:_ps} = await window.db.from('pot_settings').select('*').eq('id',1).single(); if (_ps) potSettings = _ps; } catch(_e) {}
   try { const {data:_inc} = await window.db.from('income_entries').select('*').order('date',{ascending:false}); incomeEntries = _inc || []; } catch(_e) {}
+  try { const {data:_lg} = await window.db.from('life_goals').select('*').order('sort_order',{ascending:true}); lifeGoals = _lg || []; } catch(_e) {}
+  try { const {data:_dt} = await window.db.from('daily_targets').select('*').order('sort_order',{ascending:true}); dailyTargets = _dt || []; } catch(_e) {}
+  try { const {data:_dl} = await window.db.from('daily_logs').select('*'); dailyLogs = _dl || []; } catch(_e) {}
+  try { const {data:_wt} = await window.db.from('weekly_targets').select('*').order('sort_order',{ascending:true}); weeklyTargets = _wt || []; } catch(_e) {}
+  try { const {data:_wl} = await window.db.from('weekly_logs').select('*'); weeklyLogs = _wl || []; } catch(_e) {}
   render(); // re-render once trailing loads (pots, receivables, notes, macros) are in — fixes stale header/sections on first load
   try { saveLocalBackup(); } catch(_e) {}
   try { checkBackupRestore(); } catch(_e) {}
@@ -465,7 +477,7 @@ function renderPotentialTotals(potentials) {
 }
 
 function render() {
-  if(!['today','drive','review','invoice','ticket','debt','gym','project','potential','expense','notes','pots','income'].includes(activeTab))activeTab='today';
+  if(!['today','drive','review','invoice','ticket','debt','gym','project','potential','expense','notes','pots','income','life'].includes(activeTab))activeTab='today';
   // Month-scoped: expenses use month filter; projects are ongoing (not month-scoped)
   const moneyEntries = entries.filter((e) => e.type !== 'potential');
   const inMonth = moneyEntries.filter((e) => matchesMonth(e, selectedMonth));
@@ -496,15 +508,17 @@ function render() {
   if (potCountEl) potCountEl.textContent = String((pots || []).filter(p => !p.archived).length);
   const incCountEl = $('#tc-income');
   if (incCountEl) incCountEl.textContent = String((incomeEntries || []).length);
+  const lifeCountEl = $('#tc-life');
+  if (lifeCountEl) lifeCountEl.textContent = String((lifeGoals || []).filter(g => g.status !== 'done').length);
 
   // Hide/show header bits based on tab
   const totalsEl = document.querySelector('.totals');
   const monthSelEl = $('#month-select');
   const addBtnEl = $('#add-btn');
   const hideContext = activeTab === 'drive' || activeTab === 'today';
-  if (totalsEl) totalsEl.style.display = (hideContext || activeTab === 'income') ? 'none' : '';
-  if (monthSelEl) monthSelEl.style.display = (hideContext || activeTab === 'ticket' || activeTab === 'debt' || activeTab === 'pots' || activeTab === 'income') ? 'none' : '';
-  if (addBtnEl) addBtnEl.style.display = (activeTab === 'today' || activeTab === 'pots' || activeTab === 'income') ? 'none' : '';
+  if (totalsEl) totalsEl.style.display = (hideContext || activeTab === 'income' || activeTab === 'life') ? 'none' : '';
+  if (monthSelEl) monthSelEl.style.display = (hideContext || activeTab === 'ticket' || activeTab === 'debt' || activeTab === 'pots' || activeTab === 'income' || activeTab === 'life') ? 'none' : '';
+  if (addBtnEl) addBtnEl.style.display = (activeTab === 'today' || activeTab === 'pots' || activeTab === 'income' || activeTab === 'life') ? 'none' : '';
 
   if (activeTab === 'ticket') renderTicketTotals();
   if (activeTab === 'debt') renderDebtTotals();
@@ -512,6 +526,7 @@ function render() {
 
   if (activeTab === 'pots') return renderPots();
   if (activeTab === 'income') return renderIncome();
+  if (activeTab === 'life') return renderLife();
   if (activeTab === 'today') return renderToday();
   if (activeTab === 'drive') return renderDrive();
   if (activeTab === 'review') return renderReviews();
@@ -4074,5 +4089,315 @@ async function deleteIncomeEntry(id){
   const res=await window.db.from('income_entries').delete().eq('id', id);
   if (res.error){ alert('Error: '+res.error.message); return; }
   closeWorkModal(); window._editingIncomeId=null; await loadAll();
+}
+
+/* ===================== LIFE PROGRESS (Goals + Targets) ===================== */
+const LIFE_DOMAINS = ['Money','Health','Faith','Sales/Skills','Network','Discipline'];
+function lifeDomainClass(d){ return 'dom-' + String(d||'').toLowerCase().replace(/[^a-z]+/g,'-'); }
+function lifeMonday(iso){ const d=new Date((iso||todayISO())+'T00:00:00'); const dow=(d.getDay()+6)%7; d.setDate(d.getDate()-dow); return d.toISOString().slice(0,10); }
+function lifeDateLabel(iso){ const t=todayISO(); if(iso===t) return 'Today'; if(iso===shiftISO(t,-1)) return 'Yesterday'; return new Date(iso+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}); }
+
+function lifeSetSub(s){ lifeSubTab=s; render(); }
+function lifeShiftDay(dir){ lifeDay=shiftISO(lifeDay,dir); render(); }
+function lifeJumpToday(){ lifeDay=todayISO(); render(); }
+
+function renderLife(){
+  if (!window.SUPABASE_CONFIGURED) { list.innerHTML='<div class="empty error">Supabase not configured.</div>'; return; }
+  const sub = `<div class="life-subnav">
+    <button class="life-subtab${lifeSubTab==='goals'?' active':''}" onclick="lifeSetSub('goals')">Goals</button>
+    <button class="life-subtab${lifeSubTab==='targets'?' active':''}" onclick="lifeSetSub('targets')">Targets</button>
+  </div>`;
+  const body = lifeSubTab==='targets' ? renderLifeTargetsHtml() : renderLifeGoalsHtml();
+  list.innerHTML = `<div class="life-page">${sub}<div class="life-body">${body}</div></div>`;
+}
+
+/* ---------- GOALS ---------- */
+function goalProgress(g){
+  const hasMetric = g.metric_label && g.target_value!=null && g.start_value!=null && g.current_value!=null;
+  if (hasMetric){
+    const s=parseNum(g.start_value), c=parseNum(g.current_value), t=parseNum(g.target_value);
+    if (t===s) return c>=t?100:0;
+    return Math.max(0, Math.min(100, Math.round(((c-s)/(t-s))*100)));
+  }
+  return Math.max(0, Math.min(100, parseInt(g.manual_progress)||0));
+}
+function goalCardHtml(g){
+  const pct = goalProgress(g);
+  const done = g.status==='done';
+  const paused = g.status==='paused';
+  const hasMetric = g.metric_label && g.target_value!=null;
+  const metricLine = hasMetric
+    ? `<div class="life-goal-metric">${esc(g.metric_label)}: <b>${fmtMaybe(g.current_value)}</b> <span class="life-arrow">→</span> ${fmtMaybe(g.target_value)}</div>`
+    : '';
+  const linked = [...dailyTargets, ...weeklyTargets].filter(t=>t.goal_id===g.id).length;
+  return `
+    <div class="life-goal-card${done?' done':''}${paused?' paused':''}" onclick="openGoalEditor('${g.id}')">
+      <div class="life-goal-head">
+        <span class="life-goal-title">${esc(g.title)}${done?' ✓':''}${paused?' ⏸':''}</span>
+        ${g.domain?`<span class="life-dom ${lifeDomainClass(g.domain)}">${esc(g.domain)}</span>`:''}
+      </div>
+      ${g.why?`<div class="life-goal-why">${esc(g.why)}</div>`:''}
+      ${metricLine}
+      <div class="life-bar"><div class="life-bar-fill" style="width:${pct}%"></div></div>
+      <div class="life-goal-foot">
+        <span class="life-goal-pct">${pct}%</span>
+        <span class="life-goal-meta">${g.deadline?('Due '+new Date(g.deadline+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})):''}${linked?` · ${linked} linked`:''}</span>
+      </div>
+    </div>`;
+}
+function fmtMaybe(v){ const n=Number(v); return isNaN(n)?esc(v):n.toLocaleString('en-GB'); }
+function renderLifeGoalsHtml(){
+  const groups=[['3m','Next 3 months'],['6m','6 months'],['12m','12 months']];
+  const sections = groups.map(([h,label])=>{
+    const gs=(lifeGoals||[]).filter(g=>g.horizon===h).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+    const cards = gs.length ? gs.map(goalCardHtml).join('') : '<div class="life-empty-sm">Nothing here yet.</div>';
+    return `<div class="life-goal-group"><div class="life-group-head">${label} <span class="life-group-count">${gs.length}</span></div>${cards}</div>`;
+  }).join('');
+  return `<div class="life-actions"><button class="life-add" onclick="openGoalEditor(null)">+ Add goal</button></div>${sections}`;
+}
+function openGoalEditor(id){
+  window._editGoalId = id || null;
+  const g = id ? (lifeGoals||[]).find(x=>String(x.id)===String(id)) : null;
+  const domOpts = LIFE_DOMAINS.map(d=>`<option value="${d}"${g&&g.domain===d?' selected':''}>${d}</option>`).join('');
+  const hzOpts = [['3m','3 months'],['6m','6 months'],['12m','12 months']].map(([v,l])=>`<option value="${v}"${g&&g.horizon===v?' selected':''}>${l}</option>`).join('');
+  const stOpts = [['active','Active'],['done','Done'],['paused','Paused']].map(([v,l])=>`<option value="${v}"${g&&g.status===v?' selected':''}>${l}</option>`).join('');
+  showWorkModal(`
+    <h3 class="work-modal-title">${g?'Edit goal':'Add goal'}</h3>
+    <form id="goal-form" onsubmit="return saveGoal(event)">
+      <label class="work-lbl">Goal</label>
+      <input class="work-input" id="g-title" required value="${g?esc(g.title):''}" placeholder="e.g. Clear all debt"/>
+      <div class="work-row-2">
+        <div><label class="work-lbl">Horizon</label><select class="work-input" id="g-hz">${hzOpts}</select></div>
+        <div><label class="work-lbl">Domain</label><select class="work-input" id="g-dom"><option value="">—</option>${domOpts}</select></div>
+      </div>
+      <label class="work-lbl">Why it matters</label>
+      <textarea class="work-input" id="g-why" rows="2" placeholder="The reason behind it">${g?esc(g.why||''):''}</textarea>
+      <label class="work-lbl">Metric (optional — auto-calculates progress)</label>
+      <input class="work-input" id="g-mlabel" value="${g?esc(g.metric_label||''):''}" placeholder="e.g. Debt remaining £"/>
+      <div class="work-row-3">
+        <div><label class="work-lbl">Start</label><input class="work-input" type="number" step="any" id="g-start" value="${g&&g.start_value!=null?esc(g.start_value):''}"/></div>
+        <div><label class="work-lbl">Current</label><input class="work-input" type="number" step="any" id="g-current" value="${g&&g.current_value!=null?esc(g.current_value):''}"/></div>
+        <div><label class="work-lbl">Target</label><input class="work-input" type="number" step="any" id="g-target" value="${g&&g.target_value!=null?esc(g.target_value):''}"/></div>
+      </div>
+      <label class="work-lbl">Or manual progress (%) <span class="life-hint">used if no metric</span></label>
+      <input class="work-input" type="range" min="0" max="100" id="g-manual" value="${g&&g.manual_progress!=null?g.manual_progress:0}" oninput="document.getElementById('g-manual-val').textContent=this.value+'%'"/>
+      <div class="life-range-val" id="g-manual-val">${g&&g.manual_progress!=null?g.manual_progress:0}%</div>
+      <div class="work-row-2">
+        <div><label class="work-lbl">Deadline</label><input class="work-input" type="date" id="g-deadline" value="${g&&g.deadline?esc(g.deadline):''}"/></div>
+        <div><label class="work-lbl">Status</label><select class="work-input" id="g-status">${stOpts}</select></div>
+      </div>
+      <div class="work-modal-actions">
+        ${g?`<button type="button" class="work-btn-danger" onclick="deleteGoal('${g.id}')">Delete</button>`:'<span></span>'}
+        <div class="work-modal-right">
+          <button type="button" class="work-btn-ghost" onclick="closeWorkModal()">Cancel</button>
+          <button type="submit" class="work-btn-primary">Save</button>
+        </div>
+      </div>
+    </form>`);
+}
+async function saveGoal(ev){
+  ev.preventDefault();
+  const val=id=>document.getElementById(id).value;
+  const numOrNull=id=>{ const v=val(id).trim(); return v===''?null:parseNum(v); };
+  const title=val('g-title').trim(); if(!title){ alert('Title required.'); return false; }
+  const payload={
+    horizon:val('g-hz'), domain:val('g-dom')||null, title,
+    why:val('g-why').trim()||null,
+    metric_label:val('g-mlabel').trim()||null,
+    start_value:numOrNull('g-start'), current_value:numOrNull('g-current'), target_value:numOrNull('g-target'),
+    manual_progress:parseInt(val('g-manual'))||0,
+    deadline:val('g-deadline')||null, status:val('g-status')
+  };
+  const editing=window._editGoalId||null;
+  const res = editing
+    ? await window.db.from('life_goals').update(payload).eq('id',editing)
+    : await window.db.from('life_goals').insert([payload]);
+  if(res.error){ alert('Error: '+res.error.message); return false; }
+  closeWorkModal(); window._editGoalId=null; await loadAll();
+  return false;
+}
+async function deleteGoal(id){
+  if(!confirm('Delete this goal? Linked targets stay but lose the link.')) return;
+  const res=await window.db.from('life_goals').delete().eq('id',id);
+  if(res.error){ alert('Error: '+res.error.message); return; }
+  closeWorkModal(); window._editGoalId=null; await loadAll();
+}
+
+/* ---------- TARGETS ---------- */
+function dailyVal(targetId, day){ const l=(dailyLogs||[]).find(x=>x.target_id===targetId && x.log_date===day); return l?parseNum(l.value):0; }
+function dailyMet(t, day){ const v=dailyVal(t.id,day); return t.type==='count' ? v>=(t.target_count||1) && v>0 : v>=1; }
+function dailyStreak(t){
+  let streak=0, day=todayISO();
+  // if today not yet met, start counting from yesterday so streak isn't 0 mid-day
+  if(!dailyMet(t,day)) day=shiftISO(day,-1);
+  for(let i=0;i<400;i++){ if(dailyMet(t,day)){ streak++; day=shiftISO(day,-1); } else break; }
+  return streak;
+}
+function weeklyVal(targetId, wk){ const l=(weeklyLogs||[]).find(x=>x.target_id===targetId && x.week_start===wk); return l?parseNum(l.value):0; }
+
+async function setDailyValue(targetId, valNum){
+  const day=lifeDay;
+  let log=(dailyLogs||[]).find(l=>l.target_id===targetId && l.log_date===day);
+  if(log) log.value=valNum; else { dailyLogs.push({target_id:targetId,log_date:day,value:valNum}); }
+  render();
+  const {error}=await window.db.from('daily_logs').upsert({target_id:targetId,log_date:day,value:valNum},{onConflict:'target_id,log_date'});
+  if(error){ alert('Save failed: '+error.message); await loadAll(); }
+}
+function toggleDailyCheck(id){ setDailyValue(id, dailyVal(id,lifeDay)>=1?0:1); }
+function adjustDailyCount(ev,id,delta){ if(ev) ev.stopPropagation(); setDailyValue(id, Math.max(0, dailyVal(id,lifeDay)+delta)); }
+
+async function setWeeklyValue(targetId, valNum){
+  const wk=lifeMonday(todayISO());
+  let log=(weeklyLogs||[]).find(l=>l.target_id===targetId && l.week_start===wk);
+  if(log) log.value=valNum; else { weeklyLogs.push({target_id:targetId,week_start:wk,value:valNum}); }
+  render();
+  const {error}=await window.db.from('weekly_logs').upsert({target_id:targetId,week_start:wk,value:valNum},{onConflict:'target_id,week_start'});
+  if(error){ alert('Save failed: '+error.message); await loadAll(); }
+}
+function adjustWeekly(ev,id,delta){ if(ev) ev.stopPropagation(); const wk=lifeMonday(todayISO()); setWeeklyValue(id, Math.max(0, weeklyVal(id,wk)+delta)); }
+
+function renderLifeTargetsHtml(){
+  const day=lifeDay;
+  const ad=(dailyTargets||[]).filter(t=>t.active!==false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+  const metCount=ad.filter(t=>dailyMet(t,day)).length;
+  const dayPct = ad.length ? Math.round(metCount/ad.length*100) : 0;
+
+  const dailyRows = ad.length ? ad.map(t=>{
+    const v=dailyVal(t.id,day), met=dailyMet(t,day), streak=dailyStreak(t);
+    const control = t.type==='count'
+      ? `<div class="life-counter"><button class="life-cbtn" onclick="adjustDailyCount(event,'${t.id}',-1)">−</button><span class="life-cval">${v}<span class="life-ctar">/${t.target_count||1}</span></span><button class="life-cbtn" onclick="adjustDailyCount(event,'${t.id}',1)">+</button></div>`
+      : `<button class="life-check${met?' on':''}" onclick="event.stopPropagation();toggleDailyCheck('${t.id}')">${met?'✓':''}</button>`;
+    return `<div class="life-target-row${met?' met':''}" onclick="openDailyTargetEditor('${t.id}')">
+      <div class="life-target-main">
+        <span class="life-target-title">${esc(t.title)}</span>
+        <span class="life-target-sub">${t.domain?`<span class="life-dom ${lifeDomainClass(t.domain)}">${esc(t.domain)}</span>`:''}${streak>0?`<span class="life-streak">🔥 ${streak}</span>`:''}</span>
+      </div>
+      <div class="life-target-ctl" onclick="event.stopPropagation()">${control}</div>
+    </div>`;
+  }).join('') : '<div class="life-empty-sm">No daily targets. Add one below.</div>';
+
+  const aw=(weeklyTargets||[]).filter(t=>t.active!==false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+  const wk=lifeMonday(todayISO());
+  const weeklyMet=aw.filter(t=>{ const v=weeklyVal(t.id,wk); return (t.target_count||0)===0 ? v===0 : v>=t.target_count; }).length;
+  const weekPct = aw.length ? Math.round(weeklyMet/aw.length*100) : 0;
+  const weeklyRows = aw.length ? aw.map(t=>{
+    const v=weeklyVal(t.id,wk); const tar=t.target_count||0;
+    const isZero = tar===0;
+    const pct = isZero ? (v===0?100:0) : Math.max(0,Math.min(100,Math.round(v/tar*100)));
+    const label = isZero ? `${v} ${v===1?'incident':'incidents'}` : `${v}/${tar}`;
+    const ok = isZero ? v===0 : v>=tar;
+    return `<div class="life-week-row" onclick="openWeeklyTargetEditor('${t.id}')">
+      <div class="life-week-top">
+        <span class="life-target-title">${esc(t.title)}${t.domain?` <span class="life-dom ${lifeDomainClass(t.domain)}">${esc(t.domain)}</span>`:''}</span>
+        <span class="life-week-count ${ok?'pos':''}">${label}</span>
+      </div>
+      <div class="life-bar"><div class="life-bar-fill${isZero&&v>0?' bad':''}" style="width:${pct}%"></div></div>
+      <div class="life-week-ctl" onclick="event.stopPropagation()">
+        <button class="life-cbtn" onclick="adjustWeekly(event,'${t.id}',-1)">−</button>
+        <button class="life-cbtn" onclick="adjustWeekly(event,'${t.id}',1)">+</button>
+      </div>
+    </div>`;
+  }).join('') : '<div class="life-empty-sm">No weekly targets. Add one below.</div>';
+
+  return `
+    <div class="life-day-bar">
+      <button class="inc-navbtn" onclick="lifeShiftDay(-1)">‹</button>
+      <button class="inc-period" onclick="lifeJumpToday()">${esc(lifeDateLabel(day))}</button>
+      <button class="inc-navbtn" onclick="lifeShiftDay(1)">›</button>
+    </div>
+    <div class="life-ring-row"><div class="life-ring-cell"><span class="life-ring-pct">${dayPct}%</span><span class="life-ring-lbl">today · ${metCount}/${ad.length}</span></div></div>
+    <div class="life-section-title">Daily</div>
+    <div class="life-targets">${dailyRows}</div>
+    <div class="life-actions"><button class="life-add" onclick="openDailyTargetEditor(null)">+ Add daily target</button></div>
+    <div class="life-section-title">This week <span class="life-week-pct">${weekPct}%</span></div>
+    <div class="life-weeks">${weeklyRows}</div>
+    <div class="life-actions"><button class="life-add" onclick="openWeeklyTargetEditor(null)">+ Add weekly target</button></div>`;
+}
+
+function goalLinkOptions(selId){
+  return '<option value="">— none —</option>' + (lifeGoals||[]).map(g=>`<option value="${g.id}"${selId===g.id?' selected':''}>${esc(g.title)} (${g.horizon})</option>`).join('');
+}
+function openDailyTargetEditor(id){
+  window._editDailyId = id || null;
+  const t = id ? (dailyTargets||[]).find(x=>String(x.id)===String(id)) : null;
+  const domOpts = LIFE_DOMAINS.map(d=>`<option value="${d}"${t&&t.domain===d?' selected':''}>${d}</option>`).join('');
+  showWorkModal(`
+    <h3 class="work-modal-title">${t?'Edit daily target':'Add daily target'}</h3>
+    <form id="dt-form" onsubmit="return saveDailyTarget(event)">
+      <label class="work-lbl">Title</label>
+      <input class="work-input" id="dt-title" required value="${t?esc(t.title):''}" placeholder="e.g. Fajr on time"/>
+      <div class="work-row-2">
+        <div><label class="work-lbl">Domain</label><select class="work-input" id="dt-dom"><option value="">—</option>${domOpts}</select></div>
+        <div><label class="work-lbl">Type</label><select class="work-input" id="dt-type" onchange="document.getElementById('dt-tc-wrap').style.display=this.value==='count'?'block':'none'">
+          <option value="check"${!t||t.type==='check'?' selected':''}>Check (done/not)</option>
+          <option value="count"${t&&t.type==='count'?' selected':''}>Count</option>
+        </select></div>
+      </div>
+      <div id="dt-tc-wrap" style="display:${t&&t.type==='count'?'block':'none'}"><label class="work-lbl">Target count</label><input class="work-input" type="number" id="dt-tc" value="${t?(t.target_count||1):3}"/></div>
+      <label class="work-lbl">Link to goal (optional)</label>
+      <select class="work-input" id="dt-goal">${goalLinkOptions(t&&t.goal_id)}</select>
+      <label class="life-check-inline"><input type="checkbox" id="dt-active" ${!t||t.active!==false?'checked':''}/> Active</label>
+      <div class="work-modal-actions">
+        ${t?`<button type="button" class="work-btn-danger" onclick="deleteDailyTarget('${t.id}')">Delete</button>`:'<span></span>'}
+        <div class="work-modal-right"><button type="button" class="work-btn-ghost" onclick="closeWorkModal()">Cancel</button><button type="submit" class="work-btn-primary">Save</button></div>
+      </div>
+    </form>`);
+}
+async function saveDailyTarget(ev){
+  ev.preventDefault();
+  const v=id=>document.getElementById(id);
+  const title=v('dt-title').value.trim(); if(!title){ alert('Title required.'); return false; }
+  const payload={ title, domain:v('dt-dom').value||null, type:v('dt-type').value, target_count:parseInt(v('dt-tc').value)||1, goal_id:v('dt-goal').value||null, active:v('dt-active').checked };
+  const editing=window._editDailyId||null;
+  const res = editing ? await window.db.from('daily_targets').update(payload).eq('id',editing) : await window.db.from('daily_targets').insert([payload]);
+  if(res.error){ alert('Error: '+res.error.message); return false; }
+  closeWorkModal(); window._editDailyId=null; await loadAll();
+  return false;
+}
+async function deleteDailyTarget(id){
+  if(!confirm('Delete this daily target and its history?')) return;
+  const res=await window.db.from('daily_targets').delete().eq('id',id);
+  if(res.error){ alert('Error: '+res.error.message); return; }
+  closeWorkModal(); window._editDailyId=null; await loadAll();
+}
+function openWeeklyTargetEditor(id){
+  window._editWeeklyId = id || null;
+  const t = id ? (weeklyTargets||[]).find(x=>String(x.id)===String(id)) : null;
+  const domOpts = LIFE_DOMAINS.map(d=>`<option value="${d}"${t&&t.domain===d?' selected':''}>${d}</option>`).join('');
+  showWorkModal(`
+    <h3 class="work-modal-title">${t?'Edit weekly target':'Add weekly target'}</h3>
+    <form id="wt-form" onsubmit="return saveWeeklyTarget(event)">
+      <label class="work-lbl">Title</label>
+      <input class="work-input" id="wt-title" required value="${t?esc(t.title):''}" placeholder="e.g. Gym"/>
+      <div class="work-row-2">
+        <div><label class="work-lbl">Domain</label><select class="work-input" id="wt-dom"><option value="">—</option>${domOpts}</select></div>
+        <div><label class="work-lbl">Target / week <span class="life-hint">0 = keep at zero</span></label><input class="work-input" type="number" id="wt-tc" value="${t?(t.target_count!=null?t.target_count:5):5}"/></div>
+      </div>
+      <label class="work-lbl">Link to goal (optional)</label>
+      <select class="work-input" id="wt-goal">${goalLinkOptions(t&&t.goal_id)}</select>
+      <label class="life-check-inline"><input type="checkbox" id="wt-active" ${!t||t.active!==false?'checked':''}/> Active</label>
+      <div class="work-modal-actions">
+        ${t?`<button type="button" class="work-btn-danger" onclick="deleteWeeklyTarget('${t.id}')">Delete</button>`:'<span></span>'}
+        <div class="work-modal-right"><button type="button" class="work-btn-ghost" onclick="closeWorkModal()">Cancel</button><button type="submit" class="work-btn-primary">Save</button></div>
+      </div>
+    </form>`);
+}
+async function saveWeeklyTarget(ev){
+  ev.preventDefault();
+  const v=id=>document.getElementById(id);
+  const title=v('wt-title').value.trim(); if(!title){ alert('Title required.'); return false; }
+  const tc=v('wt-tc').value.trim();
+  const payload={ title, domain:v('wt-dom').value||null, target_count:tc===''?1:parseInt(tc), goal_id:v('wt-goal').value||null, active:v('wt-active').checked };
+  const editing=window._editWeeklyId||null;
+  const res = editing ? await window.db.from('weekly_targets').update(payload).eq('id',editing) : await window.db.from('weekly_targets').insert([payload]);
+  if(res.error){ alert('Error: '+res.error.message); return false; }
+  closeWorkModal(); window._editWeeklyId=null; await loadAll();
+  return false;
+}
+async function deleteWeeklyTarget(id){
+  if(!confirm('Delete this weekly target and its history?')) return;
+  const res=await window.db.from('weekly_targets').delete().eq('id',id);
+  if(res.error){ alert('Error: '+res.error.message); return; }
+  closeWorkModal(); window._editWeeklyId=null; await loadAll();
 }
 
