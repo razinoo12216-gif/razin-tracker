@@ -3949,7 +3949,7 @@ async function deletePot(id) {
 }
 
 /* ===== Income ledger — actual earnings (incl. costs/net) across all streams, daily/weekly/monthly ===== */
-function incomeISO(d){ return d.toISOString().slice(0,10); }
+function incomeISO(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function incomeMondayOf(iso){ const d=new Date(iso+'T00:00:00'); const dow=(d.getDay()+6)%7; d.setDate(d.getDate()-dow); return d; }
 function incomePeriodBounds(){
   const ref = incomeRef || todayISO();
@@ -4094,7 +4094,7 @@ async function deleteIncomeEntry(id){
 /* ===================== LIFE PROGRESS (Goals + Targets) ===================== */
 const LIFE_DOMAINS = ['Money','Health','Faith','Sales/Skills','Network','Discipline'];
 function lifeDomainClass(d){ return 'dom-' + String(d||'').toLowerCase().replace(/[^a-z]+/g,'-'); }
-function lifeMonday(iso){ const d=new Date((iso||todayISO())+'T00:00:00'); const dow=(d.getDay()+6)%7; d.setDate(d.getDate()-dow); return d.toISOString().slice(0,10); }
+function lifeMonday(iso){ const d=new Date((iso||todayISO())+'T00:00:00'); const dow=(d.getDay()+6)%7; d.setDate(d.getDate()-dow); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function lifeDateLabel(iso){ const t=todayISO(); if(iso===t) return 'Today'; if(iso===shiftISO(t,-1)) return 'Yesterday'; return new Date(iso+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}); }
 
 function lifeSetSub(s){ lifeSubTab=s; render(); }
