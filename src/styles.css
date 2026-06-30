@@ -1993,3 +1993,30 @@ dialog .actions {
 .life-week-ctl { display:flex; gap:8px; justify-content:flex-end; }
 .life-week-pct { color:var(--gold); font-weight:800; }
 .life-check-inline { display:flex; align-items:center; gap:8px; color:var(--text); font-size:0.88rem; margin-top:10px; cursor:pointer; }
+
+/* ===== Work Pricing calculator ===== */
+.wp-wrap { display:flex; flex-direction:column; gap:14px; padding:14px 0; max-width:640px; margin:0 auto; }
+.wp-out { background:linear-gradient(160deg, rgba(251,191,36,0.10), var(--panel-2)); border:1px solid rgba(251,191,36,0.5); border-radius:14px; padding:18px; text-align:center; }
+.wp-out-lbl { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+.wp-big { font-size:40px; font-weight:800; color:var(--gold); line-height:1; margin-top:4px; }
+.wp-band { display:flex; gap:10px; margin-top:14px; }
+.wp-band > div { flex:1; background:var(--panel-3); border:1px solid var(--border); border-radius:10px; padding:10px 6px; }
+.wp-v { font-size:18px; font-weight:700; }
+.wp-k { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-top:2px; }
+.wp-floor { color:var(--amber); }
+.wp-target { color:#34d399; }
+.wp-stretch { color:#60a5fa; }
+.wp-breakdown { font-size:13px; color:var(--muted); margin-top:14px; border-top:1px solid var(--border); padding-top:12px; text-align:left; }
+.wp-breakdown div { display:flex; justify-content:space-between; gap:10px; padding:3px 0; }
+.wp-breakdown b { color:var(--text); font-weight:600; }
+.wp-driver { margin-top:6px; color:#34d399; }
+.wp-card { background:var(--panel-2); border:1px solid var(--border); border-radius:14px; padding:16px; }
+.wp-lbl { display:block; font-size:13px; color:var(--muted); margin:12px 0 6px; }
+.wp-card .wp-lbl:first-child, .wp-card .wp-row:first-child .wp-lbl { margin-top:0; }
+.wp-input { width:100%; background:var(--panel-3); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:11px 12px; font-size:15px; }
+.wp-input:focus { outline:none; border-color:var(--gold); }
+.wp-row { display:flex; gap:10px; }
+.wp-row > div { flex:1; }
+.wp-hint { font-size:11px; color:var(--muted); margin-top:4px; }
+.wp-note { font-size:12px; color:var(--muted); line-height:1.6; }
+.wp-note b { color:var(--text); }

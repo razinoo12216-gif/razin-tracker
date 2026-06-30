@@ -1986,6 +1986,7 @@ function renderWork() {
   if (workView === 'tasks')     renderWorkTasksView(tasks, companies);
   else if (workView === 'invoices') renderWorkInvoicesView();
   else if (workView === 'travel') return renderWorkTravelView();
+  else if (workView === 'pricing') return renderWorkPricingView();
   else renderWorkCompaniesView(companies);
 }
 
@@ -1993,7 +1994,7 @@ function renderWork() {
 function renderWorkTasksView(tasks, companies) {
   const pending = tasks.filter(t => t.status !== 'done');
   const done    = tasks.filter(t => t.status === 'done');
-  const toggle  = `<div class="ticket-type-filter"><button class="ticket-filter active" onclick="workView='tasks';renderWork()">Tasks</button><button class="ticket-filter" onclick="workView='companies';renderWork()">Companies</button><button class="ticket-filter" onclick="workView='invoices';renderWork()">Invoices</button><button class="ticket-filter" onclick="workView='travel';renderWork()">Travel</button></div>`;
+  const toggle  = `<div class="ticket-type-filter"><button class="ticket-filter active" onclick="workView='tasks';renderWork()">Tasks</button><button class="ticket-filter" onclick="workView='companies';renderWork()">Companies</button><button class="ticket-filter" onclick="workView='invoices';renderWork()">Invoices</button><button class="ticket-filter" onclick="workView='travel';renderWork()">Travel</button><button class="ticket-filter" onclick="workView='pricing';renderWork()">Pricing</button></div>`;
   if (tasks.length === 0) {
     list.innerHTML = `<div class="work-header-bar">${toggle}<button class="work-fab" onclick="openWorkTaskEditor()">+ Task</button></div><div class="empty">No tasks yet. Hit <strong>+ Task</strong> to add one.</div>`;
     return;
@@ -2003,14 +2004,14 @@ function renderWorkTasksView(tasks, companies) {
 
 // PATCH C: updated companies toggle — 3 buttons
 function renderWorkCompaniesView(companies) {
-  const toggle = `<div class="ticket-type-filter"><button class="ticket-filter active" onclick="workView='companies';renderWork()">Companies</button><button class="ticket-filter" onclick="workView='invoices';renderWork()">Invoices</button><button class="ticket-filter" onclick="workView='travel';renderWork()">Travel</button></div>`;
+  const toggle = `<div class="ticket-type-filter"><button class="ticket-filter active" onclick="workView='companies';renderWork()">Companies</button><button class="ticket-filter" onclick="workView='invoices';renderWork()">Invoices</button><button class="ticket-filter" onclick="workView='travel';renderWork()">Travel</button><button class="ticket-filter" onclick="workView='pricing';renderWork()">Pricing</button></div>`;
   const chKey  = localStorage.getItem('ch_api_key') || '';
   list.innerHTML = `<div class="work-header-bar">${toggle}<button class="work-fab" onclick="openWorkCompanyEditor()">+ Company</button></div><div class="work-ch-bar"><span class="work-ch-label">CH API Key</span><input type="password" id="ch-key-input" value="${esc(chKey)}" placeholder="Your Companies House API key"/><button class="work-ch-save" onclick="saveCHKey()">Save</button></div>${companies.length === 0 ? '<div class="empty">No companies yet. Hit <strong>+ Company</strong> to add one.</div>' : ''}<div class="work-companies-grid">${companies.map(c => renderWorkCompanyCard(c)).join('')}</div>`;
 }
 
 // PATCH D: new invoices view
 function renderWorkInvoicesView() {
-  const toggle = `<div class="ticket-type-filter"><button class="ticket-filter" onclick="workView='companies';renderWork()">Companies</button><button class="ticket-filter active" onclick="workView='invoices';renderWork()">Invoices</button><button class="ticket-filter" onclick="workView='travel';renderWork()">Travel</button></div>`;
+  const toggle = `<div class="ticket-type-filter"><button class="ticket-filter" onclick="workView='companies';renderWork()">Companies</button><button class="ticket-filter active" onclick="workView='invoices';renderWork()">Invoices</button><button class="ticket-filter" onclick="workView='travel';renderWork()">Travel</button><button class="ticket-filter" onclick="workView='pricing';renderWork()">Pricing</button></div>`;
   if (invoices.length === 0) {
     list.innerHTML = `<div class="work-header-bar">${toggle}<button class="work-fab" onclick="openInvoiceEditor()">+ Invoice</button></div><div class="empty">No invoices yet. Hit <strong>+ Invoice</strong> to draft one.</div>`;
     return;
@@ -3042,6 +3043,7 @@ function renderWorkTravelView() {
     '<button class="ticket-filter" onclick="workView=\'companies\';renderWork()">Companies</button>' +
     '<button class="ticket-filter active" onclick="workView=\'travel\';renderWork()">Travel</button>' +
     '<button class="ticket-filter" onclick="workView=\'invoices\';renderWork()">Invoices</button>' +
+    '<button class="ticket-filter" onclick="workView=\'pricing\';renderWork()">Pricing</button>' +
     '</div>';
   list.insertAdjacentHTML('afterbegin', nav);
 }
@@ -4399,5 +4401,109 @@ async function deleteWeeklyTarget(id){
   const res=await window.db.from('weekly_targets').delete().eq('id',id);
   if(res.error){ alert('Error: '+res.error.message); return; }
   closeWorkModal(); window._editWeeklyId=null; await loadAll();
+}
+
+/* ===================== WORK PRICING calculator (value-based) ===================== */
+function renderWorkPricingView(){
+  const list = document.getElementById('list');
+  const nav = '<div class="ticket-type-filter">'
+    + '<button class="ticket-filter" onclick="workView=\'companies\';renderWork()">Companies</button>'
+    + '<button class="ticket-filter" onclick="workView=\'invoices\';renderWork()">Invoices</button>'
+    + '<button class="ticket-filter" onclick="workView=\'travel\';renderWork()">Travel</button>'
+    + '<button class="ticket-filter active" onclick="workView=\'pricing\';renderWork()">Pricing</button>'
+    + '</div>';
+  list.innerHTML = nav + `
+    <div class="wp-wrap">
+      <div class="wp-out">
+        <div class="wp-out-lbl">Recommended fee</div>
+        <div class="wp-big" id="wp-recommended">£0</div>
+        <div class="wp-band">
+          <div><div class="wp-v wp-floor" id="wp-floor">£0</div><div class="wp-k">Floor</div></div>
+          <div><div class="wp-v wp-target" id="wp-targetB">£0</div><div class="wp-k">Target</div></div>
+          <div><div class="wp-v wp-stretch" id="wp-stretch">£0</div><div class="wp-k">Stretch</div></div>
+        </div>
+        <div class="wp-breakdown" id="wp-breakdown"></div>
+      </div>
+
+      <div class="wp-card">
+        <label class="wp-lbl">Job description (your reference)</label>
+        <input class="wp-input" id="wp-desc" placeholder="e.g. VAT registration + setup, real trading co">
+        <div class="wp-row">
+          <div><label class="wp-lbl">Your hours on it</label><input class="wp-input" id="wp-hours" type="number" value="2" min="0" step="0.5" inputmode="decimal" oninput="calcWorkPricing()"></div>
+          <div><label class="wp-lbl">Base rate (£/hr)</label><input class="wp-input" id="wp-rate" type="number" value="35" min="0" step="5" inputmode="decimal" oninput="calcWorkPricing()"><div class="wp-hint">Your floor for time</div></div>
+        </div>
+        <label class="wp-lbl">Complexity / expertise</label>
+        <select class="wp-input" id="wp-cx" onchange="calcWorkPricing()">
+          <option value="1">Routine admin (1.0×)</option>
+          <option value="1.5" selected>Specialist — needs your know-how (1.5×)</option>
+          <option value="2.2">Expert / high-stakes — few can do it (2.2×)</option>
+        </select>
+        <label class="wp-lbl">Urgency</label>
+        <select class="wp-input" id="wp-urg" onchange="calcWorkPricing()">
+          <option value="1" selected>Standard (1.0×)</option>
+          <option value="1.25">Priority — drop other work (1.25×)</option>
+          <option value="1.5">Emergency / same-day (1.5×)</option>
+        </select>
+      </div>
+
+      <div class="wp-card">
+        <label class="wp-lbl">What is this worth to the client? (£)</label>
+        <input class="wp-input" id="wp-value" type="number" value="0" min="0" step="500" inputmode="decimal" oninput="calcWorkPricing()" placeholder="deal / revenue / saving it unlocks">
+        <div class="wp-hint">The real lever. A 2-hr job that unlocks £1m is not a £70 job.</div>
+        <label class="wp-lbl">Your share of that value (%)</label>
+        <input class="wp-input" id="wp-pct" type="number" value="5" min="0" max="100" step="0.5" inputmode="decimal" oninput="calcWorkPricing()">
+        <div class="wp-hint">Typical value-capture: 3–10% depending on how central you are</div>
+      </div>
+
+      <div class="wp-card">
+        <div class="wp-row">
+          <div><label class="wp-lbl">Travel miles (round trip)</label><input class="wp-input" id="wp-miles" type="number" value="0" min="0" step="5" inputmode="decimal" oninput="calcWorkPricing()"></div>
+          <div><label class="wp-lbl">Mileage rate (£/mile)</label><input class="wp-input" id="wp-mileRate" type="number" value="0.45" min="0" step="0.05" inputmode="decimal" oninput="calcWorkPricing()"></div>
+        </div>
+        <div class="wp-row">
+          <div><label class="wp-lbl">Travel hours</label><input class="wp-input" id="wp-travelHrs" type="number" value="0" min="0" step="0.5" inputmode="decimal" oninput="calcWorkPricing()"></div>
+          <div><label class="wp-lbl">Responsibility fee (£)</label><input class="wp-input" id="wp-liability" type="number" value="0" min="0" step="50" inputmode="decimal" oninput="calcWorkPricing()"><div class="wp-hint">For carrying real liability</div></div>
+        </div>
+        <label class="wp-lbl">Minimum job fee (£)</label>
+        <input class="wp-input" id="wp-minFee" type="number" value="150" min="0" step="25" inputmode="decimal" oninput="calcWorkPricing()">
+        <div class="wp-hint">Never leave the house for less than this</div>
+      </div>
+
+      <div class="wp-card wp-note"><b>How to read it.</b> The <span class="wp-floor">Floor</span> is your cost — never go below it. <span class="wp-target">Target</span> is the right ask, factoring in value delivered. <span class="wp-stretch">Stretch</span> is what you open with. Quote the Stretch, hold past the first push-back, settle at Target.</div>
+    </div>`;
+  calcWorkPricing();
+}
+
+function calcWorkPricing(){
+  const v = id => parseFloat((document.getElementById(id)||{}).value) || 0;
+  const gbp = n => '£' + Math.round(n).toLocaleString('en-GB');
+  const hours=v('wp-hours'), rate=v('wp-rate'), cx=v('wp-cx')||1, urg=v('wp-urg')||1,
+        value=v('wp-value'), pct=v('wp-pct'), miles=v('wp-miles'), mr=v('wp-mileRate'),
+        th=v('wp-travelHrs'), liab=v('wp-liability'), minFee=v('wp-minFee');
+
+  const labour   = hours*rate*cx*urg;
+  const travel   = miles*mr + th*rate;
+  const valueFee = value*(pct/100);
+  const core     = Math.max(labour, valueFee);
+  const target   = Math.max(core + travel + liab, minFee);
+  const floor    = Math.max(labour + travel, minFee);
+  const stretch  = target * 1.3;
+
+  const set=(id,t)=>{ const e=document.getElementById(id); if(e) e.textContent=t; };
+  set('wp-recommended', gbp(target));
+  set('wp-floor', gbp(floor));
+  set('wp-targetB', gbp(target));
+  set('wp-stretch', gbp(stretch));
+
+  const driver = valueFee > labour
+    ? 'Value-based — outcome is driving the price (good)'
+    : 'Time-based — no client value entered, so it caps at hours';
+  const bd=document.getElementById('wp-breakdown');
+  if(bd) bd.innerHTML =
+    `<div><span>Labour (${hours}h × ${gbp(rate)} × ${cx} × ${urg})</span><b>${gbp(labour)}</b></div>`+
+    `<div><span>Value capture (${pct}% of ${gbp(value)})</span><b>${gbp(valueFee)}</b></div>`+
+    `<div><span>Travel</span><b>${gbp(travel)}</b></div>`+
+    `<div><span>Responsibility</span><b>${gbp(liab)}</b></div>`+
+    `<div class="wp-driver"><span>${driver}</span><b></b></div>`;
 }
 
