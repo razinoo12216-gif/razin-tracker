@@ -2020,3 +2020,20 @@ dialog .actions {
 .wp-hint { font-size:11px; color:var(--muted); margin-top:4px; }
 .wp-note { font-size:12px; color:var(--muted); line-height:1.6; }
 .wp-note b { color:var(--text); }
+
+/* Work Pricing — save + catalogue */
+.wp-actions { display:flex; }
+.wp-save { flex:1; padding:13px; border:1px solid rgba(251,191,36,0.55); background:rgba(251,191,36,0.14); color:var(--gold); font-size:0.95rem; font-weight:700; border-radius:11px; cursor:pointer; }
+.wp-save:hover { background:rgba(251,191,36,0.24); }
+.wp-save:disabled { opacity:0.6; }
+.wp-cat { display:flex; flex-direction:column; gap:8px; }
+.wp-cat-title { font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); font-weight:700; margin:2px; }
+.wp-cat-hint { text-transform:none; letter-spacing:0; font-weight:500; opacity:0.8; }
+.wp-cat-row { display:flex; align-items:center; gap:12px; padding:12px 14px; background:var(--panel-2); border:1px solid var(--border); border-radius:10px; cursor:pointer; }
+.wp-cat-row:hover { border-color:var(--border-2); }
+.wp-cat-main { display:flex; flex-direction:column; gap:3px; min-width:0; flex:1; }
+.wp-cat-desc { font-size:0.92rem; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.wp-cat-sub { font-size:0.72rem; color:var(--muted); }
+.wp-cat-fee { font-size:1.05rem; font-weight:800; color:var(--gold); flex-shrink:0; }
+.wp-cat-del { flex-shrink:0; width:28px; height:28px; border-radius:7px; border:1px solid var(--border-2); background:transparent; color:var(--muted); cursor:pointer; font-size:0.8rem; }
+.wp-cat-del:hover { color:var(--danger); border-color:var(--danger); }

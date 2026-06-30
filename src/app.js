@@ -57,6 +57,7 @@ let weeklyTargets = [];
 let weeklyLogs = [];
 let lifeSubTab = 'goals';
 let lifeDay = todayISO();
+let workQuotes = [];
 let ticketTypeFilter = 'all';
 
 const taskEditor = $('#task-editor');
@@ -352,6 +353,7 @@ async function loadAll() {
   try { const {data:_dl} = await window.db.from('daily_logs').select('*'); dailyLogs = _dl || []; } catch(_e) {}
   try { const {data:_wt} = await window.db.from('weekly_targets').select('*').order('sort_order',{ascending:true}); weeklyTargets = _wt || []; } catch(_e) {}
   try { const {data:_wl} = await window.db.from('weekly_logs').select('*'); weeklyLogs = _wl || []; } catch(_e) {}
+  try { const {data:_wq} = await window.db.from('work_quotes').select('*').order('created_at',{ascending:false}); workQuotes = _wq || []; } catch(_e) {}
   render(); // re-render once trailing loads (pots, receivables, notes, macros) are in — fixes stale header/sections on first load
   try { saveLocalBackup(); } catch(_e) {}
   try { checkBackupRestore(); } catch(_e) {}
@@ -4403,7 +4405,32 @@ async function deleteWeeklyTarget(id){
   closeWorkModal(); window._editWeeklyId=null; await loadAll();
 }
 
-/* ===================== WORK PRICING calculator (value-based) ===================== */
+/* ===================== WORK PRICING calculator (value-based) + catalogue ===================== */
+function wpGbp(n){ return '£' + Math.round(Number(n)||0).toLocaleString('en-GB'); }
+
+function collectWorkPricingInputs(){
+  const g = id => (document.getElementById(id)||{}).value;
+  return { desc:g('wp-desc'), hours:g('wp-hours'), rate:g('wp-rate'), cx:g('wp-cx'), urg:g('wp-urg'),
+    value:g('wp-value'), pct:g('wp-pct'), miles:g('wp-miles'), mileRate:g('wp-mileRate'),
+    travelHrs:g('wp-travelHrs'), liability:g('wp-liability'), minFee:g('wp-minFee') };
+}
+function workPricingCompute(i){
+  const n = x => parseFloat(x) || 0;
+  const hours=n(i.hours), rate=n(i.rate), cx=n(i.cx)||1, urg=n(i.urg)||1, value=n(i.value), pct=n(i.pct),
+        miles=n(i.miles), mr=n(i.mileRate), th=n(i.travelHrs), liab=n(i.liability), minFee=n(i.minFee);
+  const labour=hours*rate*cx*urg, travel=miles*mr+th*rate, valueFee=value*(pct/100);
+  const core=Math.max(labour,valueFee), target=Math.max(core+travel+liab,minFee),
+        floor=Math.max(labour+travel,minFee), stretch=target*1.3;
+  return {hours,rate,cx,urg,value,pct,labour,travel,valueFee,liab,target,floor,stretch};
+}
+function populateWorkPricing(i){
+  if(!i) return;
+  const set=(id,val)=>{ const e=document.getElementById(id); if(e && val!=null && val!=='') e.value=val; };
+  set('wp-desc',i.desc); set('wp-hours',i.hours); set('wp-rate',i.rate); set('wp-cx',i.cx); set('wp-urg',i.urg);
+  set('wp-value',i.value); set('wp-pct',i.pct); set('wp-miles',i.miles); set('wp-mileRate',i.mileRate);
+  set('wp-travelHrs',i.travelHrs); set('wp-liability',i.liability); set('wp-minFee',i.minFee);
+}
+
 function renderWorkPricingView(){
   const list = document.getElementById('list');
   const nav = '<div class="ticket-type-filter">'
@@ -4412,6 +4439,22 @@ function renderWorkPricingView(){
     + '<button class="ticket-filter" onclick="workView=\'travel\';renderWork()">Travel</button>'
     + '<button class="ticket-filter active" onclick="workView=\'pricing\';renderWork()">Pricing</button>'
     + '</div>';
+  const descs = [...new Set((workQuotes||[]).map(q=>(q.description||'').trim()).filter(Boolean))];
+  const dl = descs.map(d=>`<option value="${esc(d)}"></option>`).join('');
+  const cat = (workQuotes && workQuotes.length) ? `
+    <div class="wp-cat">
+      <div class="wp-cat-title">Catalogue — ${workQuotes.length} saved ${workQuotes.length===1?'quote':'quotes'} <span class="wp-cat-hint">tap to reload</span></div>
+      ${workQuotes.map(q=>`
+        <div class="wp-cat-row" onclick="loadWorkQuote('${q.id}')">
+          <div class="wp-cat-main">
+            <span class="wp-cat-desc">${esc(q.description||'Untitled')}</span>
+            <span class="wp-cat-sub">${new Date(q.created_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})} · floor ${wpGbp(q.floor)} · stretch ${wpGbp(q.stretch)}</span>
+          </div>
+          <span class="wp-cat-fee">${wpGbp(q.target)}</span>
+          <button class="wp-cat-del" onclick="event.stopPropagation();deleteWorkQuote('${q.id}')" aria-label="Delete">✕</button>
+        </div>`).join('')}
+    </div>` : '';
+
   list.innerHTML = nav + `
     <div class="wp-wrap">
       <div class="wp-out">
@@ -4426,8 +4469,9 @@ function renderWorkPricingView(){
       </div>
 
       <div class="wp-card">
-        <label class="wp-lbl">Job description (your reference)</label>
-        <input class="wp-input" id="wp-desc" placeholder="e.g. VAT registration + setup, real trading co">
+        <label class="wp-lbl">Job description (becomes the catalogue label)</label>
+        <input class="wp-input" id="wp-desc" list="wp-desc-list" placeholder="e.g. VAT registration + setup">
+        <datalist id="wp-desc-list">${dl}</datalist>
         <div class="wp-row">
           <div><label class="wp-lbl">Your hours on it</label><input class="wp-input" id="wp-hours" type="number" value="2" min="0" step="0.5" inputmode="decimal" oninput="calcWorkPricing()"></div>
           <div><label class="wp-lbl">Base rate (£/hr)</label><input class="wp-input" id="wp-rate" type="number" value="35" min="0" step="5" inputmode="decimal" oninput="calcWorkPricing()"><div class="wp-hint">Your floor for time</div></div>
@@ -4469,41 +4513,60 @@ function renderWorkPricingView(){
         <div class="wp-hint">Never leave the house for less than this</div>
       </div>
 
+      <div class="wp-actions"><button class="wp-save" id="wp-save-btn" onclick="saveWorkQuote()">Save quote to catalogue</button></div>
+
       <div class="wp-card wp-note"><b>How to read it.</b> The <span class="wp-floor">Floor</span> is your cost — never go below it. <span class="wp-target">Target</span> is the right ask, factoring in value delivered. <span class="wp-stretch">Stretch</span> is what you open with. Quote the Stretch, hold past the first push-back, settle at Target.</div>
+
+      ${cat}
     </div>`;
+  if(window._wpPending){ populateWorkPricing(window._wpPending); window._wpPending=null; }
   calcWorkPricing();
 }
 
 function calcWorkPricing(){
-  const v = id => parseFloat((document.getElementById(id)||{}).value) || 0;
-  const gbp = n => '£' + Math.round(n).toLocaleString('en-GB');
-  const hours=v('wp-hours'), rate=v('wp-rate'), cx=v('wp-cx')||1, urg=v('wp-urg')||1,
-        value=v('wp-value'), pct=v('wp-pct'), miles=v('wp-miles'), mr=v('wp-mileRate'),
-        th=v('wp-travelHrs'), liab=v('wp-liability'), minFee=v('wp-minFee');
-
-  const labour   = hours*rate*cx*urg;
-  const travel   = miles*mr + th*rate;
-  const valueFee = value*(pct/100);
-  const core     = Math.max(labour, valueFee);
-  const target   = Math.max(core + travel + liab, minFee);
-  const floor    = Math.max(labour + travel, minFee);
-  const stretch  = target * 1.3;
-
+  const r = workPricingCompute(collectWorkPricingInputs());
   const set=(id,t)=>{ const e=document.getElementById(id); if(e) e.textContent=t; };
-  set('wp-recommended', gbp(target));
-  set('wp-floor', gbp(floor));
-  set('wp-targetB', gbp(target));
-  set('wp-stretch', gbp(stretch));
-
-  const driver = valueFee > labour
+  set('wp-recommended', wpGbp(r.target));
+  set('wp-floor', wpGbp(r.floor));
+  set('wp-targetB', wpGbp(r.target));
+  set('wp-stretch', wpGbp(r.stretch));
+  const driver = r.valueFee > r.labour
     ? 'Value-based — outcome is driving the price (good)'
     : 'Time-based — no client value entered, so it caps at hours';
   const bd=document.getElementById('wp-breakdown');
   if(bd) bd.innerHTML =
-    `<div><span>Labour (${hours}h × ${gbp(rate)} × ${cx} × ${urg})</span><b>${gbp(labour)}</b></div>`+
-    `<div><span>Value capture (${pct}% of ${gbp(value)})</span><b>${gbp(valueFee)}</b></div>`+
-    `<div><span>Travel</span><b>${gbp(travel)}</b></div>`+
-    `<div><span>Responsibility</span><b>${gbp(liab)}</b></div>`+
+    `<div><span>Labour (${r.hours}h × ${wpGbp(r.rate)} × ${r.cx} × ${r.urg})</span><b>${wpGbp(r.labour)}</b></div>`+
+    `<div><span>Value capture (${r.pct}% of ${wpGbp(r.value)})</span><b>${wpGbp(r.valueFee)}</b></div>`+
+    `<div><span>Travel</span><b>${wpGbp(r.travel)}</b></div>`+
+    `<div><span>Responsibility</span><b>${wpGbp(r.liab)}</b></div>`+
     `<div class="wp-driver"><span>${driver}</span><b></b></div>`;
+}
+
+async function saveWorkQuote(){
+  const inp = collectWorkPricingInputs();
+  const desc = (inp.desc||'').trim();
+  if(!desc){ alert('Add a job description first — that becomes the catalogue label.'); const d=document.getElementById('wp-desc'); if(d) d.focus(); return; }
+  const r = workPricingCompute(inp);
+  const row = { description: desc, inputs: inp, floor: Math.round(r.floor), target: Math.round(r.target), stretch: Math.round(r.stretch) };
+  const btn = document.getElementById('wp-save-btn'); if(btn){ btn.textContent='Saving…'; btn.disabled=true; }
+  const { data, error } = await window.db.from('work_quotes').insert([row]).select();
+  if(error){ alert('Save failed: '+error.message); if(btn){ btn.textContent='Save quote to catalogue'; btn.disabled=false; } return; }
+  if(data && data[0]) workQuotes.unshift(data[0]);
+  window._wpPending = inp;
+  renderWorkPricingView();
+}
+async function loadWorkQuote(id){
+  const q = (workQuotes||[]).find(x=>String(x.id)===String(id));
+  if(!q) return;
+  window._wpPending = q.inputs || {};
+  renderWorkPricingView();
+  const out=document.querySelector('.wp-out'); if(out) out.scrollIntoView({behavior:'smooth',block:'start'});
+}
+async function deleteWorkQuote(id){
+  if(!confirm('Remove this quote from the catalogue?')) return;
+  const { error } = await window.db.from('work_quotes').delete().eq('id', id);
+  if(error){ alert('Delete failed: '+error.message); return; }
+  workQuotes = (workQuotes||[]).filter(x=>String(x.id)!==String(id));
+  renderWorkPricingView();
 }
 
