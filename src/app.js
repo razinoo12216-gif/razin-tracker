@@ -4116,10 +4116,24 @@ function renderLife(){
 }
 
 /* ---------- GOALS ---------- */
+/* --- Auto-source linking: pull from Gym / Tickets / Debts so nothing is entered twice --- */
+const AUTO_LABEL = { gym:'Gym', tickets:'Tickets' };
+function lifeWeekEnd(wk){ const d=new Date(wk+'T00:00:00'); d.setDate(d.getDate()+6); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function liveDebtTotal(){ return (debts||[]).filter(d=>d.type!=='receivable' && d.status!=='paid').reduce((s,d)=>s+parseNum(d.current_balance),0); }
+function dailyAutoSource(t){ return /\bgym\b/i.test(t.title||'') ? 'gym' : null; }
+function weeklyAutoSource(t){ const s=t.title||''; if(/\bgym\b/i.test(s)) return 'gym'; if(/ticket/i.test(s)) return 'tickets'; return null; }
+function autoDailyVal(t, day){ if(dailyAutoSource(t)==='gym') return (gymSessions||[]).some(x=>x.date===day)?1:0; return null; }
+function autoWeeklyVal(t, wk){ const src=weeklyAutoSource(t); if(!src) return null; const e=lifeWeekEnd(wk); if(src==='gym') return (gymSessions||[]).filter(x=>x.date>=wk&&x.date<=e).length; if(src==='tickets') return (tickets||[]).filter(k=>(k.ticket_kind||'personal')==='personal'&&k.date>=wk&&k.date<=e).length; return 0; }
+function dailyEffective(t, day){ const a=autoDailyVal(t,day); return a!==null ? {v:a,auto:dailyAutoSource(t)} : {v:dailyVal(t.id,day),auto:null}; }
+function weeklyEffective(t, wk){ const a=autoWeeklyVal(t,wk); return a!==null ? {v:a,auto:weeklyAutoSource(t)} : {v:weeklyVal(t.id,wk),auto:null}; }
+function goalDebtLinked(g){ return /debt/i.test((g.metric_label||'')+' '+(g.title||'')); }
+function goalCurrent(g){ return goalDebtLinked(g) ? liveDebtTotal() : g.current_value; }
+
 function goalProgress(g){
-  const hasMetric = g.metric_label && g.target_value!=null && g.start_value!=null && g.current_value!=null;
+  const cur = goalCurrent(g);
+  const hasMetric = g.metric_label && g.target_value!=null && g.start_value!=null && cur!=null;
   if (hasMetric){
-    const s=parseNum(g.start_value), c=parseNum(g.current_value), t=parseNum(g.target_value);
+    const s=parseNum(g.start_value), c=parseNum(cur), t=parseNum(g.target_value);
     if (t===s) return c>=t?100:0;
     return Math.max(0, Math.min(100, Math.round(((c-s)/(t-s))*100)));
   }
@@ -4131,7 +4145,7 @@ function goalCardHtml(g){
   const paused = g.status==='paused';
   const hasMetric = g.metric_label && g.target_value!=null;
   const metricLine = hasMetric
-    ? `<div class="life-goal-metric">${esc(g.metric_label)}: <b>${fmtMaybe(g.current_value)}</b> <span class="life-arrow">→</span> ${fmtMaybe(g.target_value)}</div>`
+    ? `<div class="life-goal-metric">${esc(g.metric_label)}: <b>${fmtMaybe(goalCurrent(g))}</b> <span class="life-arrow">→</span> ${fmtMaybe(g.target_value)}${goalDebtLinked(g)?' <span class="life-autotag">live · Debts</span>':''}</div>`
     : '';
   const linked = [...dailyTargets, ...weeklyTargets].filter(t=>t.goal_id===g.id).length;
   return `
@@ -4229,7 +4243,7 @@ async function deleteGoal(id){
 
 /* ---------- TARGETS ---------- */
 function dailyVal(targetId, day){ const l=(dailyLogs||[]).find(x=>x.target_id===targetId && x.log_date===day); return l?parseNum(l.value):0; }
-function dailyMet(t, day){ const v=dailyVal(t.id,day); return t.type==='count' ? v>=(t.target_count||1) && v>0 : v>=1; }
+function dailyMet(t, day){ const {v}=dailyEffective(t,day); return t.type==='count' ? v>=(t.target_count||1) && v>0 : v>=1; }
 function dailyStreak(t){
   let streak=0, day=todayISO();
   // if today not yet met, start counting from yesterday so streak isn't 0 mid-day
@@ -4267,14 +4281,22 @@ function renderLifeTargetsHtml(){
   const dayPct = ad.length ? Math.round(metCount/ad.length*100) : 0;
 
   const dailyRows = ad.length ? ad.map(t=>{
-    const v=dailyVal(t.id,day), met=dailyMet(t,day), streak=dailyStreak(t);
-    const control = t.type==='count'
-      ? `<div class="life-counter"><button class="life-cbtn" onclick="adjustDailyCount(event,'${t.id}',-1)">−</button><span class="life-cval">${v}<span class="life-ctar">/${t.target_count||1}</span></span><button class="life-cbtn" onclick="adjustDailyCount(event,'${t.id}',1)">+</button></div>`
-      : `<button class="life-check${met?' on':''}" onclick="event.stopPropagation();toggleDailyCheck('${t.id}')">${met?'✓':''}</button>`;
+    const eff=dailyEffective(t,day), v=eff.v, met=dailyMet(t,day), streak=dailyStreak(t);
+    let control;
+    if(eff.auto){
+      control = t.type==='count'
+        ? `<div class="life-auto-val"><span class="life-cval">${v}<span class="life-ctar">/${t.target_count||1}</span></span></div>`
+        : `<div class="life-auto-ind${met?' on':''}">${met?'✓':'—'}</div>`;
+    } else {
+      control = t.type==='count'
+        ? `<div class="life-counter"><button class="life-cbtn" onclick="adjustDailyCount(event,'${t.id}',-1)">−</button><span class="life-cval">${v}<span class="life-ctar">/${t.target_count||1}</span></span><button class="life-cbtn" onclick="adjustDailyCount(event,'${t.id}',1)">+</button></div>`
+        : `<button class="life-check${met?' on':''}" onclick="event.stopPropagation();toggleDailyCheck('${t.id}')">${met?'✓':''}</button>`;
+    }
+    const autotag = eff.auto ? `<span class="life-autotag">auto · ${AUTO_LABEL[eff.auto]||eff.auto}</span>` : '';
     return `<div class="life-target-row${met?' met':''}" onclick="openDailyTargetEditor('${t.id}')">
       <div class="life-target-main">
         <span class="life-target-title">${esc(t.title)}</span>
-        <span class="life-target-sub">${t.domain?`<span class="life-dom ${lifeDomainClass(t.domain)}">${esc(t.domain)}</span>`:''}${streak>0?`<span class="life-streak">🔥 ${streak}</span>`:''}</span>
+        <span class="life-target-sub">${t.domain?`<span class="life-dom ${lifeDomainClass(t.domain)}">${esc(t.domain)}</span>`:''}${autotag}${streak>0?`<span class="life-streak">🔥 ${streak}</span>`:''}</span>
       </div>
       <div class="life-target-ctl" onclick="event.stopPropagation()">${control}</div>
     </div>`;
@@ -4282,24 +4304,24 @@ function renderLifeTargetsHtml(){
 
   const aw=(weeklyTargets||[]).filter(t=>t.active!==false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
   const wk=lifeMonday(todayISO());
-  const weeklyMet=aw.filter(t=>{ const v=weeklyVal(t.id,wk); return (t.target_count||0)===0 ? v===0 : v>=t.target_count; }).length;
+  const weeklyMet=aw.filter(t=>{ const v=weeklyEffective(t,wk).v; return (t.target_count||0)===0 ? v===0 : v>=t.target_count; }).length;
   const weekPct = aw.length ? Math.round(weeklyMet/aw.length*100) : 0;
   const weeklyRows = aw.length ? aw.map(t=>{
-    const v=weeklyVal(t.id,wk); const tar=t.target_count||0;
+    const eff=weeklyEffective(t,wk); const v=eff.v; const tar=t.target_count||0;
     const isZero = tar===0;
     const pct = isZero ? (v===0?100:0) : Math.max(0,Math.min(100,Math.round(v/tar*100)));
     const label = isZero ? `${v} ${v===1?'incident':'incidents'}` : `${v}/${tar}`;
     const ok = isZero ? v===0 : v>=tar;
+    const ctl = eff.auto
+      ? `<span class="life-autotag">auto · ${AUTO_LABEL[eff.auto]||eff.auto}</span>`
+      : `<button class="life-cbtn" onclick="adjustWeekly(event,'${t.id}',-1)">−</button><button class="life-cbtn" onclick="adjustWeekly(event,'${t.id}',1)">+</button>`;
     return `<div class="life-week-row" onclick="openWeeklyTargetEditor('${t.id}')">
       <div class="life-week-top">
-        <span class="life-target-title">${esc(t.title)}${t.domain?` <span class="life-dom ${lifeDomainClass(t.domain)}">${esc(t.domain)}</span>`:''}</span>
+        <span class="life-target-title">${esc(t.title)}${t.domain?` <span class="life-dom ${lifeDomainClass(t.domain)}">${esc(t.domain)}</span>`:''}${eff.auto?` <span class="life-autotag">auto · ${AUTO_LABEL[eff.auto]||eff.auto}</span>`:''}</span>
         <span class="life-week-count ${ok?'pos':''}">${label}</span>
       </div>
       <div class="life-bar"><div class="life-bar-fill${isZero&&v>0?' bad':''}" style="width:${pct}%"></div></div>
-      <div class="life-week-ctl" onclick="event.stopPropagation()">
-        <button class="life-cbtn" onclick="adjustWeekly(event,'${t.id}',-1)">−</button>
-        <button class="life-cbtn" onclick="adjustWeekly(event,'${t.id}',1)">+</button>
-      </div>
+      <div class="life-week-ctl" onclick="event.stopPropagation()">${ctl}</div>
     </div>`;
   }).join('') : '<div class="life-empty-sm">No weekly targets. Add one below.</div>';
 

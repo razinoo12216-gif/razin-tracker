@@ -2037,3 +2037,9 @@ dialog .actions {
 .wp-cat-fee { font-size:1.05rem; font-weight:800; color:var(--gold); flex-shrink:0; }
 .wp-cat-del { flex-shrink:0; width:28px; height:28px; border-radius:7px; border:1px solid var(--border-2); background:transparent; color:var(--muted); cursor:pointer; font-size:0.8rem; }
 .wp-cat-del:hover { color:var(--danger); border-color:var(--danger); }
+
+/* Life Progress — auto-sourced (pulled from other tabs) */
+.life-autotag { display:inline-block; font-size:0.6rem; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; color:#7cb8ff; background:rgba(59,130,246,0.16); padding:2px 7px; border-radius:20px; }
+.life-auto-ind { width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:1.05rem; color:var(--muted); border:1.5px dashed var(--border-2); }
+.life-auto-ind.on { color:#34d399; border-color:rgba(34,197,94,0.5); border-style:solid; }
+.life-auto-val { display:flex; align-items:center; }
