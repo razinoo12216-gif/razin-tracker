@@ -1491,23 +1491,22 @@ function debtSort(a, b) {
 function renderDebtTotals() {
   clearTotalSpanClasses();
   if (window._debtView === 'owed') {
-    setTotalsLabels(['Total owed to me', 'Collected', 'Outstanding', 'Active']);
+    setTotalsLabels(['Owed to me', 'Collected', 'Lifetime', 'Owing']);
     const act = (receivables || []).filter((r) => r.status !== 'paid');
-    const totalOwed = act.reduce((s, r) => s + parseNum(r.original_amount), 0);
-    const collected = act.reduce((s, r) => s + Math.max(0, parseNum(r.original_amount) - parseNum(r.current_balance)), 0);
     const outstanding = act.reduce((s, r) => s + parseNum(r.current_balance), 0);
+    const collected = act.reduce((s, r) => s + Math.max(0, parseNum(r.original_amount) - parseNum(r.current_balance)), 0);
+    const lifetime = act.reduce((s, r) => s + parseNum(r.original_amount), 0);
+    const owingCount = act.filter((r) => parseNum(r.current_balance) > 0).length;
 
     const owedEl = $('#t-rev');
-    owedEl.textContent = fmt(totalOwed);
-    if (totalOwed > 0) owedEl.classList.add('pos');
+    owedEl.textContent = fmt(outstanding);
+    if (outstanding > 0) owedEl.classList.add('pos');
 
     $('#t-exp').textContent = fmt(collected);
 
-    const outEl = $('#t-net');
-    outEl.textContent = fmt(outstanding);
-    if (outstanding > 0) outEl.classList.add('neg');
+    $('#t-net').textContent = fmt(lifetime);
 
-    $('#t-count').textContent = String(act.length);
+    $('#t-count').textContent = String(owingCount);
   } else {
     setTotalsLabels(['Total owed', 'Monthly out', 'Paid lifetime', 'Active']);
     const myDebts = debts.filter((d) => d.type !== 'receivable');
