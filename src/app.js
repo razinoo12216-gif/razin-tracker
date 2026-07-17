@@ -1488,6 +1488,10 @@ function debtSort(a, b) {
   return parseNum(b.current_balance) - parseNum(a.current_balance);
 }
 
+function _fmtDay(iso){ return iso ? new Date(iso+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : 'date not logged'; }
+function debtSettledDate(d){ const ds=(debtPayments||[]).filter(p=>p.debt_id===d.id).map(p=>p.date).filter(Boolean).sort(); return ds.length?ds[ds.length-1]:null; }
+function receivableSettledDate(r){ try{ const ps=(JSON.parse(r.notes||'{}').payments)||[]; const ds=ps.map(x=>x.date).filter(Boolean).sort(); return ds.length?ds[ds.length-1]:null; }catch(e){ return null; } }
+
 function renderDebtTotals() {
   clearTotalSpanClasses();
   if (window._debtView === 'owed') {
@@ -1534,11 +1538,13 @@ function renderReceivablesSection() {
   if (!act.length) {
     return '<div class="empty-state"><p>No one owes you yet.</p><button class="add-btn" onclick="openReceivableEditor(null)">+ Add</button></div>';
   }
+  const activeR = act.filter(r => parseNum(r.current_balance) > 0);
+  const settledR = act.filter(r => parseNum(r.current_balance) <= 0);
   const totalOwed = act.reduce((s,r) => s + parseNum(r.current_balance), 0);
   const totalOrig = act.reduce((s,r) => s + parseNum(r.original_amount), 0);
   const totalCollected = Math.max(0, totalOrig - totalOwed);
-  const summary = `<div class="debt-summary-card"><span class="debt-summary-total">${fmt(totalOwed)}</span> outstanding across ${act.length} entr${act.length===1?'y':'ies'}<br><span style="color:#34d399">£${totalCollected.toFixed(2)} collected so far</span></div>`;
-  const cards = act.map(r => {
+  const summary = `<div class="debt-summary-card"><span class="debt-summary-total">${fmt(totalOwed)}</span> outstanding across ${activeR.length} entr${activeR.length===1?'y':'ies'}<br><span style="color:#34d399">£${totalCollected.toFixed(2)} collected so far</span></div>`;
+  const cardFor = (r) => {
     const name = r.creditor || 'Unknown';
     const orig = parseNum(r.original_amount);
     const remaining = parseNum(r.current_balance != null ? r.current_balance : orig);
@@ -1562,10 +1568,12 @@ function renderReceivablesSection() {
         <div class="debt-progress-text">${pct.toFixed(0)}% collected</div>
       </div>
       ${rPayments.length > 0 ? `<div class="debt-meta"><span>${rPayments.length} payment${rPayments.length !== 1 ? 's' : ''}</span>${lastPay ? `<span>Last: ${lastPay.date}</span>` : ''}</div>` : ''}
-      ${!isSettled ? `<button type="button" class="debt-pay-btn" style="background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.25)" onclick="event.stopPropagation();logReceivablePayment('${r.id}')">+ Log payment received</button>` : ''}
+      ${!isSettled ? `<button type="button" class="debt-pay-btn" style="background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.25)" onclick="event.stopPropagation();logReceivablePayment('${r.id}')">+ Log payment received</button>` : `<div class="debt-settled-line">Settled ${_fmtDay(receivableSettledDate(r))}</div>`}
     </div>`;
-  }).join('');
-  return summary + cards + '<button class="add-btn" style="margin-top:12px" onclick="openReceivableEditor(null)">+ Add</button>';
+  };
+  const activeCards = activeR.map(cardFor).join('') || '<div class="life-empty-sm" style="padding:10px 2px">Nothing outstanding right now.</div>';
+  const settledCards = settledR.length ? `<div class="debt-settled-group"><div class="debt-settled-head">Settled · ${settledR.length}</div>${settledR.map(cardFor).join('')}</div>` : '';
+  return summary + activeCards + settledCards + '<button class="add-btn" style="margin-top:12px" onclick="openReceivableEditor(null)">+ Add</button>';
 }
 function openReceivableEditor(id) {
   var existing = id ? (receivables || []).find(function(r) { return String(r.id) === String(id); }) : null;
@@ -1662,9 +1670,9 @@ function renderDebts() {
       <div class="debt-list">
         ${sorted.length === 0
           ? '<div class="empty">No debts logged. Hit <strong>+ New</strong> to add one. Track to kill.</div>'
-          : sorted.map(renderDebt).join('')}
+          : active.map(renderDebt).join('')}
       </div>
-      ${paid.length > 0 ? `<div class="debt-paid-celebration">${paid.length} debt${paid.length !== 1 ? 's' : ''} killed ✓</div>` : ''}
+      ${paid.length > 0 ? `<div class="debt-settled-group"><div class="debt-settled-head">Settled · ${paid.length} killed ✓</div>${paid.map(renderDebt).join('')}</div>` : ''}
     </div>
   `;
 
@@ -1740,7 +1748,7 @@ function renderDebt(d) {
         ${monthsLeft ? `<span>~${monthsLeft} months left</span>` : ''}
         ${paymentCount > 0 ? `<span>${paymentCount} payment${paymentCount !== 1 ? 's' : ''}</span>` : ''}
       </div>
-      ${!isPaid ? `<button type="button" class="debt-pay-btn" data-id="${esc(d.id)}">+ Log payment</button>` : ''}
+      ${isPaid ? `<div class="debt-settled-line">Settled ${_fmtDay(debtSettledDate(d))}</div>` : `<button type="button" class="debt-pay-btn" data-id="${esc(d.id)}">+ Log payment</button>`}
       ${(d.notes && !d.notes.trim().startsWith('{')) ? `<div class="card-notes">${esc(d.notes)}</div>` : ''}
     </div>
   `;
