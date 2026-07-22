@@ -1489,6 +1489,7 @@ function debtSort(a, b) {
 }
 
 function _fmtDay(iso){ return iso ? new Date(iso+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : 'date not logged'; }
+function elapsedSince(iso){ if(!iso) return ''; const d=new Date(iso+'T00:00:00'); const days=Math.floor((Date.now()-d.getTime())/86400000); if(days<0) return 'not started'; if(days===0) return 'today'; if(days<14) return days+' day'+(days!==1?'s':''); if(days<70){ const w=Math.round(days/7); return w+' week'+(w!==1?'s':''); } const m=Math.round(days/30.44); if(m<24) return m+' month'+(m!==1?'s':''); const y=(days/365).toFixed(1); return y+' years'; }
 function debtSettledDate(d){ const ds=(debtPayments||[]).filter(p=>p.debt_id===d.id).map(p=>p.date).filter(Boolean).sort(); return ds.length?ds[ds.length-1]:null; }
 function receivableSettledDate(r){ try{ const ps=(JSON.parse(r.notes||'{}').payments)||[]; const ds=ps.map(x=>x.date).filter(Boolean).sort(); return ds.length?ds[ds.length-1]:null; }catch(e){ return null; } }
 
@@ -1546,6 +1547,7 @@ function renderReceivablesSection() {
   const summary = `<div class="debt-summary-card"><span class="debt-summary-total">${fmt(totalOwed)}</span> outstanding across ${activeR.length} entr${activeR.length===1?'y':'ies'}<br><span style="color:#34d399">£${totalCollected.toFixed(2)} collected so far</span></div>`;
   const cardFor = (r) => {
     const name = r.creditor || 'Unknown';
+    const startISO = r.start_date || (r.created_at||'').slice(0,10);
     const orig = parseNum(r.original_amount);
     const remaining = parseNum(r.current_balance != null ? r.current_balance : orig);
     const collected = Math.max(0, orig - remaining);
@@ -1567,6 +1569,7 @@ function renderReceivablesSection() {
         <div class="debt-progress-bar"><div class="debt-progress-fill" style="width:${pct.toFixed(1)}%;background:linear-gradient(90deg,#34d399,#10b981)"></div></div>
         <div class="debt-progress-text">${pct.toFixed(0)}% collected</div>
       </div>
+      ${startISO ? `<div style="font-size:0.75rem;color:var(--muted);margin-top:8px">${isSettled?'Was owed':'Owing'} ${elapsedSince(startISO)} · since ${_fmtDay(startISO)}</div>` : ''}
       ${rPayments.length > 0 ? `<div class="debt-meta"><span>${rPayments.length} payment${rPayments.length !== 1 ? 's' : ''}</span>${lastPay ? `<span>Last: ${lastPay.date}</span>` : ''}</div>` : ''}
       ${!isSettled ? `<button type="button" class="debt-pay-btn" style="background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.25)" onclick="event.stopPropagation();logReceivablePayment('${r.id}')">+ Log payment received</button>` : `<div class="debt-settled-line">Settled ${_fmtDay(receivableSettledDate(r))}</div>`}
     </div>`;
@@ -1592,6 +1595,8 @@ function openReceivableEditor(id) {
         '<input id="rv-name" style="width:100%;box-sizing:border-box;background:#0f1319;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:11px 13px;color:#fff;font-size:0.95rem;outline:none;margin-bottom:14px" placeholder="Name or note..." />' +
         '<label style="display:block;font-size:0.75rem;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">Amount (£)</label>' +
         '<input id="rv-amount" type="number" step="0.01" min="0" style="width:100%;box-sizing:border-box;background:#0f1319;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:11px 13px;color:#fff;font-size:0.95rem;outline:none;margin-bottom:18px" placeholder="0.00" />' +
+        '<label style="display:block;font-size:0.75rem;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">Date started (owed since)</label>' +
+        '<input id="rv-start" type="date" style="width:100%;box-sizing:border-box;background:#0f1319;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:11px 13px;color:#fff;font-size:0.95rem;outline:none;margin-bottom:18px" />' +
         '<div id="rv-history" style="margin-bottom:16px"></div>' +
         '<div id="rv-btns" style="display:flex;gap:10px"></div>' +
       '</div>' +
@@ -1607,6 +1612,7 @@ function openReceivableEditor(id) {
     delBtn.className = 'btn-danger'; delBtn.textContent = 'Delete';
     delBtn.onclick = function() { deleteReceivable(id); }; btns.appendChild(delBtn);
   }
+  document.getElementById('rv-start').value = existing ? (existing.start_date || (existing.created_at||'').slice(0,10) || '') : todayISO();
   if (existing) {
     document.getElementById('rv-name').value = existing.creditor || '';
     document.getElementById('rv-amount').value = existing.original_amount || '';
@@ -1633,6 +1639,7 @@ async function saveReceivableEditor() {
   if (!name || !amount) { alert('Name and amount are required.'); return; }
   var id = window._rvEditId;
   var payload = { creditor: name, original_amount: amount, current_balance: amount, type: 'receivable', status: 'active' };
+  payload.start_date = (document.getElementById('rv-start') || {}).value || null;
   if (id) {
     var existing2 = (receivables || []).find(function(r) { return String(r.id) === String(id); });
     var origAmt = existing2 ? parseFloat(existing2.original_amount) : amount;
