@@ -1592,6 +1592,7 @@ function openReceivableEditor(id) {
         '<input id="rv-name" style="width:100%;box-sizing:border-box;background:#0f1319;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:11px 13px;color:#fff;font-size:0.95rem;outline:none;margin-bottom:14px" placeholder="Name or note..." />' +
         '<label style="display:block;font-size:0.75rem;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">Amount (£)</label>' +
         '<input id="rv-amount" type="number" step="0.01" min="0" style="width:100%;box-sizing:border-box;background:#0f1319;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:11px 13px;color:#fff;font-size:0.95rem;outline:none;margin-bottom:18px" placeholder="0.00" />' +
+        '<div id="rv-history" style="margin-bottom:16px"></div>' +
         '<div id="rv-btns" style="display:flex;gap:10px"></div>' +
       '</div>' +
     '</div>';
@@ -1609,6 +1610,21 @@ function openReceivableEditor(id) {
   if (existing) {
     document.getElementById('rv-name').value = existing.creditor || '';
     document.getElementById('rv-amount').value = existing.original_amount || '';
+    var _rvN = {}; try { _rvN = JSON.parse(existing.notes || '{}'); } catch(e) {}
+    var _pays = (Array.isArray(_rvN.payments) ? _rvN.payments : []).slice().sort(function(a,b){ return String(b.date||'').localeCompare(String(a.date||'')); });
+    var _coll = _pays.reduce(function(s,p){ return s + (parseFloat(p.amount)||0); }, 0);
+    var _rem = parseFloat(existing.current_balance != null ? existing.current_balance : existing.original_amount) || 0;
+    var _hist = document.getElementById('rv-history');
+    if (_hist) {
+      if (_pays.length) {
+        _hist.innerHTML = '<label style="display:block;font-size:0.75rem;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Payments received (' + _pays.length + ') \u00b7 \u00a3' + _coll.toFixed(2) + ' in \u00b7 \u00a3' + _rem.toFixed(2) + ' left</label>' +
+          '<div style="max-height:170px;overflow-y:auto;background:#0f1319;border:1px solid rgba(255,255,255,0.1);border-radius:8px">' +
+          _pays.map(function(p){ return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 13px;border-bottom:1px solid rgba(255,255,255,0.05);font-size:0.85rem"><span style="color:rgba(255,255,255,0.6)">' + (p.date || '\u2014') + '</span><span style="color:#34d399;font-weight:600">\u00a3' + ((parseFloat(p.amount)||0).toFixed(2)) + '</span></div>'; }).join('') +
+          '</div>';
+      } else {
+        _hist.innerHTML = '<div style="font-size:0.8rem;color:rgba(255,255,255,0.4);padding:2px 0 6px">No payments logged yet \u2014 use \u201c+ Log payment received\u201d on the card.</div>';
+      }
+    }
   }
 }
 async function saveReceivableEditor() {
