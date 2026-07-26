@@ -58,6 +58,13 @@ let weeklyLogs = [];
 let lifeSubTab = 'goals';
 let lifeDay = todayISO();
 let workQuotes = [];
+let opDailyLogs = [];
+let opDebt = null;
+let opIncome = [];
+let opSpend = [];
+let opProjects = [];
+let opPartner = [];
+let opSubTab = 'daily';
 let ticketTypeFilter = 'all';
 
 const taskEditor = $('#task-editor');
@@ -354,6 +361,12 @@ async function loadAll() {
   try { const {data:_wt} = await window.db.from('weekly_targets').select('*').order('sort_order',{ascending:true}); weeklyTargets = _wt || []; } catch(_e) {}
   try { const {data:_wl} = await window.db.from('weekly_logs').select('*'); weeklyLogs = _wl || []; } catch(_e) {}
   try { const {data:_wq} = await window.db.from('work_quotes').select('*').order('created_at',{ascending:false}); workQuotes = _wq || []; } catch(_e) {}
+  try { const {data:_od} = await window.db.from('op_daily_logs').select('*').order('date',{ascending:false}); opDailyLogs = _od || []; } catch(_e) {}
+  try { const {data:_odb} = await window.db.from('op_debt').select('*').eq('id',1).single(); if(_odb) opDebt = _odb; } catch(_e) {}
+  try { const {data:_oi} = await window.db.from('op_income').select('*').order('date',{ascending:false}); opIncome = _oi || []; } catch(_e) {}
+  try { const {data:_os} = await window.db.from('op_spend').select('*').order('date',{ascending:false}); opSpend = _os || []; } catch(_e) {}
+  try { const {data:_op} = await window.db.from('op_projects').select('*'); opProjects = _op || []; } catch(_e) {}
+  try { const {data:_opc} = await window.db.from('op_partner_checks').select('*').order('week_label',{ascending:false}); opPartner = _opc || []; } catch(_e) {}
   render(); // re-render once trailing loads (pots, receivables, notes, macros) are in — fixes stale header/sections on first load
   try { saveLocalBackup(); } catch(_e) {}
   try { checkBackupRestore(); } catch(_e) {}
@@ -479,7 +492,7 @@ function renderPotentialTotals(potentials) {
 }
 
 function render() {
-  if(!['today','drive','review','invoice','ticket','debt','gym','project','potential','expense','notes','pots','income','life'].includes(activeTab))activeTab='today';
+  if(!['today','drive','review','invoice','ticket','debt','gym','project','potential','expense','notes','pots','income','life','operator'].includes(activeTab))activeTab='today';
   // Month-scoped: expenses use month filter; projects are ongoing (not month-scoped)
   const moneyEntries = entries.filter((e) => e.type !== 'potential');
   const inMonth = moneyEntries.filter((e) => matchesMonth(e, selectedMonth));
@@ -512,15 +525,17 @@ function render() {
   if (incCountEl) incCountEl.textContent = String((incomeEntries || []).length);
   const lifeCountEl = $('#tc-life');
   if (lifeCountEl) lifeCountEl.textContent = String((lifeGoals || []).filter(g => g.status !== 'done').length);
+  const opCountEl = $('#tc-operator');
+  if (opCountEl) { const _ol = (opDailyLogs||[]).find(l=>l.date===todayISO()); opCountEl.textContent = String(_ol?OP_DAILY_ITEMS.reduce((s,it)=>s+(_ol[it[0]]===true?1:0),0):0); }
 
   // Hide/show header bits based on tab
   const totalsEl = document.querySelector('.totals');
   const monthSelEl = $('#month-select');
   const addBtnEl = $('#add-btn');
   const hideContext = activeTab === 'drive' || activeTab === 'today';
-  if (totalsEl) totalsEl.style.display = (hideContext || activeTab === 'income' || activeTab === 'life') ? 'none' : '';
-  if (monthSelEl) monthSelEl.style.display = (hideContext || activeTab === 'ticket' || activeTab === 'debt' || activeTab === 'pots' || activeTab === 'income' || activeTab === 'life') ? 'none' : '';
-  if (addBtnEl) addBtnEl.style.display = (activeTab === 'today' || activeTab === 'pots' || activeTab === 'income' || activeTab === 'life') ? 'none' : '';
+  if (totalsEl) totalsEl.style.display = (hideContext || activeTab === 'income' || activeTab === 'life' || activeTab === 'operator') ? 'none' : '';
+  if (monthSelEl) monthSelEl.style.display = (hideContext || activeTab === 'ticket' || activeTab === 'debt' || activeTab === 'pots' || activeTab === 'income' || activeTab === 'life' || activeTab === 'operator') ? 'none' : '';
+  if (addBtnEl) addBtnEl.style.display = (activeTab === 'today' || activeTab === 'pots' || activeTab === 'income' || activeTab === 'life' || activeTab === 'operator') ? 'none' : '';
 
   if (activeTab === 'ticket') renderTicketTotals();
   if (activeTab === 'debt') renderDebtTotals();
@@ -529,6 +544,7 @@ function render() {
   if (activeTab === 'pots') return renderPots();
   if (activeTab === 'income') return renderIncome();
   if (activeTab === 'life') return renderLife();
+  if (activeTab === 'operator') return renderOperator();
   if (activeTab === 'today') return renderToday();
   if (activeTab === 'drive') return renderDrive();
   if (activeTab === 'review') return renderReviews();
@@ -4621,4 +4637,183 @@ async function deleteWorkQuote(id){
   workQuotes = (workQuotes||[]).filter(x=>String(x.id)!==String(id));
   renderWorkPricingView();
 }
+
+/* ===================== OPERATOR LOG ===================== */
+const OP_DEBT_START = 21101.25;
+const OP_INCOME_TARGET = 15000;
+const OP_DAILY_ITEMS = [['wake','Wake by 6:00am'],['fajr','Fajr on time'],['gym','Gym before 9am'],['pmo','No PMO'],['sleep','Fixed bedtime hit'],['prayers','All 5 prayers on time']];
+const OP_STREAMS = ['RASNEST','IMS Trading','Other'];
+
+function opSetSub(t){ opSubTab=t; render(); }
+function opDatesBack(n){ const a=[]; for(let i=n-1;i>=0;i--) a.push(shiftISO(todayISO(),-i)); return a; }
+function opLogForDate(d){ return (opDailyLogs||[]).find(l=>l.date===d); }
+function opDayScore(l){ if(!l) return 0; return OP_DAILY_ITEMS.reduce((s,it)=>s+(l[it[0]]===true?1:0),0); }
+function opWeekLabel(iso){
+  const d=new Date((iso||todayISO())+'T00:00:00');
+  const dn=(d.getDay()+6)%7; d.setDate(d.getDate()-dn+3);
+  const firstThu=new Date(d.getFullYear(),0,4);
+  const week=1+Math.round(((d-firstThu)/86400000 - 3 + ((firstThu.getDay()+6)%7))/7);
+  return d.getFullYear()+'-W'+String(week).padStart(2,'0');
+}
+
+function renderOperator(){
+  if(!window.SUPABASE_CONFIGURED){ list.innerHTML='<div class="empty error">Supabase not configured.</div>'; return; }
+  const tabs=[['daily','Daily'],['money','Money'],['projects','Projects'],['partner','Partner']];
+  const sub=`<div class="op-subnav">${tabs.map(t=>`<button class="op-subtab${opSubTab===t[0]?' active':''}" onclick="opSetSub('${t[0]}')">${t[1]}</button>`).join('')}</div>`;
+  let body;
+  if(opSubTab==='money') body=renderOpMoney();
+  else if(opSubTab==='projects') body=renderOpProjects();
+  else if(opSubTab==='partner') body=renderOpPartner();
+  else body=renderOpDaily();
+  list.innerHTML=`<div class="op-wrap">${sub}${body}</div>`;
+}
+
+/* ---- Daily ---- */
+async function opUpsertDaily(patch){
+  const d=todayISO();
+  let log=opLogForDate(d);
+  if(!log){ log={date:d}; opDailyLogs.unshift(log); }
+  Object.assign(log, patch);
+  render();
+  const {error}=await window.db.from('op_daily_logs').upsert(Object.assign({date:d},patch),{onConflict:'date'});
+  if(error){ alert('Save failed: '+error.message); await loadAll(); }
+}
+function opToggleDaily(key){ const l=opLogForDate(todayISO()); const cur=l?l[key]:null; const p={}; p[key]=(cur===true)?false:true; opUpsertDaily(p); }
+function opSetHours(v){ opUpsertDaily({hours:parseFloat(v)||0}); }
+
+function renderOpDaily(){
+  const today=todayISO();
+  const tLog=opLogForDate(today);
+  const score=opDayScore(tLog);
+  const streak=opDatesBack(14).map(d=>{const l=opLogForDate(d);return l?opDayScore(l)>=5:false;})
+    .map(hit=>`<div class="op-streak-cell${hit?' hit':''}"></div>`).join('');
+  const toggles=OP_DAILY_ITEMS.map(it=>{
+    const v=tLog?tLog[it[0]]:null; const st=v===true?'pass':(v===false?'fail':'none');
+    return `<div class="op-item"><span class="op-item-label">${it[1]}</span><button class="op-yn op-${st}" onclick="opToggleDaily('${it[0]}')">${v===true?'✓':(v===false?'✗':'—')}</button></div>`;
+  }).join('');
+  const hoursVal=(tLog&&tLog.hours!=null)?tLog.hours:'';
+  const days7=opDatesBack(7);
+  const head=`<div class="op-grid-row op-grid-head"><span class="op-grid-label"></span>${days7.map(d=>`<span class="op-grid-cell-h">${new Date(d+'T00:00:00').toLocaleDateString('en-GB',{weekday:'narrow'})}</span>`).join('')}</div>`;
+  const rows=OP_DAILY_ITEMS.map(it=>{
+    const cells=days7.map(d=>{const l=opLogForDate(d);const v=l?l[it[0]]:null;const c=(v===true)?'pass':((v===false&&l)?'fail':'none');return `<span class="op-cell op-${c}"></span>`;}).join('');
+    return `<div class="op-grid-row"><span class="op-grid-label">${it[1]}</span>${cells}</div>`;
+  }).join('');
+  return `
+    <div class="op-panel"><div class="op-panel-head">14-day streak <span class="op-dim">5+/6 = hit</span></div><div class="op-streak">${streak}</div></div>
+    <div class="op-panel">
+      <div class="op-score">${score}<span class="op-dim"> /6 non-negotiables today</span></div>
+      <div class="op-items">${toggles}</div>
+      <div class="op-item" style="margin-top:8px;border-top:1px solid #23262b;padding-top:12px"><span class="op-item-label">Focused work hours</span><input class="op-hours" type="number" step="0.5" inputmode="decimal" value="${hoursVal}" onchange="opSetHours(this.value)" placeholder="0"/></div>
+    </div>
+    <div class="op-panel"><div class="op-panel-head">Last 7 days</div><div class="op-grid">${head}${rows}</div></div>`;
+}
+
+/* ---- Money ---- */
+function renderOpMoney(){
+  const bal=opDebt?parseNum(opDebt.balance):OP_DEBT_START;
+  const paid=Math.max(0,OP_DEBT_START-bal);
+  const pct=OP_DEBT_START>0?Math.min(100,Math.max(0,paid/OP_DEBT_START*100)):0;
+  const ym=todayISO().slice(0,7);
+  const monthInc=(opIncome||[]).filter(x=>(x.date||'').slice(0,7)===ym).reduce((s,x)=>s+parseNum(x.amount),0);
+  const incPct=OP_INCOME_TARGET>0?Math.round(monthInc/OP_INCOME_TARGET*100):0;
+  const gbp=n=>'£'+Math.round(n).toLocaleString('en-GB');
+  const gbp2=n=>'£'+n.toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const incRows=(opIncome||[]).slice(0,40).map(x=>`<div class="op-row"><span class="op-row-main"><span class="op-tag">${esc(x.stream||'Other')}</span> ${_fmtDay(x.date)}</span><span class="op-row-amt pos">${gbp(parseNum(x.amount))}</span><button class="op-del" onclick="opDeleteIncome('${x.id}')">×</button></div>`).join('')||'<div class="op-dim" style="padding:8px 0">No income logged.</div>';
+  const spendRows=(opSpend||[]).slice(0,40).map(x=>`<div class="op-row"><span class="op-row-main">${esc(x.description||'—')} · ${_fmtDay(x.date)}</span><span class="op-row-amt neg">${gbp(parseNum(x.amount))}</span><button class="op-del" onclick="opDeleteSpend('${x.id}')">×</button></div>`).join('')||'<div class="op-dim" style="padding:8px 0">No spend logged.</div>';
+  const streamOpts=OP_STREAMS.map(s=>`<option value="${s}">${s}</option>`).join('');
+  return `
+    <div class="op-panel">
+      <div class="op-panel-head">Debt</div>
+      <div class="op-debt-bal">${gbp2(bal)}<span class="op-dim"> of ${gbp2(OP_DEBT_START)}</span></div>
+      <div class="op-bar"><div class="op-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>
+      <div class="op-dim">${pct.toFixed(1)}% paid off · ${gbp2(paid)} killed</div>
+      <div class="op-inline"><input class="op-input" id="op-debt-in" type="number" step="0.01" inputmode="decimal" placeholder="New balance" value="${bal}"/><button class="op-btn" onclick="opSetDebt(document.getElementById('op-debt-in').value)">Update</button></div>
+    </div>
+    <div class="op-panel">
+      <div class="op-panel-head">Income · this month</div>
+      <div class="op-debt-bal">${gbp(monthInc)}<span class="op-dim"> / ${gbp(OP_INCOME_TARGET)} (${incPct}%)</span></div>
+      <div class="op-bar"><div class="op-bar-fill" style="width:${Math.min(100,Math.max(0,incPct))}%"></div></div>
+      <div class="op-inline">
+        <input class="op-input" id="op-inc-amt" type="number" step="0.01" inputmode="decimal" placeholder="Amount"/>
+        <select class="op-input" id="op-inc-stream">${streamOpts}</select>
+        <input class="op-input" id="op-inc-date" type="date" value="${todayISO()}"/>
+        <button class="op-btn" onclick="opAddIncome()">Add</button>
+      </div>
+      <div class="op-list">${incRows}</div>
+    </div>
+    <div class="op-panel">
+      <div class="op-panel-head">Spend log <span class="op-dim">(£100+)</span></div>
+      <div class="op-inline">
+        <input class="op-input" id="op-sp-desc" placeholder="Description" style="flex:2"/>
+        <input class="op-input" id="op-sp-amt" type="number" step="0.01" inputmode="decimal" placeholder="Amount"/>
+        <input class="op-input" id="op-sp-date" type="date" value="${todayISO()}"/>
+        <button class="op-btn" onclick="opAddSpend()">Add</button>
+      </div>
+      <div class="op-list">${spendRows}</div>
+    </div>`;
+}
+async function opSetDebt(v){ const b=parseNum(v); const {error}=await window.db.from('op_debt').upsert({id:1,balance:b,updated_at:new Date().toISOString()},{onConflict:'id'}); if(error){alert('Error: '+error.message);return;} opDebt={id:1,balance:b}; render(); }
+async function opAddIncome(){ const amt=parseNum(document.getElementById('op-inc-amt').value); if(!amt){alert('Enter an amount.');return;} const row={date:document.getElementById('op-inc-date').value||todayISO(),stream:document.getElementById('op-inc-stream').value,amount:amt}; const {data,error}=await window.db.from('op_income').insert([row]).select(); if(error){alert('Error: '+error.message);return;} if(data&&data[0])opIncome.unshift(data[0]); render(); }
+async function opDeleteIncome(id){ const {error}=await window.db.from('op_income').delete().eq('id',id); if(error){alert('Error');return;} opIncome=(opIncome||[]).filter(x=>String(x.id)!==String(id)); render(); }
+async function opAddSpend(){ const amt=parseNum(document.getElementById('op-sp-amt').value); if(!amt){alert('Enter an amount.');return;} const row={date:document.getElementById('op-sp-date').value||todayISO(),description:(document.getElementById('op-sp-desc').value||'').trim()||null,amount:amt}; const {data,error}=await window.db.from('op_spend').insert([row]).select(); if(error){alert('Error: '+error.message);return;} if(data&&data[0])opSpend.unshift(data[0]); render(); }
+async function opDeleteSpend(id){ const {error}=await window.db.from('op_spend').delete().eq('id',id); if(error){alert('Error');return;} opSpend=(opSpend||[]).filter(x=>String(x.id)!==String(id)); render(); }
+
+/* ---- Projects ---- */
+function renderOpProjects(){
+  const order={Active:0,Stalled:1,Dead:2};
+  const ps=[...(opProjects||[])].sort((a,b)=>((order[a.status]==null?9:order[a.status])-(order[b.status]==null?9:order[b.status]))||String(b.updated_at||'').localeCompare(String(a.updated_at||'')));
+  const cards=ps.length?ps.map(p=>{
+    const st=p.status||'Active';
+    return `<div class="op-proj op-st-${st.toLowerCase()}" onclick="openOpProjectEditor('${p.id}')">
+      <div class="op-proj-head"><span class="op-proj-name">${esc(p.name)}</span><span class="op-proj-status st-${st.toLowerCase()}">${st}</span></div>
+      <div class="op-proj-next">${p.next_action?('<span class="op-dim">Next:</span> '+esc(p.next_action)):'<span class="op-dim">No next action set</span>'}</div>
+      <div class="op-proj-upd op-dim">Updated ${_fmtDay((p.updated_at||'').slice(0,10))}</div>
+    </div>`;
+  }).join(''):'<div class="op-dim" style="padding:10px 0">No projects yet. Every project needs one of: Active / Stalled / Dead.</div>';
+  return `<div class="op-actions"><button class="op-add" onclick="openOpProjectEditor(null)">+ Add project</button></div>${cards}`;
+}
+function openOpProjectEditor(id){
+  window._opProjId=id||null;
+  const p=id?(opProjects||[]).find(x=>String(x.id)===String(id)):null;
+  const stOpts=['Active','Stalled','Dead'].map(s=>`<option value="${s}"${p&&p.status===s?' selected':''}>${s}</option>`).join('');
+  showWorkModal(`<h3 class="work-modal-title">${p?'Edit project':'Add project'}</h3>
+    <form id="opp-form" onsubmit="return saveOpProject(event)">
+      <label class="work-lbl">Name</label>
+      <input class="work-input" id="opp-name" required value="${p?esc(p.name):''}"/>
+      <label class="work-lbl">Status</label>
+      <select class="work-input" id="opp-status">${stOpts}</select>
+      <label class="work-lbl">Next action</label>
+      <textarea class="work-input" id="opp-next" rows="2" placeholder="The single next move">${p?esc(p.next_action||''):''}</textarea>
+      <div class="work-modal-actions">${p?`<button type="button" class="work-btn-danger" onclick="deleteOpProject('${p.id}')">Delete</button>`:'<span></span>'}<div class="work-modal-right"><button type="button" class="work-btn-ghost" onclick="closeWorkModal()">Cancel</button><button type="submit" class="work-btn-primary">Save</button></div></div>
+    </form>`);
+}
+async function saveOpProject(ev){ ev.preventDefault(); const name=document.getElementById('opp-name').value.trim(); if(!name){alert('Name required.');return false;} const payload={name,status:document.getElementById('opp-status').value,next_action:document.getElementById('opp-next').value.trim()||null,updated_at:new Date().toISOString()}; const id=window._opProjId; const res=id?await window.db.from('op_projects').update(payload).eq('id',id):await window.db.from('op_projects').insert([payload]); if(res.error){alert('Error: '+res.error.message);return false;} closeWorkModal(); await loadAll(); return false; }
+async function deleteOpProject(id){ if(!confirm('Delete this project?'))return; const res=await window.db.from('op_projects').delete().eq('id',id); if(res.error){alert('Error: '+res.error.message);return;} closeWorkModal(); await loadAll(); }
+
+/* ---- Partner check ---- */
+function renderOpPartner(){
+  const wk=opWeekLabel(todayISO());
+  const done=(opPartner||[]).some(p=>p.week_label===wk);
+  const hist=[...(opPartner||[])].sort((a,b)=>String(b.week_label).localeCompare(String(a.week_label)));
+  const rows=hist.length?hist.map(p=>`<div class="op-panel" onclick="openOpPartnerEditor('${p.id}')" style="cursor:pointer">
+      <div class="op-panel-head">${esc(p.week_label)}${p.week_label===wk?' <span class="op-tag">this week</span>':''}</div>
+      <div class="op-partner-note">${p.note?esc(p.note):'<span class="op-dim">No note</span>'}</div>
+    </div>`).join(''):'<div class="op-dim" style="padding:10px 0">No entries yet.</div>';
+  return `<div class="op-actions"><button class="op-add" onclick="openOpPartnerEditor(null)">${done?'Edit this week':'+ Log this week'}</button></div>
+    <div class="op-partner-q op-dim">"Did anything happen this week that gave my business partner reason to doubt me?"</div>
+    ${rows}`;
+}
+function openOpPartnerEditor(id){
+  const wk=opWeekLabel(todayISO());
+  const p=id?(opPartner||[]).find(x=>String(x.id)===String(id)):(opPartner||[]).find(x=>x.week_label===wk);
+  window._opPartnerId=p?p.id:null; window._opPartnerWeek=p?p.week_label:wk;
+  showWorkModal(`<h3 class="work-modal-title">Partner check · ${window._opPartnerWeek}</h3>
+    <form id="opw-form" onsubmit="return saveOpPartner(event)">
+      <label class="work-lbl">Did anything give your partner reason to doubt you this week?</label>
+      <textarea class="work-input" id="opw-note" rows="4" placeholder="Be honest.">${p?esc(p.note||''):''}</textarea>
+      <div class="work-modal-actions">${p?`<button type="button" class="work-btn-danger" onclick="deleteOpPartner('${p.id}')">Delete</button>`:'<span></span>'}<div class="work-modal-right"><button type="button" class="work-btn-ghost" onclick="closeWorkModal()">Cancel</button><button type="submit" class="work-btn-primary">Save</button></div></div>
+    </form>`);
+}
+async function saveOpPartner(ev){ ev.preventDefault(); const note=document.getElementById('opw-note').value.trim(); const {error}=await window.db.from('op_partner_checks').upsert({week_label:window._opPartnerWeek,note:note||null},{onConflict:'week_label'}); if(error){alert('Error: '+error.message);return false;} closeWorkModal(); await loadAll(); return false; }
+async function deleteOpPartner(id){ if(!confirm('Delete this entry?'))return; const res=await window.db.from('op_partner_checks').delete().eq('id',id); if(res.error){alert('Error: '+res.error.message);return;} closeWorkModal(); await loadAll(); }
 
