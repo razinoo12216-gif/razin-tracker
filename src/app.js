@@ -4153,12 +4153,7 @@ function lifeJumpToday(){ lifeDay=todayISO(); render(); }
 
 function renderLife(){
   if (!window.SUPABASE_CONFIGURED) { list.innerHTML='<div class="empty error">Supabase not configured.</div>'; return; }
-  const sub = `<div class="life-subnav">
-    <button class="life-subtab${lifeSubTab==='goals'?' active':''}" onclick="lifeSetSub('goals')">Goals</button>
-    <button class="life-subtab${lifeSubTab==='targets'?' active':''}" onclick="lifeSetSub('targets')">Targets</button>
-  </div>`;
-  const body = lifeSubTab==='targets' ? renderLifeTargetsHtml() : renderLifeGoalsHtml();
-  list.innerHTML = `<div class="life-page">${sub}<div class="life-body">${body}</div></div>`;
+  list.innerHTML = `<div class="life-page"><div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin:2px 2px 6px">Long-term goals · daily tracking lives in Operator Log</div><div class="life-body">${renderLifeGoalsHtml()}</div></div>`;
 }
 
 /* ---------- GOALS ---------- */
@@ -4710,7 +4705,7 @@ function renderOpDaily(){
 
 /* ---- Money ---- */
 function renderOpMoney(){
-  const bal=opDebt?parseNum(opDebt.balance):OP_DEBT_START;
+  const bal=liveDebtTotal();
   const paid=Math.max(0,OP_DEBT_START-bal);
   const pct=OP_DEBT_START>0?Math.min(100,Math.max(0,paid/OP_DEBT_START*100)):0;
   const ym=todayISO().slice(0,7);
@@ -4727,7 +4722,7 @@ function renderOpMoney(){
       <div class="op-debt-bal">${gbp2(bal)}<span class="op-dim"> of ${gbp2(OP_DEBT_START)}</span></div>
       <div class="op-bar"><div class="op-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>
       <div class="op-dim">${pct.toFixed(1)}% paid off · ${gbp2(paid)} killed</div>
-      <div class="op-inline"><input class="op-input" id="op-debt-in" type="number" step="0.01" inputmode="decimal" placeholder="New balance" value="${bal}"/><button class="op-btn" onclick="opSetDebt(document.getElementById('op-debt-in').value)">Update</button></div>
+      <div class="op-dim" style="margin-top:10px">\u21bb Live from your Debts tab \u2014 log a payment there and this drops automatically.</div>
     </div>
     <div class="op-panel">
       <div class="op-panel-head">Income · this month</div>
