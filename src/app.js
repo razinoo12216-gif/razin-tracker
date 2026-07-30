@@ -65,6 +65,8 @@ let opSpend = [];
 let opProjects = [];
 let opPartner = [];
 let opSubTab = 'daily';
+let agentMessages = [];
+let agentBusy = false;
 let ticketTypeFilter = 'all';
 
 const taskEditor = $('#task-editor');
@@ -367,6 +369,7 @@ async function loadAll() {
   try { const {data:_os} = await window.db.from('op_spend').select('*').order('date',{ascending:false}); opSpend = _os || []; } catch(_e) {}
   try { const {data:_op} = await window.db.from('op_projects').select('*'); opProjects = _op || []; } catch(_e) {}
   try { const {data:_opc} = await window.db.from('op_partner_checks').select('*').order('week_label',{ascending:false}); opPartner = _opc || []; } catch(_e) {}
+  try { const {data:_cm} = await window.db.from('coach_messages').select('*').order('created_at',{ascending:true}); agentMessages = (_cm||[]).map(m=>({role:m.role,content:m.content})); } catch(_e) {}
   render(); // re-render once trailing loads (pots, receivables, notes, macros) are in — fixes stale header/sections on first load
   try { saveLocalBackup(); } catch(_e) {}
   try { checkBackupRestore(); } catch(_e) {}
@@ -492,7 +495,7 @@ function renderPotentialTotals(potentials) {
 }
 
 function render() {
-  if(!['today','drive','review','invoice','ticket','debt','gym','project','potential','expense','notes','pots','income','life','operator'].includes(activeTab))activeTab='today';
+  if(!['today','drive','review','invoice','ticket','debt','gym','project','potential','expense','notes','pots','income','life','operator','agent'].includes(activeTab))activeTab='today';
   // Month-scoped: expenses use month filter; projects are ongoing (not month-scoped)
   const moneyEntries = entries.filter((e) => e.type !== 'potential');
   const inMonth = moneyEntries.filter((e) => matchesMonth(e, selectedMonth));
@@ -533,9 +536,9 @@ function render() {
   const monthSelEl = $('#month-select');
   const addBtnEl = $('#add-btn');
   const hideContext = activeTab === 'drive' || activeTab === 'today';
-  if (totalsEl) totalsEl.style.display = (hideContext || activeTab === 'income' || activeTab === 'life' || activeTab === 'operator') ? 'none' : '';
-  if (monthSelEl) monthSelEl.style.display = (hideContext || activeTab === 'ticket' || activeTab === 'debt' || activeTab === 'pots' || activeTab === 'income' || activeTab === 'life' || activeTab === 'operator') ? 'none' : '';
-  if (addBtnEl) addBtnEl.style.display = (activeTab === 'today' || activeTab === 'pots' || activeTab === 'income' || activeTab === 'life' || activeTab === 'operator') ? 'none' : '';
+  if (totalsEl) totalsEl.style.display = (hideContext || activeTab === 'income' || activeTab === 'life' || activeTab === 'operator' || activeTab === 'agent') ? 'none' : '';
+  if (monthSelEl) monthSelEl.style.display = (hideContext || activeTab === 'ticket' || activeTab === 'debt' || activeTab === 'pots' || activeTab === 'income' || activeTab === 'life' || activeTab === 'operator' || activeTab === 'agent') ? 'none' : '';
+  if (addBtnEl) addBtnEl.style.display = (activeTab === 'today' || activeTab === 'pots' || activeTab === 'income' || activeTab === 'life' || activeTab === 'operator' || activeTab === 'agent') ? 'none' : '';
 
   if (activeTab === 'ticket') renderTicketTotals();
   if (activeTab === 'debt') renderDebtTotals();
@@ -545,6 +548,7 @@ function render() {
   if (activeTab === 'income') return renderIncome();
   if (activeTab === 'life') return renderLife();
   if (activeTab === 'operator') return renderOperator();
+  if (activeTab === 'agent') return renderAgent();
   if (activeTab === 'today') return renderToday();
   if (activeTab === 'drive') return renderDrive();
   if (activeTab === 'review') return renderReviews();
@@ -4811,4 +4815,59 @@ function openOpPartnerEditor(id){
 }
 async function saveOpPartner(ev){ ev.preventDefault(); const note=document.getElementById('opw-note').value.trim(); const {error}=await window.db.from('op_partner_checks').upsert({week_label:window._opPartnerWeek,note:note||null},{onConflict:'week_label'}); if(error){alert('Error: '+error.message);return false;} closeWorkModal(); await loadAll(); return false; }
 async function deleteOpPartner(id){ if(!confirm('Delete this entry?'))return; const res=await window.db.from('op_partner_checks').delete().eq('id',id); if(res.error){alert('Error: '+res.error.message);return;} closeWorkModal(); await loadAll(); }
+
+/* ===================== OPERATOR AGENT (chat) ===================== */
+function agentFmt(s){ return esc(String(s||'')).replace(/\n/g,'<br>'); }
+function renderAgent(){
+  const msgs = (agentMessages||[]).map(m=>{
+    if(m.role==='user') return `<div class="ag-row ag-user"><div class="ag-bub ag-ubub">${agentFmt(m.content)}</div></div>`;
+    const tools = (m.tools&&m.tools.length)?`<div class="ag-tools">${[...new Set(m.tools)].map(t=>`<span class="ag-tool">✓ ${esc(t)}</span>`).join('')}</div>`:'';
+    return `<div class="ag-row ag-ai"><div class="ag-bub ag-abub">${agentFmt(m.content)}${tools}</div></div>`;
+  }).join('');
+  const busy = agentBusy?`<div class="ag-row ag-ai"><div class="ag-bub ag-abub ag-think">thinking…</div></div>`:'';
+  const empty = (!agentMessages||!agentMessages.length)&&!agentBusy
+    ? `<div class="ag-empty">Your operator agent. Ask it anything about your state — <i>"what's overdue?"</i>, <i>"who owes me and how long?"</i>, <i>"how's my discipline this week?"</i><br><br><b>Read-only for now</b> — it sees everything but can't change anything yet.</div>`:'';
+  const u=window._agLastUsage;
+  const cost=u?`<div class="ag-cost">last turn: ${u.input_tokens} in / ${u.output_tokens} out tokens · ~$${(u.input_tokens/1e6*3+u.output_tokens/1e6*15).toFixed(3)}</div>`:'';
+  list.innerHTML = `<div class="ag-wrap">
+    <div class="ag-thread" id="ag-thread">${empty}${msgs}${busy}</div>
+    <div class="ag-input-bar">
+      <textarea id="ag-input" class="ag-input" rows="1" placeholder="Talk to your operator…" ${agentBusy?'disabled':''}></textarea>
+      <button class="ag-mic" onclick="agentVoice()" title="Voice input" aria-label="Voice">🎤</button>
+      <button class="ag-send" onclick="sendAgentMessage()" ${agentBusy?'disabled':''}>Send</button>
+    </div>${cost}
+  </div>`;
+  const th=document.getElementById('ag-thread'); if(th) th.scrollTop=th.scrollHeight;
+  const inp=document.getElementById('ag-input');
+  if(inp && !agentBusy){
+    inp.focus();
+    inp.oninput=function(){ this.style.height='auto'; this.style.height=Math.min(120,this.scrollHeight)+'px'; };
+    inp.onkeydown=function(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendAgentMessage(); } };
+  }
+}
+async function sendAgentMessage(){
+  const inp=document.getElementById('ag-input'); if(!inp) return;
+  const text=(inp.value||'').trim(); if(!text || agentBusy) return;
+  agentMessages.push({role:'user',content:text});
+  agentBusy=true; render();
+  try{ await window.db.from('coach_messages').insert({role:'user',content:text}); }catch(e){}
+  try{
+    const r=await fetch('/api/agent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:agentMessages.map(m=>({role:m.role,content:m.content}))})});
+    let data={}; try{ data=await r.json(); }catch(e){}
+    if(!r.ok || data.error){ agentMessages.push({role:'assistant',content:'⚠ '+(data.error||('HTTP '+r.status))}); }
+    else {
+      agentMessages.push({role:'assistant',content:data.text,tools:data.toolsUsed});
+      window._agLastUsage=data.usage;
+      try{ await window.db.from('coach_messages').insert({role:'assistant',content:data.text}); }catch(e){}
+    }
+  }catch(e){ agentMessages.push({role:'assistant',content:'⚠ '+e.message}); }
+  agentBusy=false; render();
+}
+function agentVoice(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ alert('Voice input isn’t supported on this device/browser.'); return; }
+  const rec=new SR(); rec.lang='en-GB'; rec.interimResults=false; rec.maxAlternatives=1;
+  rec.onresult=function(e){ const tr=e.results[0][0].transcript; const inp=document.getElementById('ag-input'); if(inp){ inp.value=(inp.value?inp.value+' ':'')+tr; inp.focus(); inp.dispatchEvent(new Event('input')); } };
+  rec.onerror=function(){}; try{ rec.start(); }catch(e){}
+}
 
