@@ -27,6 +27,40 @@ const PROMPTS = {
     'that would compound most over the next 90 days. Be blunt about what is drifting.',
 };
 
+// The brief takes ~20s to generate, which is uncomfortably close to the 30s ceiling most
+// schedulers and fetch clients impose. So we cache each day's brief in agent_memory and
+// let a cron warm it before Razin is awake. A cached read comes back in well under a second.
+const londonToday = () => new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit',
+}).format(new Date());
+
+function memKey(kind) { return 'brief:' + kind + ':' + londonToday(); }
+
+async function readCache(env, kind) {
+  const r = await fetch(env.url.replace(/\/$/, '') + '/rest/v1/agent_memory?key=eq.' +
+    encodeURIComponent(memKey(kind)) + '&select=value&limit=1',
+    { headers: { apikey: env.key, Authorization: 'Bearer ' + env.key } });
+  if (!r.ok) return null;
+  const rows = await r.json();
+  return rows.length ? rows[0].value : null;
+}
+
+// agent_memory.key has no unique constraint, so upsert-on-conflict is not available.
+// Delete-then-insert keeps exactly one cached row per kind per day without needing DDL.
+async function writeCache(env, kind, text) {
+  const base = env.url.replace(/\/$/, '') + '/rest/v1/agent_memory';
+  const H = { apikey: env.key, Authorization: 'Bearer ' + env.key, 'Content-Type': 'application/json' };
+  const k = encodeURIComponent(memKey(kind));
+  try {
+    await fetch(base + '?key=eq.' + k, { method: 'DELETE', headers: H });
+    await fetch(base, {
+      method: 'POST',
+      headers: { ...H, Prefer: 'return=minimal' },
+      body: JSON.stringify([{ key: memKey(kind), value: text, category: 'brief' }]),
+    });
+  } catch (e) { /* cache write is best-effort — never fail the brief over it */ }
+}
+
 export default async function handler(req, res) {
   const env = {
     url: process.env.SUPABASE_URL,
@@ -40,13 +74,28 @@ export default async function handler(req, res) {
   const prompt = PROMPTS[kind];
   if (!prompt) return res.status(400).json({ error: 'kind must be morning, evening or week' });
 
+  const wantsText = req.query && req.query.format === 'text';
+  const refresh = req.query && req.query.refresh;
+
   try {
+    if (!refresh) {
+      const cached = await readCache(env, kind).catch(() => null);
+      if (cached) {
+        if (wantsText) {
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+          return res.status(200).send(cached);
+        }
+        return res.status(200).json({ kind, text: cached, cached: true });
+      }
+    }
+
     const out = await runAgent({ messages: [{ role: 'user', content: prompt }], env });
-    if (req.query && req.query.format === 'text') {
+    await writeCache(env, kind, out.text);
+    if (wantsText) {
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
       return res.status(200).send(out.text);
     }
-    return res.status(200).json({ kind, text: out.text, toolsUsed: out.toolsUsed, usage: out.usage });
+    return res.status(200).json({ kind, text: out.text, cached: false, toolsUsed: out.toolsUsed, usage: out.usage });
   } catch (e) {
     return res.status(500).json({ error: e.message || 'brief failed' });
   }
