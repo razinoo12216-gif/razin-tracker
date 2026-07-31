@@ -495,7 +495,10 @@ function renderPotentialTotals(potentials) {
 }
 
 function render() {
-  if(!['today','drive','review','invoice','ticket','debt','gym','project','potential','expense','notes','pots','income','life','operator','agent'].includes(activeTab))activeTab='today';
+  // Operator Log removed 2026-07-30 — dead feature, never logged against. renderOperator()
+  // is left in place but unreachable so nothing else that referenced it breaks.
+  if(activeTab==='operator')activeTab='today';
+  if(!['today','drive','review','invoice','ticket','debt','gym','project','potential','expense','notes','pots','income','life','agent'].includes(activeTab))activeTab='today';
   // Month-scoped: expenses use month filter; projects are ongoing (not month-scoped)
   const moneyEntries = entries.filter((e) => e.type !== 'potential');
   const inMonth = moneyEntries.filter((e) => matchesMonth(e, selectedMonth));
@@ -4822,11 +4825,12 @@ function renderAgent(){
   const msgs = (agentMessages||[]).map(m=>{
     if(m.role==='user') return `<div class="ag-row ag-user"><div class="ag-bub ag-ubub">${agentFmt(m.content)}</div></div>`;
     const tools = (m.tools&&m.tools.length)?`<div class="ag-tools">${[...new Set(m.tools)].map(t=>`<span class="ag-tool">✓ ${esc(t)}</span>`).join('')}</div>`:'';
-    return `<div class="ag-row ag-ai"><div class="ag-bub ag-abub">${agentFmt(m.content)}${tools}</div></div>`;
+    const acts = (m.actions&&m.actions.length)?`<div class="ag-acts">${m.actions.map(a=>`<div class="ag-act"><span class="ag-act-txt">✎ ${esc(a.summary||a.tool)}</span><button class="ag-undo" onclick="agentUndo('${esc(a.id)}',this)">undo</button></div>`).join('')}</div>`:'';
+    return `<div class="ag-row ag-ai"><div class="ag-bub ag-abub">${agentFmt(m.content)}${acts}${tools}</div></div>`;
   }).join('');
   const busy = agentBusy?`<div class="ag-row ag-ai"><div class="ag-bub ag-abub ag-think">thinking…</div></div>`:'';
   const empty = (!agentMessages||!agentMessages.length)&&!agentBusy
-    ? `<div class="ag-empty">Your operator agent. Ask it anything about your state — <i>"what's overdue?"</i>, <i>"who owes me and how long?"</i>, <i>"how's my discipline this week?"</i><br><br><b>Read-only for now</b> — it sees everything but can't change anything yet.</div>`:'';
+    ? `<div class="ag-empty">Your operator agent — it reads your whole app and can run your task list.<br><br>Ask it: <i>"what's overdue?"</i> · <i>"who owes me and how long?"</i> · <i>"which companies need filing?"</i><br>Tell it: <i>"add call the accountant tomorrow 9am"</i> · <i>"tick off the gym"</i> · <i>"move Bramble Close to Friday"</i><br><br>Every change it makes shows an <b>undo</b> button. Say <i>"undo"</i> and it reverses the last one.</div>`:'';
   const u=window._agLastUsage;
   const cost=u?`<div class="ag-cost">last turn: ${u.input_tokens} in / ${u.output_tokens} out tokens · ~$${(u.input_tokens/1e6*3+u.output_tokens/1e6*15).toFixed(3)}</div>`:'';
   list.innerHTML = `<div class="ag-wrap">
@@ -4856,12 +4860,27 @@ async function sendAgentMessage(){
     let data={}; try{ data=await r.json(); }catch(e){}
     if(!r.ok || data.error){ agentMessages.push({role:'assistant',content:'⚠ '+(data.error||('HTTP '+r.status))}); }
     else {
-      agentMessages.push({role:'assistant',content:data.text,tools:data.toolsUsed});
+      agentMessages.push({role:'assistant',content:data.text,tools:data.toolsUsed,actions:data.actions||[]});
       window._agLastUsage=data.usage;
       try{ await window.db.from('coach_messages').insert({role:'assistant',content:data.text}); }catch(e){}
+      // agent changed data — pull it back in so the other tabs are not stale
+      if((data.actions||[]).length){ try{ await loadAll(); }catch(e){} }
     }
   }catch(e){ agentMessages.push({role:'assistant',content:'⚠ '+e.message}); }
   agentBusy=false; render();
+}
+async function agentUndo(actionId, btn){
+  if(!actionId) return;
+  if(btn){ btn.disabled=true; btn.textContent='…'; }
+  try{
+    const r=await fetch('/api/agentUndo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({actionId})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||d.error){ alert('Undo failed: '+(d.error||('HTTP '+r.status))); if(btn){btn.disabled=false;btn.textContent='undo';} return; }
+    // drop the action from the thread so the button can't be pressed twice
+    (agentMessages||[]).forEach(m=>{ if(m.actions) m.actions=m.actions.filter(a=>String(a.id)!==String(actionId)); });
+    await loadAll();
+    render();
+  }catch(e){ alert('Undo failed: '+e.message); if(btn){btn.disabled=false;btn.textContent='undo';} }
 }
 function agentVoice(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
