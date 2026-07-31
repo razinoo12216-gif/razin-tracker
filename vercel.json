@@ -2,7 +2,11 @@
   "crons": [
     {
       "path": "/api/check-deadlines",
-      "schedule": "0 6 * * *"
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/brief?kind=morning&refresh=1",
+      "schedule": "45 4 * * *"
     }
   ]
 }
