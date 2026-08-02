@@ -1,0 +1,50 @@
+name: 12 World nudges
+
+# Server-side push notifications. Deliberately NOT Vercel cron — Vercel plans cap the
+# number of cron jobs, GitHub Actions does not. These fire regardless of whether Razin's
+# laptop is open, which was the reason the old Cowork-based brief never arrived.
+#
+# Times are UTC. Razin is Europe/London (BST = UTC+1 in summer).
+on:
+  schedule:
+    - cron: '5 5 * * *'    # 06:05 BST — the day's one thing
+    - cron: '0 12 * * *'   # 13:00 BST — midday check
+    - cron: '0 20 * * *'   # 21:00 BST — close the day
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: 'morning | midday | evening'
+        required: true
+        default: 'morning'
+
+jobs:
+  nudge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Work out which nudge this is
+        id: pick
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "kind=${{ github.event.inputs.kind }}" >> $GITHUB_OUTPUT
+          else
+            case "${{ github.event.schedule }}" in
+              "5 5 * * *")  echo "kind=morning" >> $GITHUB_OUTPUT ;;
+              "0 12 * * *") echo "kind=midday"  >> $GITHUB_OUTPUT ;;
+              "0 20 * * *") echo "kind=evening" >> $GITHUB_OUTPUT ;;
+              *)            echo "kind=morning" >> $GITHUB_OUTPUT ;;
+            esac
+          fi
+
+      - name: Send nudge
+        run: |
+          echo "Sending ${{ steps.pick.outputs.kind }} nudge"
+          code=$(curl -s -o /tmp/out.json -w "%{http_code}" --max-time 120 \
+            "https://razin-tracker.vercel.app/api/nudge?kind=${{ steps.pick.outputs.kind }}")
+          echo "HTTP $code"
+          cat /tmp/out.json
+          if [ "$code" != "200" ]; then exit 1; fi
+
+      - name: Warm tomorrow's brief cache
+        if: steps.pick.outputs.kind == 'morning'
+        run: |
+          curl -s --max-time 120 "https://razin-tracker.vercel.app/api/brief?kind=morning" > /dev/null || true
