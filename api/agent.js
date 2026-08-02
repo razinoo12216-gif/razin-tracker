@@ -16,7 +16,8 @@ export default async function handler(req, res) {
   const messages = (req.body && req.body.messages) || [];
   if (!Array.isArray(messages) || !messages.length) return res.status(400).json({ error: 'messages required' });
   try {
-    const out = await runAgent({ messages: messages.slice(-20), env });
+    const mode = req.body && req.body.mode;
+    const out = await runAgent({ messages: messages.slice(-20), env, mode });
     return res.status(200).json(out);
   } catch (e) {
     return res.status(500).json({ error: e.message || 'agent error' });
