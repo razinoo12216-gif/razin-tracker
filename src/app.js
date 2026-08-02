@@ -4819,35 +4819,143 @@ function openOpPartnerEditor(id){
 async function saveOpPartner(ev){ ev.preventDefault(); const note=document.getElementById('opw-note').value.trim(); const {error}=await window.db.from('op_partner_checks').upsert({week_label:window._opPartnerWeek,note:note||null},{onConflict:'week_label'}); if(error){alert('Error: '+error.message);return false;} closeWorkModal(); await loadAll(); return false; }
 async function deleteOpPartner(id){ if(!confirm('Delete this entry?'))return; const res=await window.db.from('op_partner_checks').delete().eq('id',id); if(res.error){alert('Error: '+res.error.message);return;} closeWorkModal(); await loadAll(); }
 
-/* ===================== OPERATOR AGENT (chat) ===================== */
-function agentFmt(s){ return esc(String(s||'')).replace(/\n/g,'<br>'); }
+/* ===================== OPERATOR AGENT ===================== */
+/* Three sections: Chat (talk + act) · Brief (daily read-out) · Check (fast gut-checks). */
+
+var agentSub = agentSub || 'chat';
+var briefState = briefState || { kind:'morning', text:'', loading:false, cached:null, err:null };
+var checkState = checkState || { q:'', answer:'', loading:false };
+
+function setAgentSub(s){ agentSub=s; render(); if(s==='brief' && !briefState.text && !briefState.loading) loadBrief(briefState.kind); }
+
+// Lightweight markdown → HTML. The agent replies in markdown; rendering it raw looked like a terminal.
+function agentFmt(s){
+  let t = esc(String(s||''));
+  t = t.replace(/^### (.*)$/gm,'<b class="ag-h">$1</b>')
+       .replace(/^## (.*)$/gm,'<b class="ag-h">$1</b>')
+       .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+       .replace(/(^|[\s(])\*(?!\s)([^*\n]+?)\*(?=[\s).,!?]|$)/g,'$1<em>$2</em>')
+       .replace(/`([^`]+)`/g,'<code>$1</code>')
+       .replace(/^\s*[-•]\s+(.*)$/gm,'<span class="ag-li">$1</span>')
+       .replace(/\n/g,'<br>');
+  return t;
+}
+function agentBubble(m){
+  if(m.role==='user') return `<div class="ag-row ag-user"><div class="ag-bub ag-ubub">${agentFmt(m.content)}</div></div>`;
+  const tools = (m.tools&&m.tools.length)?`<div class="ag-tools">${[...new Set(m.tools)].map(t=>`<span class="ag-tool">${esc(t)}</span>`).join('')}</div>`:'';
+  const acts = (m.actions&&m.actions.length)?`<div class="ag-acts">${m.actions.map(a=>`<div class="ag-act"><span class="ag-act-txt">${esc(a.summary||a.tool)}</span><button class="ag-undo" onclick="agentUndo('${esc(a.id)}',this)">undo</button></div>`).join('')}</div>`:'';
+  return `<div class="ag-row ag-ai"><div class="ag-avatar">12</div><div class="ag-bub ag-abub">${agentFmt(m.content)}${acts}${tools}</div></div>`;
+}
+
 function renderAgent(){
-  const msgs = (agentMessages||[]).map(m=>{
-    if(m.role==='user') return `<div class="ag-row ag-user"><div class="ag-bub ag-ubub">${agentFmt(m.content)}</div></div>`;
-    const tools = (m.tools&&m.tools.length)?`<div class="ag-tools">${[...new Set(m.tools)].map(t=>`<span class="ag-tool">✓ ${esc(t)}</span>`).join('')}</div>`:'';
-    const acts = (m.actions&&m.actions.length)?`<div class="ag-acts">${m.actions.map(a=>`<div class="ag-act"><span class="ag-act-txt">✎ ${esc(a.summary||a.tool)}</span><button class="ag-undo" onclick="agentUndo('${esc(a.id)}',this)">undo</button></div>`).join('')}</div>`:'';
-    return `<div class="ag-row ag-ai"><div class="ag-bub ag-abub">${agentFmt(m.content)}${acts}${tools}</div></div>`;
+  const tabs = ['chat','brief','check'].map(s=>{
+    const label = s==='chat'?'Chat':(s==='brief'?'Daily brief':'Quick check');
+    return `<button class="ag-subtab ${agentSub===s?'on':''}" onclick="setAgentSub('${s}')">${label}</button>`;
   }).join('');
-  const busy = agentBusy?`<div class="ag-row ag-ai"><div class="ag-bub ag-abub ag-think">thinking…</div></div>`:'';
-  const empty = (!agentMessages||!agentMessages.length)&&!agentBusy
-    ? `<div class="ag-empty">Your operator agent — it reads your whole app and can run your task list.<br><br>Ask it: <i>"what's overdue?"</i> · <i>"who owes me and how long?"</i> · <i>"which companies need filing?"</i><br>Tell it: <i>"add call the accountant tomorrow 9am"</i> · <i>"tick off the gym"</i> · <i>"move Bramble Close to Friday"</i><br><br>Every change it makes shows an <b>undo</b> button. Say <i>"undo"</i> and it reverses the last one.</div>`:'';
+
+  let body='';
+  if(agentSub==='chat'){
+    const msgs=(agentMessages||[]).map(agentBubble).join('');
+    const busy = agentBusy?`<div class="ag-row ag-ai"><div class="ag-avatar">12</div><div class="ag-bub ag-abub ag-think"><span></span><span></span><span></span></div></div>`:'';
+    const empty=(!agentMessages||!agentMessages.length)&&!agentBusy
+      ? `<div class="ag-empty">
+           <div class="ag-empty-h">Your operator</div>
+           <p>Reads your whole app, your companies and your chat history — and runs your task list.</p>
+           <div class="ag-chips">
+             ${['What is overdue right now?','Who owes me and how long?','Which companies need filing?','Add call the accountant tomorrow 9am']
+               .map(q=>`<button class="ag-chip" onclick="agentQuick('${esc(q).replace(/'/g,"\\'")}')">${esc(q)}</button>`).join('')}
+           </div>
+           <p class="ag-fine">Every change shows an undo button. Say “undo” to reverse the last one.</p>
+         </div>`:'';
+    body=`<div class="ag-thread" id="ag-thread">${empty}${msgs}${busy}</div>
+      <div class="ag-input-bar">
+        <textarea id="ag-input" class="ag-input" rows="1" placeholder="Talk to your operator…" ${agentBusy?'disabled':''}></textarea>
+        <button class="ag-mic" onclick="agentVoice()" title="Voice" aria-label="Voice">●</button>
+        <button class="ag-send" onclick="sendAgentMessage()" ${agentBusy?'disabled':''}>Send</button>
+      </div>`;
+  }
+
+  if(agentSub==='brief'){
+    const kinds=['morning','evening','week'].map(k=>`<button class="ag-kind ${briefState.kind===k?'on':''}" onclick="loadBrief('${k}')">${k==='week'?'This week':(k==='morning'?'Morning':'Evening')}</button>`).join('');
+    let inner;
+    if(briefState.loading) inner=`<div class="ag-brief-load"><div class="ag-think"><span></span><span></span><span></span></div><div>Reading your whole operation…</div></div>`;
+    else if(briefState.err) inner=`<div class="ag-brief-err">${esc(briefState.err)}</div>`;
+    else if(briefState.text) inner=`<div class="ag-brief-body">${agentFmt(briefState.text)}</div>`;
+    else inner=`<div class="ag-brief-err">No brief yet — hit refresh.</div>`;
+    body=`<div class="ag-brief">
+        <div class="ag-brief-bar">
+          <div class="ag-kinds">${kinds}</div>
+          <button class="ag-refresh" onclick="loadBrief('${briefState.kind}',true)" ${briefState.loading?'disabled':''}>Refresh</button>
+        </div>
+        ${briefState.cached!==null&&!briefState.loading?`<div class="ag-stamp">${briefState.cached?'cached — today':'freshly generated'}</div>`:''}
+        ${inner}
+        <div class="ag-brief-foot">Pushed to your phone at 06:05, 13:00 and 21:00.</div>
+      </div>`;
+  }
+
+  if(agentSub==='check'){
+    const suggestions=['Shall I eat this?','Should I take this call now?','Can I take tonight off?','Is it worth doing this deal?','Should I go gym now or later?'];
+    body=`<div class="ag-check">
+        <div class="ag-check-h">Quick check</div>
+        <p class="ag-check-p">Fast yes/no against today — your deadlines, your targets, the time on the clock. It answers in two lines, not an essay.</p>
+        <div class="ag-chips">${suggestions.map(q=>`<button class="ag-chip" onclick="runCheck('${esc(q).replace(/'/g,"\\'")}')">${esc(q)}</button>`).join('')}</div>
+        <div class="ag-input-bar ag-check-bar">
+          <textarea id="ag-check-input" class="ag-input" rows="1" placeholder="Shall I…?" ${checkState.loading?'disabled':''}></textarea>
+          <button class="ag-send" onclick="runCheck()" ${checkState.loading?'disabled':''}>Ask</button>
+        </div>
+        ${checkState.loading?`<div class="ag-check-a ag-check-loading"><div class="ag-think"><span></span><span></span><span></span></div></div>`:''}
+        ${(!checkState.loading&&checkState.answer)?`<div class="ag-check-a">${agentFmt(checkState.answer)}</div>`:''}
+      </div>`;
+  }
+
   const u=window._agLastUsage;
-  const cost=u?`<div class="ag-cost">last turn: ${u.input_tokens} in / ${u.output_tokens} out tokens · ~$${(u.input_tokens/1e6*3+u.output_tokens/1e6*15).toFixed(3)}</div>`:'';
-  list.innerHTML = `<div class="ag-wrap">
-    <div class="ag-thread" id="ag-thread">${empty}${msgs}${busy}</div>
-    <div class="ag-input-bar">
-      <textarea id="ag-input" class="ag-input" rows="1" placeholder="Talk to your operator…" ${agentBusy?'disabled':''}></textarea>
-      <button class="ag-mic" onclick="agentVoice()" title="Voice input" aria-label="Voice">🎤</button>
-      <button class="ag-send" onclick="sendAgentMessage()" ${agentBusy?'disabled':''}>Send</button>
-    </div>${cost}
+  const cost=(u&&agentSub!=='brief')?`<div class="ag-cost">${u.input_tokens} in / ${u.output_tokens} out · ~$${(u.input_tokens/1e6*3+u.output_tokens/1e6*15+((u.cache_read_tokens||0)/1e6*0.3)+((u.cache_write_tokens||0)/1e6*3.75)).toFixed(3)}</div>`:'';
+
+  list.innerHTML=`<div class="ag-wrap">
+    <div class="ag-subnav">${tabs}</div>
+    ${body}${cost}
   </div>`;
+
   const th=document.getElementById('ag-thread'); if(th) th.scrollTop=th.scrollHeight;
   const inp=document.getElementById('ag-input');
   if(inp && !agentBusy){
     inp.focus();
-    inp.oninput=function(){ this.style.height='auto'; this.style.height=Math.min(120,this.scrollHeight)+'px'; };
+    inp.oninput=function(){ this.style.height='auto'; this.style.height=Math.min(140,this.scrollHeight)+'px'; };
     inp.onkeydown=function(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendAgentMessage(); } };
   }
+  const ci=document.getElementById('ag-check-input');
+  if(ci && !checkState.loading){
+    ci.onkeydown=function(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); runCheck(); } };
+  }
+}
+
+function agentQuick(q){ const i=document.getElementById('ag-input'); if(i){ i.value=q; } sendAgentMessage(); }
+
+async function loadBrief(kind, force){
+  briefState.kind=kind; briefState.loading=true; briefState.err=null; if(force) briefState.text='';
+  render();
+  try{
+    const r=await fetch('/api/brief?kind='+encodeURIComponent(kind)+(force?'&refresh=1':''));
+    const d=await r.json();
+    if(!r.ok||d.error){ briefState.err=d.error||('HTTP '+r.status); }
+    else { briefState.text=d.text||''; briefState.cached=!!d.cached; }
+  }catch(e){ briefState.err=e.message; }
+  briefState.loading=false; render();
+}
+
+async function runCheck(preset){
+  const ci=document.getElementById('ag-check-input');
+  const q=(preset||(ci?ci.value:'')||'').trim();
+  if(!q||checkState.loading) return;
+  checkState.q=q; checkState.loading=true; checkState.answer=''; render();
+  try{
+    const r=await fetch('/api/agent',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({mode:'check',messages:[{role:'user',content:q}]})});
+    const d=await r.json();
+    checkState.answer=(!r.ok||d.error)?('⚠ '+(d.error||('HTTP '+r.status))):(d.text||'');
+    if(d.usage) window._agLastUsage=d.usage;
+  }catch(e){ checkState.answer='⚠ '+e.message; }
+  checkState.loading=false; render();
 }
 async function sendAgentMessage(){
   const inp=document.getElementById('ag-input'); if(!inp) return;
