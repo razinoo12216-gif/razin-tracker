@@ -4825,8 +4825,22 @@ async function deleteOpPartner(id){ if(!confirm('Delete this entry?'))return; co
 var agentSub = agentSub || 'chat';
 var briefState = briefState || { kind:'morning', text:'', loading:false, cached:null, err:null };
 var checkState = checkState || { q:'', answer:'', loading:false };
+var eBriefState = eBriefState || { text:'', date:'', loading:false, err:null };
+// Drafts live in state, not in the DOM — render() rebuilds innerHTML on every tab switch,
+// which was silently binning whatever had been typed.
+var agentDraft = agentDraft || '';
+var checkDraft = checkDraft || '';
 
-function setAgentSub(s){ agentSub=s; render(); if(s==='brief' && !briefState.text && !briefState.loading) loadBrief(briefState.kind); }
+function saveAgentDrafts(){
+  const i=document.getElementById('ag-input'); if(i) agentDraft=i.value;
+  const c=document.getElementById('ag-check-input'); if(c) checkDraft=c.value;
+}
+function setAgentSub(s){
+  saveAgentDrafts();
+  agentSub=s; render();
+  if(s==='brief' && !briefState.text && !briefState.loading) loadBrief(briefState.kind);
+  if(s==='ecall' && !eBriefState.text && !eBriefState.loading) loadEBrief();
+}
 
 // Lightweight markdown → HTML. The agent replies in markdown; rendering it raw looked like a terminal.
 function agentFmt(s){
@@ -4848,10 +4862,10 @@ function agentBubble(m){
 }
 
 function renderAgent(){
-  const tabs = ['chat','brief','check'].map(s=>{
-    const label = s==='chat'?'Chat':(s==='brief'?'Daily brief':'Quick check');
-    return `<button class="ag-subtab ${agentSub===s?'on':''}" onclick="setAgentSub('${s}')">${label}</button>`;
-  }).join('');
+  const LABELS={chat:'Chat',brief:'Daily brief',ecall:'Call · E',check:'Quick check'};
+  const tabs = ['chat','brief','ecall','check'].map(s=>
+    `<button class="ag-subtab ${agentSub===s?'on':''}" onclick="setAgentSub('${s}')">${LABELS[s]}</button>`
+  ).join('');
 
   let body='';
   if(agentSub==='chat'){
@@ -4869,7 +4883,7 @@ function renderAgent(){
          </div>`:'';
     body=`<div class="ag-thread" id="ag-thread">${empty}${msgs}${busy}</div>
       <div class="ag-input-bar">
-        <textarea id="ag-input" class="ag-input" rows="1" placeholder="Talk to your operator…" ${agentBusy?'disabled':''}></textarea>
+        <textarea id="ag-input" class="ag-input" rows="1" placeholder="Talk to your operator…" ${agentBusy?'disabled':''}>${esc(agentDraft)}</textarea>
         <button class="ag-mic" onclick="agentVoice()" title="Voice" aria-label="Voice">●</button>
         <button class="ag-send" onclick="sendAgentMessage()" ${agentBusy?'disabled':''}>Send</button>
       </div>`;
@@ -4893,6 +4907,23 @@ function renderAgent(){
       </div>`;
   }
 
+  if(agentSub==='ecall'){
+    let inner;
+    if(eBriefState.loading) inner=`<div class="ag-brief-load"><div class="ag-think"><span></span><span></span><span></span></div><div>Building your call brief…</div></div>`;
+    else if(eBriefState.err) inner=`<div class="ag-brief-err">${esc(eBriefState.err)}</div>`;
+    else if(eBriefState.text) inner=`<div class="ag-brief-body">${agentFmt(eBriefState.text)}</div>`;
+    else inner=`<div class="ag-brief-err">No call brief stored yet. Hit Generate — or it lands automatically each morning.</div>`;
+    body=`<div class="ag-brief">
+        <div class="ag-brief-bar">
+          <div class="ag-kinds"><span class="ag-kind on">Call with E</span></div>
+          <button class="ag-refresh" onclick="loadEBrief(true)" ${eBriefState.loading?'disabled':''}>Generate</button>
+        </div>
+        ${eBriefState.date?`<div class="ag-stamp">brief for ${esc(eBriefState.date)}</div>`:''}
+        ${inner}
+        <div class="ag-brief-foot">Decisions needed · what you owe E · what E owes you · money · the unnamed risk</div>
+      </div>`;
+  }
+
   if(agentSub==='check'){
     const suggestions=['Shall I eat this?','Should I take this call now?','Can I take tonight off?','Is it worth doing this deal?','Should I go gym now or later?'];
     body=`<div class="ag-check">
@@ -4900,7 +4931,7 @@ function renderAgent(){
         <p class="ag-check-p">Fast yes/no against today — your deadlines, your targets, the time on the clock. It answers in two lines, not an essay.</p>
         <div class="ag-chips">${suggestions.map(q=>`<button class="ag-chip" onclick="runCheck('${esc(q).replace(/'/g,"\\'")}')">${esc(q)}</button>`).join('')}</div>
         <div class="ag-input-bar ag-check-bar">
-          <textarea id="ag-check-input" class="ag-input" rows="1" placeholder="Shall I…?" ${checkState.loading?'disabled':''}></textarea>
+          <textarea id="ag-check-input" class="ag-input" rows="1" placeholder="Shall I…?" ${checkState.loading?'disabled':''}>${esc(checkDraft)}</textarea>
           <button class="ag-send" onclick="runCheck()" ${checkState.loading?'disabled':''}>Ask</button>
         </div>
         ${checkState.loading?`<div class="ag-check-a ag-check-loading"><div class="ag-think"><span></span><span></span><span></span></div></div>`:''}
@@ -4920,13 +4951,30 @@ function renderAgent(){
   const inp=document.getElementById('ag-input');
   if(inp && !agentBusy){
     inp.focus();
-    inp.oninput=function(){ this.style.height='auto'; this.style.height=Math.min(140,this.scrollHeight)+'px'; };
+    // put the caret back at the end of the restored draft rather than the start
+    try{ inp.setSelectionRange(inp.value.length, inp.value.length); }catch(e){}
+    inp.style.height='auto'; inp.style.height=Math.min(140,inp.scrollHeight)+'px';
+    inp.oninput=function(){ agentDraft=this.value; this.style.height='auto'; this.style.height=Math.min(140,this.scrollHeight)+'px'; };
     inp.onkeydown=function(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendAgentMessage(); } };
   }
   const ci=document.getElementById('ag-check-input');
   if(ci && !checkState.loading){
+    try{ ci.setSelectionRange(ci.value.length, ci.value.length); }catch(e){}
+    ci.oninput=function(){ checkDraft=this.value; };
     ci.onkeydown=function(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); runCheck(); } };
   }
+}
+
+async function loadEBrief(force){
+  eBriefState.loading=true; eBriefState.err=null; if(force) eBriefState.text='';
+  render();
+  try{
+    const r=await fetch('/api/ebrief'+(force?'?generate=1':''));
+    const d=await r.json();
+    if(!r.ok||d.error){ eBriefState.err=d.error||('HTTP '+r.status); }
+    else { eBriefState.text=d.text||''; eBriefState.date=d.date||''; }
+  }catch(e){ eBriefState.err=e.message; }
+  eBriefState.loading=false; render();
 }
 
 function agentQuick(q){ const i=document.getElementById('ag-input'); if(i){ i.value=q; } sendAgentMessage(); }
@@ -4947,6 +4995,7 @@ async function runCheck(preset){
   const ci=document.getElementById('ag-check-input');
   const q=(preset||(ci?ci.value:'')||'').trim();
   if(!q||checkState.loading) return;
+  checkDraft='';
   checkState.q=q; checkState.loading=true; checkState.answer=''; render();
   try{
     const r=await fetch('/api/agent',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -4960,6 +5009,7 @@ async function runCheck(preset){
 async function sendAgentMessage(){
   const inp=document.getElementById('ag-input'); if(!inp) return;
   const text=(inp.value||'').trim(); if(!text || agentBusy) return;
+  agentDraft='';
   agentMessages.push({role:'user',content:text});
   agentBusy=true; render();
   try{ await window.db.from('coach_messages').insert({role:'user',content:text}); }catch(e){}
