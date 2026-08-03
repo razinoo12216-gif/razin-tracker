@@ -4826,6 +4826,7 @@ var agentSub = agentSub || 'chat';
 var briefState = briefState || { kind:'morning', text:'', loading:false, cached:null, err:null };
 var checkState = checkState || { q:'', answer:'', loading:false };
 var eBriefState = eBriefState || { text:'', date:'', loading:false, err:null };
+var rasnestState = rasnestState || { text:'', loading:false, cached:null, err:null };
 // Drafts live in state, not in the DOM — render() rebuilds innerHTML on every tab switch,
 // which was silently binning whatever had been typed.
 var agentDraft = agentDraft || '';
@@ -4840,6 +4841,7 @@ function setAgentSub(s){
   agentSub=s; render();
   if(s==='brief' && !briefState.text && !briefState.loading) loadBrief(briefState.kind);
   if(s==='ecall' && !eBriefState.text && !eBriefState.loading) loadEBrief();
+  if(s==='rasnest' && !rasnestState.text && !rasnestState.loading) loadRasnest();
 }
 
 // Lightweight markdown → HTML. The agent replies in markdown; rendering it raw looked like a terminal.
@@ -4862,8 +4864,8 @@ function agentBubble(m){
 }
 
 function renderAgent(){
-  const LABELS={chat:'Chat',brief:'Daily brief',ecall:'Call · E',check:'Quick check'};
-  const tabs = ['chat','brief','ecall','check'].map(s=>
+  const LABELS={chat:'Chat',brief:'Daily brief',rasnest:'RASNEST',ecall:'Call · E',check:'Quick check'};
+  const tabs = ['chat','brief','rasnest','ecall','check'].map(s=>
     `<button class="ag-subtab ${agentSub===s?'on':''}" onclick="setAgentSub('${s}')">${LABELS[s]}</button>`
   ).join('');
 
@@ -4904,6 +4906,23 @@ function renderAgent(){
         ${briefState.cached!==null&&!briefState.loading?`<div class="ag-stamp">${briefState.cached?'cached — today':'freshly generated'}</div>`:''}
         ${inner}
         <div class="ag-brief-foot">Pushed to your phone at 06:05, 13:00 and 21:00.</div>
+      </div>`;
+  }
+
+  if(agentSub==='rasnest'){
+    let inner;
+    if(rasnestState.loading) inner=`<div class="ag-brief-load"><div class="ag-think"><span></span><span></span><span></span></div><div>Pulling the whole RASNEST picture…</div></div>`;
+    else if(rasnestState.err) inner=`<div class="ag-brief-err">${esc(rasnestState.err)}</div>`;
+    else if(rasnestState.text) inner=`<div class="ag-brief-body">${agentFmt(rasnestState.text)}</div>`;
+    else inner=`<div class="ag-brief-err">No report yet — hit Rebuild.</div>`;
+    body=`<div class="ag-brief">
+        <div class="ag-brief-bar">
+          <div class="ag-kinds"><span class="ag-kind on">Operating report</span></div>
+          <button class="ag-refresh" onclick="loadRasnest(true)" ${rasnestState.loading?'disabled':''}>Rebuild</button>
+        </div>
+        ${rasnestState.cached!==null&&!rasnestState.loading?`<div class="ag-stamp">${rasnestState.cached?'cached — today':'freshly built'}</div>`:''}
+        ${inner}
+        <div class="ag-brief-foot">UK RASNEST = you + Jibril, Almir, Saul · Irish RASNEST = the venture with E</div>
       </div>`;
   }
 
@@ -4963,6 +4982,18 @@ function renderAgent(){
     ci.oninput=function(){ checkDraft=this.value; };
     ci.onkeydown=function(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); runCheck(); } };
   }
+}
+
+async function loadRasnest(force){
+  rasnestState.loading=true; rasnestState.err=null; if(force) rasnestState.text='';
+  render();
+  try{
+    const r=await fetch('/api/brief?kind=rasnest'+(force?'&refresh=1':''));
+    const d=await r.json();
+    if(!r.ok||d.error){ rasnestState.err=d.error||('HTTP '+r.status); }
+    else { rasnestState.text=d.text||''; rasnestState.cached=!!d.cached; }
+  }catch(e){ rasnestState.err=e.message; }
+  rasnestState.loading=false; render();
 }
 
 async function loadEBrief(force){
