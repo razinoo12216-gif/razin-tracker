@@ -25,6 +25,27 @@ const PROMPTS = {
     'Produce my weekly review. Under 350 words: trajectory on money, commitments kept vs slipped, ' +
     'discipline logging rate, statutory deadlines inside 60 days, and the one structural change ' +
     'that would compound most over the next 90 days. Be blunt about what is drifting.',
+  rasnest:
+    'Produce a full RASNEST operating report I can take straight into a conversation with my partners.\n\n' +
+    'CRITICAL — keep the two sides separate and never merge them:\n' +
+    '- UK RASNEST (RASNEST Properties Limited — Bramble Close/Chalfont, UK lettings and management). ' +
+    'Partners are Jibril, Almir and Saul. This side has NOTHING to do with E.\n' +
+    '- IRISH RASNEST (Primekey Stays and the Irish entities). This side IS the venture with E.\n\n' +
+    'Search the knowledge store thoroughly first — most RASNEST detail lives there, not in the tables. ' +
+    'Use the tables for anything financial. Never invent a figure; anything unverified is "UNKNOWN — confirm".\n\n' +
+    'Structure it exactly like this:\n' +
+    '1. HEADLINE — three lines: where RASNEST actually stands, the biggest risk, the biggest opportunity.\n' +
+    '2. PORTFOLIO — each property: revenue, management fee rate, current state, open issues.\n' +
+    '3. MONEY — fees earned, anything owed to RASNEST, anything RASNEST owes, and any invoice or ' +
+    'statement error you can detect. Flag undercharging explicitly.\n' +
+    '4. COMPLIANCE & STATUTORY — UK and Irish, with dates and days remaining. Separate the two clearly.\n' +
+    '5. DELEGATION BOARD — the single most useful section. For every open item, name who should own it ' +
+    '(Jibril is the most operationally reliable — self-employed, flexible, has transport; Saul has said ' +
+    'he cannot be heavily involved; Almir is least responsive; anything I have not delegated defaults to me). ' +
+    'Mark each item KEEP or HAND OFF and say why. Be honest about what I am hoarding that I should not be.\n' +
+    '6. IRELAND / E — status of the Irish side only, and what needs raising with E.\n' +
+    '7. TOP 5 ACTIONS THIS WEEK — ranked, each with an owner and a deadline.\n\n' +
+    'Dense, no padding, no preamble. Tables where comparative. All UK money in £, Irish in €. UK dates.',
 };
 
 // The brief takes ~20s to generate, which is uncomfortably close to the 30s ceiling most
