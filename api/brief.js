@@ -31,8 +31,11 @@ const PROMPTS = {
     '- UK RASNEST (RASNEST Properties Limited — Bramble Close/Chalfont, UK lettings and management). ' +
     'Partners are Jibril, Almir and Saul. This side has NOTHING to do with E.\n' +
     '- IRISH RASNEST (Primekey Stays and the Irish entities). This side IS the venture with E.\n\n' +
-    'Search the knowledge store thoroughly first — most RASNEST detail lives there, not in the tables. ' +
-    'Use the tables for anything financial. Never invent a figure; anything unverified is "UNKNOWN — confirm".\n\n' +
+    'BE EFFICIENT WITH TOOLS — you have a hard cap. Plan: ONE searchKnowledge for "RASNEST", ONE for ' +
+    '"Primekey Ireland", ONE listCompanies, ONE listTasks, and readTable on projects/debts with narrow ' +
+    'columns. That is enough. Do not run a separate search per property or per person. If something is ' +
+    'still missing after that, write "UNKNOWN — confirm" and move on rather than burning calls hunting.\n' +
+    'Never invent a figure.\n\n' +
     'Structure it exactly like this:\n' +
     '1. HEADLINE — three lines: where RASNEST actually stands, the biggest risk, the biggest opportunity.\n' +
     '2. PORTFOLIO — each property: revenue, management fee rate, current state, open issues.\n' +
@@ -111,7 +114,12 @@ export default async function handler(req, res) {
     }
 
     const out = await runAgent({ messages: [{ role: 'user', content: prompt }], env });
-    await writeCache(env, kind, out.text);
+
+    // NEVER cache a failure. A capped or truncated run once got cached and then served
+    // instantly all day, which looks exactly like a working feature that has nothing to say.
+    const failed = /^\(stopped|^⚠/.test((out.text || '').trim()) ||
+      ['tool_cap', 'turn_cap', 'max_tokens', 'empty'].includes(out.stop_reason);
+    if (!failed) await writeCache(env, kind, out.text);
     if (wantsText) {
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
       return res.status(200).send(out.text);
