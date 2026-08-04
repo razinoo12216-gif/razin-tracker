@@ -4859,7 +4859,15 @@ function agentFmt(s){
 function agentBubble(m){
   if(m.role==='user') return `<div class="ag-row ag-user"><div class="ag-bub ag-ubub">${agentFmt(m.content)}</div></div>`;
   const tools = (m.tools&&m.tools.length)?`<div class="ag-tools">${[...new Set(m.tools)].map(t=>`<span class="ag-tool">${esc(t)}</span>`).join('')}</div>`:'';
-  const acts = (m.actions&&m.actions.length)?`<div class="ag-acts">${m.actions.map(a=>`<div class="ag-act"><span class="ag-act-txt">${esc(a.summary||a.tool)}</span><button class="ag-undo" onclick="agentUndo('${esc(a.id)}',this)">undo</button></div>`).join('')}</div>`:'';
+  // Trust layer: the server re-reads every write out of Postgres before replying.
+  // A card only shows the tick if the row was actually found. verified===undefined
+  // = an older message from before this shipped, so don't imply either way.
+  const acts = (m.actions&&m.actions.length)?`<div class="ag-acts">${m.actions.map(a=>{
+      const bad = a.verified===false;
+      const mark = bad?'<span class="ag-act-x">NOT SAVED</span>':(a.verified===true?'<span class="ag-act-ok">✓</span>':'');
+      const where = (a.verified===true&&a.where)?`<span class="ag-act-where">${esc(a.where)}</span>`:'';
+      return `<div class="ag-act${bad?' ag-act-bad':''}">${mark}<span class="ag-act-txt">${esc(a.summary||a.tool)}${where}</span>${bad?'':`<button class="ag-undo" onclick="agentUndo('${esc(a.id)}',this)">undo</button>`}</div>`;
+    }).join('')}</div>`:'';
   return `<div class="ag-row ag-ai"><div class="ag-avatar">12</div><div class="ag-bub ag-abub">${agentFmt(m.content)}${acts}${tools}</div></div>`;
 }
 
@@ -4881,7 +4889,7 @@ function renderAgent(){
              ${['What is overdue right now?','Who owes me and how long?','Which companies need filing?','Add call the accountant tomorrow 9am']
                .map(q=>`<button class="ag-chip" onclick="agentQuick('${esc(q).replace(/'/g,"\\'")}')">${esc(q)}</button>`).join('')}
            </div>
-           <p class="ag-fine">Every change shows an undo button. Say “undo” to reverse the last one.</p>
+           <p class="ag-fine">Every change it makes is re-read out of the database before it replies, and shown below the message with a ✓. No ✓, no change — whatever the wording says. Undo is one tap.</p>
          </div>`:'';
     body=`<div class="ag-thread" id="ag-thread">${empty}${msgs}${busy}</div>
       <div class="ag-input-bar">
