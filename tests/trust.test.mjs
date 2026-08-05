@@ -39,5 +39,29 @@ console.log('# claimsWrite() — must NOT fire on honest replies');
   'UNKNOWN — confirm. No figure is recorded for that.',
 ].forEach(s => t(JSON.stringify(s.slice(0, 48)), () => assert.equal(claimsWrite(s), false)));
 
+
+console.log('# claimsWrite() — REGRESSION 2026-08-05: must NOT fire on read-only report text');
+// Every one of these is real brief/summary phrasing. The first version of the
+// detector fired on three of them, which is why the E brief broke.
+[
+  'WHAT HAS ALREADY BEEN DONE:\n- DVLA export document sent to E\n- Accountant fee agreed at €1,200',
+  'You have 4 overdue tasks. Two were added last week and never touched.',
+  'Royal Orchard: shelf company purchase requested, waiting on E. Status updated 2 Aug by you.',
+  'Three items are logged against RASNEST Ireland this month.',
+  'The accountant fee was agreed in July and the invoice was raised on 28 Jul.',
+  'Open commitments: 2 you owe E, 1 E owes you. Nothing has slipped yet.',
+  'Your gym target is 5/week. You logged 2 sessions.',
+  'MONEY: debt £21,101.25. Two payments were recorded in July.',
+  'What needs discussing: the Primekey director change. A bond is needed before filing.',
+  'Deptford: chased, no reply. Escalate if nothing lands by Thursday.',
+  'The task stays open on your list, waiting on his reply.',
+  'That was created before you started tracking properly, so treat the date as unreliable.',
+].forEach(s => t('read: ' + JSON.stringify(s.slice(0, 42)), () => assert.equal(claimsWrite(s), false)));
+
+console.log('# claimsWrite() — must ignore the code-generated receipt');
+t('receipt does not self-trigger', () => assert.equal(
+  claimsWrite('Here is your overdue list.\n\n———\nVERIFIED IN THE DATABASE JUST NOW:\n✅ Added "call Marc" for 6 Aug 2026'),
+  false));
+
 console.log(`# ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
