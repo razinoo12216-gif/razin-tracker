@@ -45,7 +45,7 @@ export default async function handler(req, res) {
   if (!prompt) return res.status(400).json({ error: 'kind must be morning, midday or evening' });
 
   try {
-    const out = await runAgent({ messages: [{ role: 'user', content: prompt }], env, readOnly: true });
+    const out = await runAgent({ messages: [{ role: 'user', content: prompt }], env, readOnly: true, cheap: true });
 
     // Strip anything that looks like formatting and keep it notification-length.
     let body = (out.text || '')
