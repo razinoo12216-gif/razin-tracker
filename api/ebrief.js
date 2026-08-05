@@ -87,7 +87,7 @@ export default async function handler(req, res) {
     }
 
     if (!env.anthropic) return res.status(500).json({ error: 'Missing ANTHROPIC_API_KEY' });
-    const out = await runAgent({ messages: [{ role: 'user', content: PROMPT }], env });
+    const out = await runAgent({ messages: [{ role: 'user', content: PROMPT }], env, readOnly: true });
     await store(env, today, out.text);
     return res.status(200).json({ text: out.text, date: today, stored: false, usage: out.usage });
   } catch (e) {

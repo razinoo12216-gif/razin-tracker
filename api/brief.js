@@ -113,7 +113,7 @@ export default async function handler(req, res) {
       }
     }
 
-    const out = await runAgent({ messages: [{ role: 'user', content: prompt }], env });
+    const out = await runAgent({ messages: [{ role: 'user', content: prompt }], env, readOnly: true });
 
     // NEVER cache a failure. A capped or truncated run once got cached and then served
     // instantly all day, which looks exactly like a working feature that has nothing to say.
