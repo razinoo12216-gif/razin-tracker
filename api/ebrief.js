@@ -88,8 +88,22 @@ export default async function handler(req, res) {
 
     if (!env.anthropic) return res.status(500).json({ error: 'Missing ANTHROPIC_API_KEY' });
     const out = await runAgent({ messages: [{ role: 'user', content: PROMPT }], env, readOnly: true });
-    await store(env, today, out.text);
-    return res.status(200).json({ text: out.text, date: today, stored: false, usage: out.usage });
+
+    // NEVER CACHE A FAILURE. brief.js has had this guard for a while; ebrief.js
+    // did not, and on 2026-08-05 that let a broken 456-char reply get stored and
+    // then served instantly all day — looking exactly like a working feature
+    // with nothing to say. A real E brief is thousands of characters.
+    const txt = (out.text || '').trim();
+    const failed =
+      /^\(stopped|^⚠/.test(txt) ||
+      ['tool_cap', 'turn_cap', 'max_tokens', 'empty'].includes(out.stop_reason) ||
+      txt.length < 400;
+    if (!failed) await store(env, today, out.text);
+
+    return res.status(200).json({
+      text: out.text, date: today, stored: !failed, cached: !failed,
+      degraded: failed || undefined, stop_reason: out.stop_reason, usage: out.usage,
+    });
   } catch (e) {
     return res.status(500).json({ error: e.message || 'ebrief failed' });
   }
