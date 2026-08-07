@@ -14,24 +14,55 @@ const londonToday = () => new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit',
 }).format(new Date());
 
-const PROMPT =
-  'Generate today\'s call brief for my daily call with my business partner "E". ' +
-  'Build it ONLY from real data in my app and knowledge store — never invent a project status, ' +
-  'a number, or a commitment. Anything you cannot verify is written "UNKNOWN — confirm".\n\n' +
-  'Sections, in this exact order:\n' +
-  '1. DECISIONS NEEDED FROM E — max 3. Each: the decision, the cost of delay, my recommended answer. ' +
-  'If there are none, write "None — do not manufacture one."\n' +
-  '2. PER PROJECT: DONE / BLOCKED / NEXT — max 3 bullets per section per project.\n' +
-  '3. WHAT I OWE E — every commitment I made, delivered yes/no, flag anything slipped and how many times.\n' +
-  '4. WHAT E OWES ME — every commitment E made, with days overdue. State it flatly.\n' +
-  '5. MONEY — cash position, receivables to chase with days overdue, payables due this week.\n' +
-  '6. THE UNNAMED RISK — one real risk nobody has raised on a call yet. Blunt. If you cannot see one ' +
-  'in the data, say so rather than padding.\n\n' +
+// PROMPT rewritten 2026-08-07 to Razin's spec. The previous version pulled his
+// whole financial position and his personal debts into a brief for a call with a
+// business partner, and capped decisions at 3. Both were wrong.
+//
+// The governing rule now: E SCOPE. This brief covers the ventures Razin runs WITH
+// E and nothing else. Everything outside that scope is noise on this call.
+const E_SCOPE =
+  'E SCOPE — WHAT THIS BRIEF IS ABOUT.\n' +
+  'E is Razin\'s senior business partner. This brief covers ONLY the ventures they run together:\n' +
+  '- Primekey Stays / RASNEST Ireland (the Irish operation) — IN SCOPE.\n' +
+  '- Royal Orchard — IN SCOPE. This is a NEW company being set up. It is NOT the shelf company.\n' +
+  '- Any project where E is named as a decision-maker, funder or blocker in the data.\n\n' +
+  'EXPLICITLY OUT OF SCOPE — never include these, even when the data is sitting right there:\n' +
+  '- RASNEST UK / RASNEST Properties. Different venture, partners Jibril, Almir and Saul. ' +
+  'E happens to be landlord of one UK house; that does NOT make UK RASNEST an E topic.\n' +
+  '- Razin\'s overall cash position, total debt, income and spend. Not E\'s business.\n' +
+  '- The "BSK" debt line. That is a personal balance being cleared automatically with every ' +
+  'invoice. It is settled business, not a live call topic. Never surface it.\n' +
+  '- Receivables, payables and debtors unrelated to the Irish operation.\n' +
+  '- IMS Trading, Escape Logistics, the other Raz companies, gym, personal discipline.\n' +
+  '- The shelf company purchase — that belongs under Raz Companies, NOT under Royal Orchard.\n\n' +
+  'If a section has nothing IN SCOPE to report, write "Nothing this week." Do NOT pad it with ' +
+  'out-of-scope material to make the brief look fuller. A short honest brief beats a padded one.\n\n';
+
+const PROMPT = E_SCOPE +
+  'Generate today\'s brief for my call with E. Build it ONLY from real data in my app and ' +
+  'knowledge store — never invent a project status, a number, or a commitment. Anything you ' +
+  'cannot verify is written "UNKNOWN — confirm".\n\n' +
+  'Sections, in this exact order:\n\n' +
+  '1. DECISIONS NEEDED FROM E — NO LIMIT. List every open decision that is genuinely waiting ' +
+  'on E, however many there are. This is the core of the brief and the reason the app exists — ' +
+  'do not truncate it. Order by cost of delay, worst first. Each one: the decision, what it is ' +
+  'blocking, how long it has been waiting, and my recommended answer. If there are genuinely ' +
+  'none, write "None — do not manufacture one."\n\n' +
+  '2. PER PROJECT: DONE / BLOCKED / NEXT — in-scope projects only. Max 3 bullets per heading ' +
+  'per project. Skip any project with no movement rather than writing filler.\n\n' +
+  '3. OPEN LOOPS BETWEEN US — promises and deliverables only, both directions: what I said I ' +
+  'would do for E, and what E said he would do for me, with days outstanding and a flag on ' +
+  'anything that has slipped more than once. This means COMMITMENTS AND ACTIONS ONLY. It does ' +
+  'NOT mean money owed — no debt balances, no invoices, no BSK. If the commitments table is ' +
+  'empty, say "Nothing logged — this is the gap" in one line and move on.\n\n' +
+  '4. THE UNNAMED RISK — one real risk inside the E scope that nobody has raised on a call yet. ' +
+  'Blunt. Statutory clocks, unconfirmed registrations and undated commitments all count. If you ' +
+  'cannot see one in the data, say so rather than padding.\n\n' +
   'Close with CALL DISCIPLINE — exactly three lines:\n' +
   'Open with: [the single sentence I should lead the call with]\n' +
   'Do not: [the one thing I am most likely to do badly on this call]\n' +
   'Close with: [the specific confirmation I must get before hanging up]\n\n' +
-  'Readable in under 90 seconds. Dense, no padding, no preamble. All money in £, UK dates.';
+  'Dense, no padding, no preamble. All money in £ (Irish figures in €), UK dates.';
 
 function rest(env, path, init = {}) {
   return fetch(env.url.replace(/\/$/, '') + '/rest/v1/' + path, {
