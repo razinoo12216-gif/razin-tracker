@@ -34,6 +34,8 @@ const E_SCOPE =
   'invoice. It is settled business, not a live call topic. Never surface it.\n' +
   '- Receivables, payables and debtors unrelated to the Irish operation.\n' +
   '- IMS Trading, Escape Logistics, the other Raz companies, gym, personal discipline.\n' +
+  '- Out-of-scope debtors and figures must not appear even as comparisons or rhetorical ' +
+  'examples. Do not reach outside the E scope to make a point.\n' +
   '- The shelf company purchase — that belongs under Raz Companies, NOT under Royal Orchard.\n\n' +
   'If a section has nothing IN SCOPE to report, write "Nothing this week." Do NOT pad it with ' +
   'out-of-scope material to make the brief look fuller. A short honest brief beats a padded one.\n\n';
@@ -118,7 +120,7 @@ export default async function handler(req, res) {
     }
 
     if (!env.anthropic) return res.status(500).json({ error: 'Missing ANTHROPIC_API_KEY' });
-    const out = await runAgent({ messages: [{ role: 'user', content: PROMPT }], env, readOnly: true });
+    const out = await runAgent({ messages: [{ role: 'user', content: PROMPT }], env, readOnly: true, maxTokens: 8000 });
 
     // NEVER CACHE A FAILURE. brief.js has had this guard for a while; ebrief.js
     // did not, and on 2026-08-05 that let a broken 456-char reply get stored and
