@@ -44,7 +44,15 @@ jobs:
           cat /tmp/out.json
           if [ "$code" != "200" ]; then exit 1; fi
 
-      - name: Warm tomorrow's brief cache
+      # SPEED FIX 2026-08-07. Only kind=morning was ever pre-warmed, so the E brief
+      # and RASNEST were cold on first open every single day — a 25-40s wait that
+      # felt like the app was broken. Generating them here costs nothing extra:
+      # Razin was paying for the same generation anyway, just while staring at a
+      # spinner. Now it is already sitting in the cache when he opens the tab.
+      - name: Warm the day's briefs (morning run only)
         if: steps.pick.outputs.kind == 'morning'
         run: |
-          curl -s --max-time 120 "https://razin-tracker.vercel.app/api/brief?kind=morning" > /dev/null || true
+          echo "Warming morning brief"
+          curl -s --max-time 180 "https://razin-tracker.vercel.app/api/brief?kind=morning" > /dev/null || true
+          echo "Warming E brief"
+          curl -s --max-time 180 "https://razin-tracker.vercel.app/api/ebrief?generate=1" > /dev/null || true
