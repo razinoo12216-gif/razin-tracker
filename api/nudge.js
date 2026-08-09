@@ -11,23 +11,34 @@
 
 import { runAgent } from '../lib/agentCore.js';
 
+// REWRITTEN 2026-08-08. These used to be statements that told Razin what he had
+// failed to log. He is out working and driving all day and is never going to stop to
+// tick a box — a system that depends on that has already failed. So the nudges now
+// ASK. His reply becomes the log, captured by the agent in chat. One question, five
+// words to answer, one-handed, at a red light.
 const PROMPTS = {
   morning:
-    'Write a PUSH NOTIFICATION for Razin, right now, first thing in his morning. ' +
-    'Hard limit 160 characters. No greeting, no sign-off, no markdown, no emoji. ' +
-    'Name the single most important thing he must do today and the count of what is overdue. ' +
-    'Be specific — a name, a number, a company. Uncomfortable thing first. ' +
-    'Reply with the notification text and NOTHING else — no preamble, no restating the brief, no label. Your entire reply is what appears on his lock screen.',
+    'Write a PUSH NOTIFICATION for Razin at 6am. Hard limit 160 characters. No greeting, no markdown, no emoji.\n' +
+    'Format: ONE line naming the single most important WORK or MONEY thing today (a person to chase, a deal, ' +
+    'a filing, a decision waiting on someone), then ONE short question he can answer in five words while driving ' +
+    '— e.g. "Gym before 9 or after?".\n' +
+    'Work first, discipline second. Never lead with what he failed to log. ' +
+    'Reply with the notification text and NOTHING else — no preamble, no restating the brief, no label. ' +
+    'Your entire reply is what appears on his lock screen.',
   midday:
-    'Write a PUSH NOTIFICATION for Razin at midday. Hard limit 160 characters. ' +
-    'No greeting, no markdown, no emoji. Check what has actually been ticked off today versus what was due. ' +
-    'If nothing has moved, say so bluntly and name the one task to do next. ' +
-    'If he has logged nothing in his discipline tracker today, call it. Reply with the notification text and NOTHING else — no preamble, no restating the brief, no label. Your entire reply is what appears on his lock screen.',
+    'Write a PUSH NOTIFICATION for Razin at 1pm. Hard limit 160 characters. No greeting, no markdown, no emoji.\n' +
+    'Format: ONE line on the highest-value thing still unmoved today (money, a person, a deadline), then ONE ' +
+    'short question — "Eaten yet, what?" or "Did E reply?" or "Gym still happening?".\n' +
+    'He is mid-day and busy. Do not list. Do not scold. Ask something that helps him decide the next move. ' +
+    'Reply with the notification text and NOTHING else — no preamble, no restating the brief, no label. ' +
+    'Your entire reply is what appears on his lock screen.',
   evening:
-    'Write a PUSH NOTIFICATION for Razin at 9pm. Hard limit 160 characters. ' +
-    'No greeting, no markdown, no emoji. State what closed today and what did not. ' +
-    'Push him to log today (wake, fajr, gym, PMO, sleep, prayers) and to set tomorrow up now. ' +
-    'Reply with the notification text and NOTHING else — no preamble, no restating the brief, no label. Your entire reply is what appears on his lock screen.',
+    'Write a PUSH NOTIFICATION for Razin at 9pm. Hard limit 160 characters. No greeting, no markdown, no emoji.\n' +
+    'Format: ONE line on what is genuinely still open for tomorrow (work or money), then ONE closing question ' +
+    '— "Train today?" or "What moved today?" — so he can answer in a few words and have it logged for him.\n' +
+    'Never present an empty log as failure; he simply has not told you yet, which is what the question is for. ' +
+    'Reply with the notification text and NOTHING else — no preamble, no restating the brief, no label. ' +
+    'Your entire reply is what appears on his lock screen.',
 };
 
 const TITLES = { morning: '12 World — today', midday: '12 World — midday check', evening: '12 World — close the day' };

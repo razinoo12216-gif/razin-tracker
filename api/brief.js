@@ -26,29 +26,33 @@ const PROMPTS = {
     'discipline logging rate, statutory deadlines inside 60 days, and the one structural change ' +
     'that would compound most over the next 90 days. Be blunt about what is drifting.',
   rasnest:
-    'Produce a full RASNEST operating report I can take straight into a conversation with my partners.\n\n' +
-    'CRITICAL — keep the two sides separate and never merge them:\n' +
-    '- UK RASNEST (RASNEST Properties Limited — Bramble Close/Chalfont, UK lettings and management). ' +
-    'Partners are Jibril, Almir and Saul. This side has NOTHING to do with E.\n' +
-    '- IRISH RASNEST (Primekey Stays and the Irish entities). This side IS the venture with E.\n\n' +
-    'BE EFFICIENT WITH TOOLS — you have a hard cap. Plan: ONE searchKnowledge for "RASNEST", ONE for ' +
-    '"Primekey Ireland", ONE listCompanies, ONE listTasks, and readTable on projects/debts with narrow ' +
-    'columns. That is enough. Do not run a separate search per property or per person. If something is ' +
-    'still missing after that, write "UNKNOWN — confirm" and move on rather than burning calls hunting.\n' +
-    'Never invent a figure.\n\n' +
+    // Rewritten 2026-08-08. Two changes: the Irish side is now covered properly by the
+    // dedicated E brief, so duplicating it here just made this report long and split
+    // Razin's attention. And the old "you have a hard tool cap, be efficient" warning
+    // is gone — that was a workaround for a cap problem that no longer bites, and it
+    // was making the report thinner than it needed to be.
+    'Produce a full UK RASNEST operating report I can take straight into a conversation with my partners.\n\n' +
+    'SCOPE — UK ONLY.\n' +
+    'This report is about RASNEST Properties Limited: the UK lettings and management business ' +
+    '(Bramble Close / Chalfont and the rest of the portfolio). Partners are Jibril, Almir and Saul. ' +
+    'This side has NOTHING to do with E.\n' +
+    'The Irish operation (Primekey Stays / RASNEST Ireland) has its own dedicated brief on the ' +
+    '"Call · E" tab. Do NOT reproduce it here. If something on the Irish side genuinely blocks the UK ' +
+    'business, give it ONE line and point me at the E brief. Otherwise leave it out entirely.\n\n' +
+    'Never invent a figure. Anything you cannot verify is "UNKNOWN — confirm".\n\n' +
     'Structure it exactly like this:\n' +
-    '1. HEADLINE — three lines: where RASNEST actually stands, the biggest risk, the biggest opportunity.\n' +
+    '1. HEADLINE — three lines: where UK RASNEST actually stands, the biggest risk, the biggest opportunity.\n' +
     '2. PORTFOLIO — each property: revenue, management fee rate, current state, open issues.\n' +
-    '3. MONEY — fees earned, anything owed to RASNEST, anything RASNEST owes, and any invoice or ' +
-    'statement error you can detect. Flag undercharging explicitly.\n' +
-    '4. COMPLIANCE & STATUTORY — UK and Irish, with dates and days remaining. Separate the two clearly.\n' +
-    '5. DELEGATION BOARD — the single most useful section. For every open item, name who should own it ' +
-    '(Jibril is the most operationally reliable — self-employed, flexible, has transport; Saul has said ' +
-    'he cannot be heavily involved; Almir is least responsive; anything I have not delegated defaults to me). ' +
+    '3. MONEY — fees earned, owed to RASNEST, owed by RASNEST, and any invoice or statement error you ' +
+    'can detect. Flag undercharging explicitly — it is the most common way this business leaks.\n' +
+    '4. COMPLIANCE & STATUTORY — UK filings with dates and days remaining.\n' +
+    '5. DELEGATION BOARD — the single most useful section. For every open item, name who should own it. ' +
+    'Jibril is the most operationally reliable (self-employed, flexible, has transport). Saul has said he ' +
+    'cannot be heavily involved. Almir is least responsive. Anything not delegated defaults to me. ' +
     'Mark each item KEEP or HAND OFF and say why. Be honest about what I am hoarding that I should not be.\n' +
-    '6. IRELAND / E — status of the Irish side only, and what needs raising with E.\n' +
-    '7. TOP 5 ACTIONS THIS WEEK — ranked, each with an owner and a deadline.\n\n' +
-    'Dense, no padding, no preamble. Tables where comparative. All UK money in £, Irish in €. UK dates.',
+    '6. ACTIONS THIS WEEK — no limit, ranked by value, each with a named owner and a deadline. ' +
+    'Do not truncate this to a round number; list what actually needs doing.\n\n' +
+    'Dense, no padding, no preamble. Tables where comparative. Money in £, UK dates.',
 };
 
 // The brief takes ~20s to generate, which is uncomfortably close to the 30s ceiling most
