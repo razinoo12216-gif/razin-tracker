@@ -7,21 +7,36 @@
 //   GET /api/brief?kind=week
 import { runAgent } from '../lib/agentCore.js';
 
+// ADDED 2026-08-10. None of these prompts previously mentioned the knowledge store, so the
+// briefs were built from Postgres tables only — which is precisely why Razin kept saying his
+// Claude chats and his agent were not communicating. The store was alive (28 Cowork sessions,
+// 118 chunks) and the searchKnowledge tool was available; nothing was telling the model to use
+// it. Naming example search terms matters: a general "consult the knowledge store" gets skipped.
+const KNOWLEDGE = 'Before you write anything, search my knowledge store. My working ' +
+  'conversations are distilled into it, and a lot of what is actually live exists there and not ' +
+  'in any table — deals in progress, what I promised someone, what I am blocked on. Call ' +
+  'searchKnowledge at least THREE times with different terms first. Useful terms: "Primekey", ' +
+  '"Royal Orchard", "RASNEST", "IMS", "Escape", "accountant", "E", plus anything the day\'s open ' +
+  'tasks point at. If a result names something you have not searched, search that too.\n' +
+  'Where the store and the app disagree, the more recent record wins and you say which you used. ' +
+  'Where a search comes back empty, say so rather than presenting the app tables as the whole ' +
+  'picture.\n\n';
+
 const PROMPTS = {
-  morning:
+  morning: KNOWLEDGE +
     'Produce my morning brief for today. Work in this order and keep the whole thing under 250 words:\n' +
     '1. The single most important thing I must do today, and why it is that one.\n' +
     '2. Anything overdue or due today — tasks, statutory filings, commitments, payments.\n' +
     '3. Money: who owes me and is ageing badly, what I owe that is due soon.\n' +
     '4. Discipline: what my logs actually show. If nothing is logged, say so plainly and tell me to log it — do not pretend it is a failure or a success.\n' +
     'Uncomfortable thing first. No greeting, no motivational filler, no sign-off. Use £ and UK dates.',
-  evening:
+  evening: KNOWLEDGE +
     'Produce my evening review. Under 180 words:\n' +
     '1. What got closed out today according to my task list.\n' +
     '2. What did NOT move that I said would.\n' +
     '3. One thing to set up tonight so tomorrow starts clean.\n' +
     'Ask me directly whether today\'s discipline is logged. No filler.',
-  week:
+  week: KNOWLEDGE +
     'Produce my weekly review. Under 350 words: trajectory on money, commitments kept vs slipped, ' +
     'discipline logging rate, statutory deadlines inside 60 days, and the one structural change ' +
     'that would compound most over the next 90 days. Be blunt about what is drifting.',

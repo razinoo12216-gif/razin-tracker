@@ -44,6 +44,22 @@ const PROMPT = E_SCOPE +
   'Generate today\'s brief for my call with E. Build it ONLY from real data in my app and ' +
   'knowledge store — never invent a project status, a number, or a commitment. Anything you ' +
   'cannot verify is written "UNKNOWN — confirm".\n\n' +
+
+  // ADDED 2026-08-10. The prompt used to say "app and knowledge store" but never told the model
+  // to actually CALL searchKnowledge, so in practice it built the brief from Postgres tables
+  // alone. That is why the brief kept reading as disconnected from the work: almost everything
+  // live on the Irish side is discussed in conversation and lands in the knowledge store, not
+  // in a table. Named example searches, because a vague "use the knowledge store" gets ignored.
+  'SEARCH MY KNOWLEDGE STORE FIRST — this is not optional.\n' +
+  'My working conversations are distilled into it. Most of what is genuinely live on the Irish ' +
+  'side exists there and nowhere else. Call searchKnowledge at least FOUR times with different ' +
+  'terms before you draft a single line. Useful terms: "Primekey", "Royal Orchard", "E", ' +
+  '"notary", "bond", "accountant", "Maureen", "incorporation", "Ireland". Follow the thread — if ' +
+  'a result names something you have not searched, search that too.\n' +
+  'Reconciling the two sources: treat the knowledge store as current unless a dated record in ' +
+  'the app contradicts it, in which case the more recent one wins and you name which you used. ' +
+  'If a search comes back empty, say the store is thin on that topic — do not quietly fall back ' +
+  'to the app tables and present it as the full picture.\n\n' +
   'Sections, in this exact order:\n\n' +
   '1. DECISIONS NEEDED FROM E — NO LIMIT. List every open decision that is genuinely waiting ' +
   'on E, however many there are. This is the core of the brief and the reason the app exists — ' +
