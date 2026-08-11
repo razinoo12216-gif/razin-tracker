@@ -2205,3 +2205,49 @@ dialog .actions {
 .ag-send:disabled { opacity:0.5; }
 .ag-mic { background:var(--panel-2); border:1px solid var(--border); border-radius:12px; padding:11px 12px; cursor:pointer; font-size:1rem; }
 .ag-cost { text-align:right; font-size:0.65rem; color:var(--muted); padding-top:5px; font-family:ui-monospace,monospace; }
+
+/* ─── QUICK CAPTURE (2026-08-10) ────────────────────────────────────────────
+   Sits at the top of 12 Ticks. Replaced the Agent Chat as the way anything gets
+   logged, so it has to be the first thing his thumb lands on. Deliberately looks
+   like a note field, not a chat: no avatar, no thread, no send arrow. */
+.cap-wrap { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 4px; }
+.cap-input {
+  flex:1 1 100%; background:var(--panel-2); border:1px solid var(--border);
+  color:var(--text); border-radius:12px; padding:11px 13px; font-size:0.9rem;
+  resize:none; font-family:inherit; line-height:1.45; box-sizing:border-box;
+}
+.cap-input:focus { outline:none; border-color:var(--gold); }
+.cap-input::placeholder { color:var(--muted); }
+.cap-send {
+  flex:0 0 auto; margin-left:auto; background:var(--gold); color:#1a1500; border:none;
+  border-radius:12px; padding:10px 20px; font-weight:700; font-size:0.85rem; cursor:pointer;
+}
+.cap-send:disabled { opacity:0.5; cursor:default; }
+.cap-out { flex:1 1 100%; font-size:0.8rem; line-height:1.5; }
+.cap-wait { color:var(--muted); font-style:italic; }
+.cap-reply { color:var(--text); padding-top:2px; }
+.cap-bad { color:var(--danger); }
+.cap-act { display:flex; align-items:flex-start; gap:7px; color:var(--muted); padding:1px 0; }
+.cap-ok { color:var(--green); font-weight:700; flex:0 0 auto; }
+
+/* ─── INVOICES: active vs paid (2026-08-10) ─────────────────────────────────
+   Two numbers he actually wants: what is still out there to collect, and what
+   the work has earned since he started invoicing. */
+.inv-summary { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:12px 0 6px; }
+.inv-stat {
+  background:var(--panel); border:1px solid var(--border); border-left:3px solid var(--gold);
+  border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:3px;
+}
+.inv-stat-paid { border-left-color:var(--green); }
+.inv-stat label { font-size:0.68rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); font-weight:700; }
+.inv-stat-num { font-size:1.35rem; font-weight:800; color:var(--text); line-height:1.15; }
+.inv-stat em { font-style:normal; font-size:0.7rem; color:var(--muted); }
+.inv-card-paid { opacity:0.72; }
+.inv-card-paid .inv-total-num { color:var(--green); }
+.inv-paid-stamp { font-size:0.72rem; color:var(--green); font-weight:700; padding-top:4px; }
+.inv-paid-btn.on { color:var(--muted); }
+.inv-card-draft { border-left:3px solid var(--border-2); }
+.inv-draft-chip { font-size:0.72rem; font-weight:700; color:var(--muted); border:1px solid var(--border-2); border-radius:20px; padding:2px 10px; }
+@media (max-width:420px) {
+  .inv-summary { grid-template-columns:1fr; }
+}

@@ -780,6 +780,66 @@ function buildDayTasks(dayISO) {
   return [...realTasks, ...virtualTasks];
 }
 
+/* ─── QUICK CAPTURE ────────────────────────────────────────────────────────────
+ * Added 2026-08-10, replacing the removed Agent Chat as the only way anything gets
+ * logged. Razin will not sit in a chat thread — he is driving, working, out. One box,
+ * one Send, one line back. POSTs to /api/capture, which runs on Haiku and writes
+ * through the same audited/verified path as everything else.
+ *
+ * Draft lives in a var, not the DOM: render() rebuilds innerHTML on every tab switch
+ * and was silently binning typed text. Same bug that bit the agent input.
+ * ──────────────────────────────────────────────────────────────────────────── */
+var captureState = captureState || { loading:false, reply:'', actions:[], err:null, wrote:null };
+var captureDraft = captureDraft || '';
+
+function saveCaptureDraft(){
+  const t=document.getElementById('cap-input'); if(t) captureDraft=t.value;
+}
+
+async function sendCapture(){
+  const ta=document.getElementById('cap-input');
+  const t=((ta?ta.value:captureDraft)||'').trim();
+  if(!t || captureState.loading) return;
+  captureDraft=t;
+  captureState.loading=true; captureState.err=null; captureState.reply=''; captureState.actions=[]; captureState.wrote=null;
+  render();
+  try{
+    const r=await fetch('/api/capture',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text:t})});
+    const d=await r.json();
+    if(!r.ok||d.error){ captureState.err=d.error||('HTTP '+r.status); }
+    else{
+      captureState.reply=d.text||'';
+      captureState.actions=d.actions||[];
+      captureState.wrote=!!d.wrote;
+      if(d.usage) window._agLastUsage=d.usage;
+    }
+  }catch(e){ captureState.err=e.message; }
+  captureState.loading=false;
+  // Clear the box ONLY once a row came back verified out of Postgres. If nothing was
+  // written his words stay where they are, so a retry costs him no retyping.
+  if(captureState.wrote){ captureDraft=''; await loadAll(); }
+  else render();
+}
+
+function renderCaptureBox(){
+  const acts=(captureState.actions||[]).filter(a=>a.verified).map(a=>
+    `<div class="cap-act"><span class="cap-ok">✓</span><span>${esc(a.summary||a.tool)}</span></div>`).join('');
+  const bad=(captureState.actions||[]).some(a=>a.verified===false);
+  let out='';
+  if(captureState.loading) out=`<div class="cap-out cap-wait">Writing it down…</div>`;
+  else if(captureState.err) out=`<div class="cap-out cap-bad">⚠ ${esc(captureState.err)} — your text is still in the box.</div>`;
+  else if(captureState.reply||acts){
+    const warn=(captureState.wrote===false)?`<div class="cap-bad">Nothing reached the database — text kept so you can resend.</div>`:'';
+    out=`<div class="cap-out">${warn}${acts}${bad?`<div class="cap-bad">Some of that did not save.</div>`:''}<div class="cap-reply">${esc(String(captureState.reply).split('\n')[0])}</div></div>`;
+  }
+  return `<div class="cap-wrap">
+      <textarea id="cap-input" class="cap-input" rows="2" placeholder="Gym done, fajr on time, told E I'd send the docs Tuesday…" ${captureState.loading?'disabled':''} oninput="saveCaptureDraft()">${esc(captureDraft)}</textarea>
+      <button class="cap-send" onclick="sendCapture()" ${captureState.loading?'disabled':''}>Log it</button>
+      ${out}
+    </div>`;
+}
+
 function renderToday() {
   const dayTasks = buildDayTasks(selectedDay).sort(taskSort);
   const done = dayTasks.filter((t) => t.done).length;
@@ -801,6 +861,7 @@ function renderToday() {
           <input type="date" id="day-picker" value="${esc(selectedDay)}" aria-label="Pick a date" style="background:#1e293b;color:#fff;border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:5px 10px;font-size:0.8rem;color-scheme:dark;cursor:pointer;margin-top:6px" />
         </div>
       </div>
+      ${renderCaptureBox()}
       <div class="task-search-bar" style="margin:10px 0;">
         <input id="task-search" type="text" placeholder="\u{1F50D} Search all tasks across every day\u2026" autocomplete="off" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#10151c;color:#fff;border:1px solid rgba(255,255,255,0.12);border-radius:12px;font-size:0.9rem" />
         <div id="task-search-results" style="margin-top:6px;"></div>
@@ -2071,26 +2132,135 @@ function renderWorkInvoicesView() {
     list.innerHTML = `<div class="work-header-bar">${toggle}<button class="work-fab" onclick="openInvoiceEditor()">+ Invoice</button></div><div class="empty">No invoices yet. Hit <strong>+ Invoice</strong> to draft one.</div>`;
     return;
   }
-  list.innerHTML = `<div class="work-header-bar">${toggle}<button class="work-fab" onclick="openInvoiceEditor()">+ Invoice</button></div>${invoices.map(renderInvoiceCard).join('')}`;
+
+  // THREE states, not two. An invoice whose sections have no totals yet is a DRAFT —
+  // the shell exists but it has not been costed. Counting it as money outstanding
+  // makes the headline lie twice over: it inflates the invoice count while adding
+  // nothing to the figure. Drafts get their own block so they read as a to-do.
+  const paid   = invoices.filter(invoiceIsPaid);
+  const unpaid = invoices.filter(i => !invoiceIsPaid(i));
+  const active = unpaid.filter(i => invoiceTotal(i) > 0);
+  const drafts = unpaid.filter(i => invoiceTotal(i) <= 0);
+
+  const activeTotal = active.reduce((s, i) => s + invoiceTotal(i), 0);
+  const paidTotal   = paid.reduce((s, i) => s + invoiceTotal(i), 0);
+
+  // "since the first invoice" — earliest month across ALL invoices, not just the
+  // paid ones, so the figure doesn't jump backwards when an old one gets marked.
+  const months = invoices.map(i => i.month).filter(Boolean).sort();
+  const since = months.length ? invoiceMonthLabel(months[0]) : '';
+
+  const sortByMonthDesc = (a, b) => String(b.month || '').localeCompare(String(a.month || ''));
+  const sortByPaidDesc  = (a, b) => String(b.paid_on || b.month || '').localeCompare(String(a.paid_on || a.month || ''));
+
+  const draftNote = drafts.length ? ` · ${drafts.length} draft${drafts.length === 1 ? '' : 's'} not costed` : '';
+
+  const band = `<div class="inv-summary">
+      <div class="inv-stat">
+        <label>Earning power</label>
+        <span class="inv-stat-num">${money0(activeTotal)}</span>
+        <em>${active.length} invoice${active.length === 1 ? '' : 's'} outstanding${draftNote}</em>
+      </div>
+      <div class="inv-stat inv-stat-paid">
+        <label>Paid to date</label>
+        <span class="inv-stat-num">${money0(paidTotal)}</span>
+        <em>${paid.length} settled${since ? ' since ' + esc(since) : ''}</em>
+      </div>
+    </div>`;
+
+  const activeBlock = active.length
+    ? `<div class="work-section-divider">Outstanding — ${money0(activeTotal)}</div>${active.sort(sortByMonthDesc).map(renderInvoiceCard).join('')}`
+    : `<div class="work-section-divider">Outstanding</div><div class="empty">${paid.length ? 'Nothing outstanding. Everything costed has been paid.' : 'Nothing costed yet — fill in the section totals below.'}</div>`;
+
+  const draftBlock = drafts.length
+    ? `<div class="work-section-divider">Not costed yet — ${drafts.length}</div>${drafts.sort(sortByMonthDesc).map(renderInvoiceCard).join('')}`
+    : '';
+
+  const paidBlock = paid.length
+    ? `<div class="work-section-divider">Paid — ${money0(paidTotal)}</div>${paid.sort(sortByPaidDesc).map(renderInvoiceCard).join('')}`
+    : '';
+
+  list.innerHTML = `<div class="work-header-bar">${toggle}<button class="work-fab" onclick="openInvoiceEditor()">+ Invoice</button></div>${band}${activeBlock}${draftBlock}${paidBlock}`;
+}
+
+/* ─── INVOICE MONEY ───────────────────────────────────────────────────────────
+ * An invoice's value is the sum of its section totals — there is no total column,
+ * so it is derived everywhere. One helper so the cards and the summary band can
+ * never disagree with each other.
+ * ─────────────────────────────────────────────────────────────────────────── */
+function invoiceTotal(inv) {
+  const sections = Array.isArray(inv && inv.sections) ? inv.sections : [];
+  return sections.reduce((s, sec) => s + (parseFloat(sec.total) || 0), 0);
+}
+function invoiceIsPaid(inv) { return !!(inv && inv.paid); }
+function money0(n) { return '£' + Math.round(n || 0).toLocaleString('en-GB'); }
+
+// "2026-08" -> "Aug 2026". Invoices store month as an <input type="month"> value.
+function invoiceMonthLabel(m) {
+  if (!m) return '';
+  const parts = String(m).split('-');
+  if (parts.length < 2) return String(m);
+  const d = new Date(Number(parts[0]), Number(parts[1]) - 1, 1);
+  if (isNaN(d)) return String(m);
+  return new Intl.DateTimeFormat('en-GB', { month: 'short', year: 'numeric' }).format(d);
+}
+
+// "2026-08-10" -> "10 Aug 2026". Parsed as parts, not via new Date(str), so it
+// cannot drift a day on a BST/UTC boundary.
+function fmtUKDate(iso) {
+  if (!iso) return '';
+  const p = String(iso).slice(0, 10).split('-');
+  if (p.length !== 3) return String(iso);
+  const d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+  if (isNaN(d)) return String(iso);
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(d);
+}
+
+async function toggleInvoicePaid(id, nowPaid) {
+  if (!window.SUPABASE_CONFIGURED) return;
+  const patch = nowPaid
+    ? { paid: true, paid_on: todayISO() }
+    : { paid: false, paid_on: null };
+  const { error } = await window.db.from('invoices').update(patch).eq('id', id);
+  if (error) {
+    // The paid/paid_on columns arrive with invoices_paid_setup.sql. Reads cope
+    // without them (undefined reads as unpaid); writes cannot. Say which file.
+    const missing = /column .*(paid)/i.test(error.message || '');
+    alert(missing
+      ? 'Paid tracking is not set up yet.\n\nRun invoices_paid_setup.sql in the Supabase SQL editor, then try again.'
+      : 'Could not update: ' + error.message);
+    return;
+  }
+  await loadAll();
 }
 
 function renderInvoiceCard(inv) {
   const sections = Array.isArray(inv.sections) ? inv.sections : [];
-  const total = sections.reduce((s, sec) => s + (parseFloat(sec.total) || 0), 0);
+  const total = invoiceTotal(inv);
+  const paid = invoiceIsPaid(inv);
   const month = inv.month ? inv.month.replace('-', ' / ') : '';
   const sectionsHtml = sections.filter(s => s.title || s.total).map(s =>
     `<div class="inv-section-row"><span class="inv-section-name">${esc(s.title||'')}</span><span class="inv-section-total">${s.total ? '£' + parseFloat(s.total).toLocaleString() : '—'}</span></div>`
   ).join('');
-  return `<div class="card inv-card" onclick="openInvoiceEditor('${inv.id}')">
+  // A shell with no section totals is a draft, not a £0 invoice. Say so, and don't
+  // offer "Mark paid" — marking an uncosted invoice paid would bury it at £0.
+  const isDraft = !paid && total <= 0;
+  return `<div class="card inv-card${paid ? ' inv-card-paid' : ''}${isDraft ? ' inv-card-draft' : ''}" onclick="openInvoiceEditor('${inv.id}')">
     <div class="inv-card-head">
       <span class="inv-card-title">${esc(inv.title || 'Untitled Invoice')}</span>
       <span class="inv-card-month">${month}</span>
     </div>
     ${sectionsHtml}
-    <div class="inv-card-total"><span>Total</span><span class="inv-total-num">£${total.toLocaleString()}</span></div>
+    ${isDraft
+      ? `<div class="inv-card-total"><span>Total</span><span class="inv-draft-chip">Not costed yet</span></div>`
+      : `<div class="inv-card-total"><span>Total</span><span class="inv-total-num">£${total.toLocaleString()}</span></div>`}
+    ${paid && inv.paid_on ? `<div class="inv-paid-stamp">Paid ${esc(fmtUKDate(inv.paid_on))}</div>` : ''}
     ${inv.notes ? `<div class="card-notes">${esc(inv.notes)}</div>` : ''}
     <div class="inv-card-actions">
       <button class="work-btn-ghost inv-copy-btn" onclick="event.stopPropagation();copyInvoiceText('${inv.id}')">Copy text</button>
+      ${isDraft
+        ? `<button class="work-btn-ghost" onclick="event.stopPropagation();openInvoiceEditor('${inv.id}')">Add amounts</button>`
+        : `<button class="work-btn-ghost inv-paid-btn${paid ? ' on' : ''}" onclick="event.stopPropagation();toggleInvoicePaid('${inv.id}',${paid ? 'false' : 'true'})">${paid ? 'Mark unpaid' : 'Mark paid'}</button>`}
     </div>
   </div>`;
 }
@@ -2729,7 +2899,19 @@ document.querySelectorAll('.tab').forEach((btn) => {
   });
 });
 
-loadAll();
+// Boot. When the real Supabase login is live, index.html sets window._twGate = true
+// before this file parses and calls _twBoot() once getSession() resolves. If the
+// session resolved first, _twSession is already set and we boot here. Both covered.
+//
+// _twGate is the compatibility shim: with no gate present (the current index.html,
+// or a stale cached one) app.js self-boots exactly as it always did. Without this,
+// pairing a new app.js with an old index.html gives a permanently blank app.
+window._twBoot = function () {
+  if (window._twBooted) return;
+  window._twBooted = true;
+  loadAll();
+};
+if (window._twSession || !window._twGate) window._twBoot();
 
 
 // ─── GYM ────────────────────────────────────────────────────────────────────
@@ -4819,10 +5001,23 @@ function openOpPartnerEditor(id){
 async function saveOpPartner(ev){ ev.preventDefault(); const note=document.getElementById('opw-note').value.trim(); const {error}=await window.db.from('op_partner_checks').upsert({week_label:window._opPartnerWeek,note:note||null},{onConflict:'week_label'}); if(error){alert('Error: '+error.message);return false;} closeWorkModal(); await loadAll(); return false; }
 async function deleteOpPartner(id){ if(!confirm('Delete this entry?'))return; const res=await window.db.from('op_partner_checks').delete().eq('id',id); if(res.error){alert('Error: '+res.error.message);return;} closeWorkModal(); await loadAll(); }
 
-/* ===================== OPERATOR AGENT ===================== */
-/* Three sections: Chat (talk + act) · Brief (daily read-out) · Check (fast gut-checks). */
+/* ===================== DAILY BRIEFS ===================== */
+/* Three sections: Call · E (the one he reads live on the phone) · Daily brief · Quick check.
+ *
+ * The Chat sub-tab was REMOVED on 2026-08-10 at Razin's instruction. It was unusable: a long
+ * update plus "give me my E brief" made the model spend all 4096 output tokens on tool calls
+ * and return no text at all. Chat mode was never the right shape for producing a brief, and it
+ * duplicated what he already does in a Cowork chat. The RASNEST sub-tab went at the same time —
+ * superseded by the separate RASNEST app.
+ *
+ * /api/agent stays live: Quick check still posts to it with mode:'check'. The chat-only helpers
+ * below (agentBubble, sendAgentMessage, agentVoice, agentUndo, agentQuick) and the rasnest
+ * loader are now unreachable from the UI. Left in place deliberately — ripping out ~150 lines of
+ * interlinked code in the same deploy as the auth change would make any failure hard to isolate.
+ * They are dead code and should be deleted in a follow-up.
+ */
 
-var agentSub = agentSub || 'chat';
+var agentSub = agentSub || 'ecall';
 var briefState = briefState || { kind:'morning', text:'', loading:false, cached:null, err:null };
 var checkState = checkState || { q:'', answer:'', loading:false };
 var eBriefState = eBriefState || { text:'', date:'', loading:false, err:null };
@@ -4841,7 +5036,6 @@ function setAgentSub(s){
   agentSub=s; render();
   if(s==='brief' && !briefState.text && !briefState.loading) loadBrief(briefState.kind);
   if(s==='ecall' && !eBriefState.text && !eBriefState.loading) loadEBrief();
-  if(s==='rasnest' && !rasnestState.text && !rasnestState.loading) loadRasnest();
 }
 
 // Lightweight markdown → HTML. The agent replies in markdown; rendering it raw looked like a terminal.
@@ -4872,32 +5066,12 @@ function agentBubble(m){
 }
 
 function renderAgent(){
-  const LABELS={chat:'Chat',brief:'Daily brief',rasnest:'RASNEST',ecall:'Call · E',check:'Quick check'};
-  const tabs = ['chat','brief','rasnest','ecall','check'].map(s=>
+  const LABELS={ecall:'Call · E',brief:'Daily brief',check:'Quick check'};
+  const tabs = ['ecall','brief','check'].map(s=>
     `<button class="ag-subtab ${agentSub===s?'on':''}" onclick="setAgentSub('${s}')">${LABELS[s]}</button>`
   ).join('');
 
   let body='';
-  if(agentSub==='chat'){
-    const msgs=(agentMessages||[]).map(agentBubble).join('');
-    const busy = agentBusy?`<div class="ag-row ag-ai"><div class="ag-avatar">12</div><div class="ag-bub ag-abub ag-think"><span></span><span></span><span></span></div></div>`:'';
-    const empty=(!agentMessages||!agentMessages.length)&&!agentBusy
-      ? `<div class="ag-empty">
-           <div class="ag-empty-h">Your operator</div>
-           <p>Reads your whole app, your companies and your chat history — and runs your task list.</p>
-           <div class="ag-chips">
-             ${['What is overdue right now?','Who owes me and how long?','Which companies need filing?','Add call the accountant tomorrow 9am']
-               .map(q=>`<button class="ag-chip" onclick="agentQuick('${esc(q).replace(/'/g,"\\'")}')">${esc(q)}</button>`).join('')}
-           </div>
-           <p class="ag-fine">Every change it makes is re-read out of the database before it replies, and shown below the message with a ✓. No ✓, no change — whatever the wording says. Undo is one tap.</p>
-         </div>`:'';
-    body=`<div class="ag-thread" id="ag-thread">${empty}${msgs}${busy}</div>
-      <div class="ag-input-bar">
-        <textarea id="ag-input" class="ag-input" rows="1" placeholder="Talk to your operator…" ${agentBusy?'disabled':''}>${esc(agentDraft)}</textarea>
-        <button class="ag-mic" onclick="agentVoice()" title="Voice" aria-label="Voice">●</button>
-        <button class="ag-send" onclick="sendAgentMessage()" ${agentBusy?'disabled':''}>Send</button>
-      </div>`;
-  }
 
   if(agentSub==='brief'){
     const kinds=['morning','evening','week'].map(k=>`<button class="ag-kind ${briefState.kind===k?'on':''}" onclick="loadBrief('${k}')">${k==='week'?'This week':(k==='morning'?'Morning':'Evening')}</button>`).join('');
@@ -4917,23 +5091,6 @@ function renderAgent(){
       </div>`;
   }
 
-  if(agentSub==='rasnest'){
-    let inner;
-    if(rasnestState.loading) inner=`<div class="ag-brief-load"><div class="ag-think"><span></span><span></span><span></span></div><div>Pulling the whole RASNEST picture…</div></div>`;
-    else if(rasnestState.err) inner=`<div class="ag-brief-err">${esc(rasnestState.err)}</div>`;
-    else if(rasnestState.text) inner=`<div class="ag-brief-body">${agentFmt(rasnestState.text)}</div>`;
-    else inner=`<div class="ag-brief-err">No report yet — hit Rebuild.</div>`;
-    body=`<div class="ag-brief">
-        <div class="ag-brief-bar">
-          <div class="ag-kinds"><span class="ag-kind on">Operating report</span></div>
-          <button class="ag-refresh" onclick="loadRasnest(true)" ${rasnestState.loading?'disabled':''}>Rebuild</button>
-        </div>
-        ${rasnestState.cached!==null&&!rasnestState.loading?`<div class="ag-stamp">${rasnestState.cached?'cached — today':'freshly built'}</div>`:''}
-        ${inner}
-        <div class="ag-brief-foot">UK RASNEST = you + Jibril, Almir, Saul · Irish RASNEST = the venture with E</div>
-      </div>`;
-  }
-
   if(agentSub==='ecall'){
     let inner;
     if(eBriefState.loading) inner=`<div class="ag-brief-load"><div class="ag-think"><span></span><span></span><span></span></div><div>Building your call brief…</div></div>`;
@@ -4947,7 +5104,7 @@ function renderAgent(){
         </div>
         ${eBriefState.date?`<div class="ag-stamp">brief for ${esc(eBriefState.date)}</div>`:''}
         ${inner}
-        <div class="ag-brief-foot">Decisions needed · what you owe E · what E owes you · money · the unnamed risk</div>
+        <div class="ag-brief-foot">Decisions needed from E · per project done/blocked/next · open loops between you · the unnamed risk · call discipline</div>
       </div>`;
   }
 
@@ -4966,8 +5123,16 @@ function renderAgent(){
       </div>`;
   }
 
+  // The old version printed u.input_tokens alone, which since the prompt-cache fix is almost
+  // always a single-digit number — it read as "2 in / 4096 out", which looks broken. The real
+  // input is fresh + cache-read + cache-write.
   const u=window._agLastUsage;
-  const cost=(u&&agentSub!=='brief')?`<div class="ag-cost">${u.input_tokens} in / ${u.output_tokens} out · ~$${(u.input_tokens/1e6*3+u.output_tokens/1e6*15+((u.cache_read_tokens||0)/1e6*0.3)+((u.cache_write_tokens||0)/1e6*3.75)).toFixed(3)}</div>`:'';
+  const cost=u?(function(){
+    const cr=u.cache_read_tokens||0, cw=u.cache_write_tokens||0;
+    const tin=(u.input_tokens||0)+cr+cw;
+    const usd=(u.input_tokens||0)/1e6*3+(u.output_tokens||0)/1e6*15+cr/1e6*0.3+cw/1e6*3.75;
+    return `<div class="ag-cost">${tin.toLocaleString()} in / ${(u.output_tokens||0).toLocaleString()} out · ~$${usd.toFixed(3)}</div>`;
+  })():'';
 
   list.innerHTML=`<div class="ag-wrap">
     <div class="ag-subnav">${tabs}</div>
