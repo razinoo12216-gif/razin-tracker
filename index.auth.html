@@ -526,25 +526,92 @@
   </form>
 </dialog>
 <script>
-(function(){
-  var TK='tw_auth',EK='tw_exp';
-  var D30=30*24*60*60*1000;
-  var H='92d2a7deeec66a351e03decbcd77620922841143842aa56a285cacc9200ce606';
-  function authed(){var t=localStorage.getItem(TK),e=+(localStorage.getItem(EK)||0);return t==='ok'&&Date.now()<e;}
-  function hide(){var el=document.getElementById('lock-screen');if(el)el.style.display='none';}
-  if(authed())hide();
-  window._twUnlock=async function(){
-    var inp=document.getElementById('lock-input');
-    var val=inp?inp.value:'';if(!val)return;
-    var buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(val));
-    var h=Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
-    if(h===H){localStorage.setItem(TK,'ok');localStorage.setItem(EK,String(Date.now()+D30));hide();}
-    else{var er=document.getElementById('lock-error');if(er)er.textContent='Wrong password.';if(inp){inp.value='';inp.focus();}}
+/* ───────────────────────────────────────────────────────────────────────────
+   AUTH GATE — real Supabase session, not a hidden div.
+   Runs after src/supabase.js (window.db) and before src/app.js.
+   app.js no longer self-boots; it exposes window._twBoot and waits.
+   ─────────────────────────────────────────────────────────────────────────── */
+(function () {
+  window._twGate = true;   // tells app.js to wait for a session
+  var OWNER_EMAIL = 'razinoo12216@gmail.com';
+
+  function el(id) { return document.getElementById(id); }
+  function hide() { var l = el('lock-screen'); if (l) l.style.display = 'none'; }
+  function show() { var l = el('lock-screen'); if (l) l.style.display = ''; }
+  function err(m) { var e = el('lock-error'); if (e) e.textContent = m || ''; }
+
+  // The old hash gate's keys. Nothing reads them any more — bin them so no
+  // stale "authed" state lingers on the device.
+  try { localStorage.removeItem('tw_auth'); localStorage.removeItem('tw_exp'); } catch (e) {}
+
+  // Is there a persisted supabase session on this device? Used only to avoid a
+  // lock-screen flash on reload, and as an offline fallback. Not a security
+  // check — RLS in Postgres is the security check.
+  function storedToken() {
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf('sb-') === 0 && k.indexOf('-auth-token') > -1 && localStorage.getItem(k)) return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  function unlock() {
+    window._twSession = true;
+    hide();
+    if (typeof window._twBoot === 'function') window._twBoot();
+  }
+
+  if (storedToken()) hide();   // optimistic, corrected below if wrong
+
+  window._twUnlock = async function () {
+    var inp = el('lock-input');
+    var val = inp ? inp.value : '';
+    if (!val) return;
+    err('Checking…');
+    try {
+      var res = await window.db.auth.signInWithPassword({ email: OWNER_EMAIL, password: val });
+      if (res.error) {
+        err(res.error.message || 'Sign in failed.');
+        if (inp) { inp.value = ''; inp.focus(); }
+        return;
+      }
+      err('');
+      if (inp) inp.value = '';
+      unlock();
+    } catch (e) {
+      err((e && e.message) ? e.message : 'Network error. Try again.');
+    }
   };
-  document.addEventListener('DOMContentLoaded',function(){
-    var inp=document.getElementById('lock-input');
-    if(inp)inp.addEventListener('keydown',function(e){if(e.key==='Enter')window._twUnlock();});
-    if(authed())hide();
+
+  window._twSignOut = function () {
+    try { window.db.auth.signOut().then(function () { location.reload(); }); }
+    catch (e) { location.reload(); }
+  };
+
+  (async function () {
+    try {
+      var r = await window.db.auth.getSession();
+      if (r && r.data && r.data.session) { unlock(); return; }
+      // Offline with a stored session: open the app rather than show a wrong-
+      // password screen he can do nothing about. Reads still need the network.
+      if (!navigator.onLine && storedToken()) { unlock(); return; }
+    } catch (e) {
+      if (!navigator.onLine && storedToken()) { unlock(); return; }
+    }
+    show();
+  })();
+
+  try {
+    window.db.auth.onAuthStateChange(function (event) {
+      if (event === 'SIGNED_OUT') { window._twSession = false; show(); }
+    });
+  } catch (e) {}
+
+  document.addEventListener('DOMContentLoaded', function () {
+    var inp = el('lock-input');
+    if (inp) inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') window._twUnlock(); });
   });
 })();
 </script>
