@@ -2251,3 +2251,99 @@ dialog .actions {
 @media (max-width:420px) {
   .inv-summary { grid-template-columns:1fr; }
 }
+
+/* ─── DEBT PAYOFF PLANS (2026-08-10) ───────────────────────────────────────
+   The sequence out of each debt, on the card, so it stops living in his head. */
+.debt-plan { margin:10px 0 4px; padding:9px 0 2px; border-top:1px solid var(--border); }
+.debt-plan-empty { border-top:none; padding-top:0; }
+.debt-plan-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px; }
+.debt-plan-title { font-size:0.68rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); font-weight:700; }
+.debt-plan-clear { font-size:0.75rem; color:var(--green); font-weight:700; }
+.debt-plan-short { font-size:0.75rem; color:var(--danger); font-weight:700; }
+.debt-plan-btn {
+  margin-left:auto; background:none; border:1px solid var(--border-2); color:var(--muted);
+  border-radius:20px; padding:3px 12px; font-size:0.72rem; font-weight:700; cursor:pointer;
+}
+.debt-plan-btn:hover { color:var(--text); border-color:var(--text); }
+.debt-plan-row {
+  display:grid; grid-template-columns:auto 1fr auto auto; gap:4px 10px; align-items:baseline;
+  font-size:0.78rem; padding:3px 0; border-bottom:1px dashed rgba(255,255,255,0.05);
+}
+.debt-plan-row.done { opacity:0.5; }
+.debt-plan-when { color:var(--gold); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.debt-plan-src  { color:var(--text); overflow:hidden; text-overflow:ellipsis; }
+.debt-plan-amt  { color:var(--text); font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.debt-plan-left { color:var(--muted); font-size:0.72rem; font-variant-numeric:tabular-nums; white-space:nowrap; }
+@media (max-width:430px) {
+  .debt-plan-row { grid-template-columns:1fr auto; }
+  .debt-plan-when { grid-column:1; }
+  .debt-plan-amt { grid-column:2; text-align:right; }
+  .debt-plan-src { grid-column:1; color:var(--muted); font-size:0.72rem; }
+  .debt-plan-left { grid-column:2; text-align:right; }
+}
+/* editor */
+#plan-editor { max-width:560px; }
+.plan-sub { font-size:0.8rem; color:var(--muted); margin:-10px 0 14px; }
+.plan-row { display:flex; flex-direction:column; gap:6px; padding:10px; margin-bottom:8px;
+  background:var(--panel-2); border:1px solid var(--border); border-radius:10px; position:relative; }
+.plan-row-nums { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.plan-row-del { position:absolute; top:6px; right:6px; background:none; border:none;
+  color:var(--muted); cursor:pointer; font-size:0.85rem; padding:2px 6px; }
+.plan-row-del:hover { color:var(--danger); }
+.plan-preview { font-size:0.8rem; color:var(--muted); padding:8px 0 12px; }
+.plan-ok { color:var(--green); font-weight:700; }
+.plan-short { color:var(--danger); font-weight:700; }
+
+/* shared pot (waterfall) */
+.debt-free-line strong { color:var(--green); }
+.debt-pot-btn { margin-left:8px; background:none; border:1px solid var(--border-2); color:var(--muted);
+  border-radius:20px; padding:2px 10px; font-size:0.68rem; font-weight:700; cursor:pointer; }
+.debt-pot-btn:hover { color:var(--text); border-color:var(--text); }
+.debt-plan-row.pot .debt-plan-src { color:var(--gold); }
+.pot-q-head { font-size:0.68rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted);
+  font-weight:700; margin:14px 0 6px; }
+.pot-q-row { display:grid; grid-template-columns:auto 1fr auto auto auto; gap:10px; align-items:center;
+  padding:7px 10px; margin-bottom:5px; background:var(--panel-2); border:1px solid var(--border); border-radius:8px; }
+.pot-q-num { color:var(--gold); font-weight:800; font-size:0.8rem; min-width:1.1em; }
+.pot-q-name { font-size:0.85rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pot-q-bal { font-size:0.78rem; color:var(--muted); font-variant-numeric:tabular-nums; }
+.pot-q-row button { background:var(--panel-3); border:1px solid var(--border); color:var(--text);
+  border-radius:6px; width:28px; height:28px; cursor:pointer; font-size:0.85rem; padding:0; }
+.pot-q-row button:disabled { opacity:0.3; cursor:default; }
+
+/* ─── CONTACTS, encrypted (2026-08-17) ─────────────────────────────────────── */
+.c-lock { max-width:380px; margin:48px auto; text-align:center; padding:0 18px; }
+.c-lock-icon { width:44px; height:44px; color:var(--gold); margin-bottom:14px; }
+.c-lock h2 { font-size:1.15rem; margin:0 0 8px; }
+.c-lock-p { font-size:0.82rem; color:var(--muted); line-height:1.6; margin:0 0 18px; }
+.c-lock-p strong { color:var(--danger); }
+.c-pass { width:100%; box-sizing:border-box; background:var(--panel-2); border:1px solid var(--border);
+  color:var(--text); border-radius:12px; padding:12px 14px; font-size:0.95rem; text-align:center; }
+.c-pass:focus { outline:none; border-color:var(--gold); }
+.c-unlock { width:100%; margin-top:10px; background:var(--gold); color:#1a1500; border:none;
+  border-radius:12px; padding:12px; font-weight:700; font-size:0.9rem; cursor:pointer; }
+.c-unlock:disabled { opacity:0.5; cursor:default; }
+.c-err { color:var(--danger); font-size:0.8rem; margin-top:10px; line-height:1.5; }
+.c-count { color:var(--muted); font-size:0.75rem; margin-top:14px; }
+.c-bar { display:flex; gap:8px; align-items:center; margin:10px 0 4px; }
+.c-search { flex:1; background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+  border-radius:12px; padding:10px 13px; font-size:0.9rem; }
+.c-search:focus { outline:none; border-color:var(--border-2); }
+.c-new { background:var(--gold); color:#1a1500; border:none; border-radius:12px;
+  padding:10px 16px; font-weight:700; font-size:0.82rem; cursor:pointer; white-space:nowrap; }
+.c-relock { background:none; border:1px solid var(--border-2); color:var(--muted);
+  border-radius:12px; padding:10px 14px; font-size:0.8rem; font-weight:700; cursor:pointer; }
+.c-relock:hover { color:var(--text); border-color:var(--text); }
+.c-note { font-size:0.7rem; color:var(--muted); margin-bottom:12px; }
+.c-card-head { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+.c-name { font-size:0.98rem; font-weight:700; }
+.c-label { font-size:0.7rem; color:var(--muted); border:1px solid var(--border-2);
+  border-radius:20px; padding:1px 9px; }
+.c-sub { font-size:0.8rem; color:var(--muted); margin-top:3px; }
+.c-contact-lines { display:flex; flex-wrap:wrap; gap:14px; margin-top:8px; }
+.c-link { font-size:0.82rem; color:var(--gold); text-decoration:none; }
+.c-link:hover { text-decoration:underline; }
+.c-tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.c-tag { font-size:0.7rem; background:var(--panel-3); color:var(--muted);
+  border-radius:20px; padding:2px 10px; }
+.c-broken { border-left:3px solid var(--danger); }

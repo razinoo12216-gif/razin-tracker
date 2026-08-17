@@ -363,6 +363,10 @@ async function loadAll() {
   try { const {data:_wt} = await window.db.from('weekly_targets').select('*').order('sort_order',{ascending:true}); weeklyTargets = _wt || []; } catch(_e) {}
   try { const {data:_wl} = await window.db.from('weekly_logs').select('*'); weeklyLogs = _wl || []; } catch(_e) {}
   try { const {data:_wq} = await window.db.from('work_quotes').select('*').order('created_at',{ascending:false}); workQuotes = _wq || []; } catch(_e) {}
+  try { const {data:_ds} = await window.db.from('debt_settings').select('*').eq('id',1).single(); if(_ds) window._debtSettings = _ds; } catch(_e) {}
+  // Contacts arrive as ciphertext. Nothing is decrypted until a passphrase is entered.
+  try { const {data:_ct} = await window.db.from('contacts').select('*').order('created_at',{ascending:false}); contacts = _ct || []; } catch(_e) {}
+  try { const {data:_cm} = await window.db.from('contacts_meta').select('*').eq('id',1).single(); contactsMeta = _cm || null; } catch(_e) {}
   try { const {data:_od} = await window.db.from('op_daily_logs').select('*').order('date',{ascending:false}); opDailyLogs = _od || []; } catch(_e) {}
   try { const {data:_odb} = await window.db.from('op_debt').select('*').eq('id',1).single(); if(_odb) opDebt = _odb; } catch(_e) {}
   try { const {data:_oi} = await window.db.from('op_income').select('*').order('date',{ascending:false}); opIncome = _oi || []; } catch(_e) {}
@@ -561,6 +565,7 @@ function render() {
   if (activeTab === 'potential') return renderPotentials(potentials);
   if (activeTab === 'gym') return renderGym();
   if (activeTab === 'notes') return renderNotes();
+  if (activeTab === 'contacts') return renderContacts();
 
   const q = $('#search').value.trim().toLowerCase();
   const sf = secondaryFilter.value;
@@ -1566,6 +1571,15 @@ function debtSort(a, b) {
   const aPaid = a.status === 'paid';
   const bPaid = b.status === 'paid';
   if (aPaid !== bPaid) return aPaid ? 1 : -1;
+  // Once a queue order exists it IS the display order — the list should read top
+  // to bottom in the sequence he actually pays them. Falls back to focus-then-size.
+  const ao = a.payoff_order == null || a.payoff_order === '' ? null : parseNum(a.payoff_order);
+  const bo = b.payoff_order == null || b.payoff_order === '' ? null : parseNum(b.payoff_order);
+  if (ao != null || bo != null) {
+    if (ao != null && bo != null && ao !== bo) return ao - bo;
+    if (ao != null && bo == null) return -1;
+    if (ao == null && bo != null) return 1;
+  }
   const aFocus = a.priority === 'focus';
   const bFocus = b.priority === 'focus';
   if (aFocus !== bFocus) return aFocus ? -1 : 1;
@@ -1766,12 +1780,27 @@ function renderDebts() {
   const totalMonthly = active.reduce((s, d) => s + parseNum(d.monthly_payment), 0);
   const monthsToFreedom = totalMonthly > 0 ? Math.ceil(totalOwed / totalMonthly) : null;
 
+  // One simulation for the whole tab, cached so each card reads its own slice
+  // rather than recomputing. The old header line divided total balance by total
+  // monthly, which assumes every debt is paid in parallel forever — always
+  // optimistic. This is the real schedule, pot rollover included.
+  const sched = debtSchedule();
+  window._debtSchedCache = sched;
+  const planned = active.filter(d => sched.byId[d.id] && sched.byId[d.id].rows.length);
+  const unplanned = sched.unplanned;
+  const lastClear = sched.clearMonth;
+  const potLine = sched.budget > 0 && sched.start
+    ? `<div class="debt-strategy-line">Shared pot <strong>${fmt(sched.budget)}/mo</strong> from ${esc(invoiceMonthLabel(sched.start))}, in queue order<button type="button" class="debt-pot-btn" onclick="openPotBudgetEditor()">change</button></div>`
+    : `<div class="debt-strategy-line muted">No shared pot set.<button type="button" class="debt-pot-btn" onclick="openPotBudgetEditor()">set one</button></div>`;
+
   list.innerHTML = `
     <div class="debts-page">
       ${active.length > 0 ? `
         <div class="debt-strategy">
           <div class="debt-strategy-line"><strong>${fmt(totalOwed)}</strong> across ${active.length} active debt${active.length !== 1 ? 's' : ''}</div>
-          ${totalMonthly > 0 ? `<div class="debt-strategy-line">At ${fmt(totalMonthly)}/mo current pace → debt-free in <strong>~${monthsToFreedom} month${monthsToFreedom !== 1 ? 's' : ''}</strong>${monthsToFreedom >= 12 ? ' (' + (monthsToFreedom / 12).toFixed(1) + ' years)' : ''}</div>` : '<div class="debt-strategy-line muted">Set monthly payments on each debt to see projected payoff.</div>'}
+          ${lastClear ? `<div class="debt-strategy-line debt-free-line">Debt-free <strong>${esc(invoiceMonthLabel(lastClear))}</strong></div>` : ''}
+          ${unplanned > 0.005 ? `<div class="debt-strategy-line"><span class="debt-plan-short">${fmt(unplanned)} with no plan yet</span></div>` : ''}
+          ${potLine}
         </div>
       ` : ''}
       <div class="debt-list">
@@ -1785,12 +1814,16 @@ function renderDebts() {
 
   list.querySelectorAll('.card.debt').forEach((el) => {
     el.addEventListener('click', (e) => {
-      if (e.target.closest('.debt-pay-btn')) return;
+      // The plan block is interactive — a stray click there must not open the debt editor.
+      if (e.target.closest('.debt-pay-btn') || e.target.closest('.debt-plan')) return;
       openDebtEditor(el.dataset.id);
     });
   });
   list.querySelectorAll('.debt-pay-btn').forEach((btn) => {
     btn.addEventListener('click', (e) => { e.stopPropagation(); openPaymentEditor(btn.dataset.id); });
+  });
+  list.querySelectorAll('.debt-plan-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); openPlanEditor(btn.dataset.planId); });
   });
   // Sub-tabs
   var _dv = window._debtView || 'debts';
@@ -1822,6 +1855,426 @@ function renderDebts() {
     _rvEl.style.display = _dv === 'owed' ? '' : 'none';
   }
 }
+/* ─── DEBT PAYOFF PLANS ───────────────────────────────────────────────────────
+ * Each debt carries an ordered list of steps in debts.plan (jsonb). Three kinds:
+ *   invoice  — a named invoice pays a chunk of it
+ *   oneoff   — any other lump
+ *   monthly  — a standing amount per month from a start month
+ * Monthly steps with months=null run until the balance is dead, so the projection
+ * answers the only question that matters: which month does this one disappear.
+ * Needs debt_plans_setup.sql. Reads degrade to "no plan yet" without it.
+ * ─────────────────────────────────────────────────────────────────────────── */
+function debtPlanSteps(d) { return Array.isArray(d && d.plan) ? d.plan : []; }
+
+function addMonthsISO(ym, n) {
+  const p = String(ym || '').split('-');
+  if (p.length < 2) return String(ym || '');
+  let y = Number(p[0]), m = Number(p[1]) - 1 + Number(n || 0);
+  y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+  return y + '-' + String(m + 1).padStart(2, '0');
+}
+
+/* ── THE SHARED POT (waterfall) ───────────────────────────────────────────────
+ * Razin's real behaviour, 2026-08-10: once the plane is dead he puts a single
+ * £1,000/month at the debts and works a queue — Iwoca, Amex, Macbook, Monzo, Apu.
+ *
+ * That is NOT five per-debt monthly payments. The whole pot hits the debt at the
+ * front of the queue, and the month it dies the leftover rolls straight onto the
+ * next one. Per-debt monthly steps cannot express "£810 of December's £1,000",
+ * so the schedule is simulated month by month across every debt at once.
+ *
+ * Config lives in debt_settings (single row): monthly_budget + start_month.
+ * Queue position is debts.payoff_order. Invoice/one-off chunks stay earmarked to
+ * their own debt and are applied in their own month, before the pot moves.
+ * ─────────────────────────────────────────────────────────────────────────── */
+var DEBT_HORIZON_MONTHS = 240;   // 20 years. A plan that runs past this is not a plan.
+
+function debtSettings() {
+  const s = window._debtSettings || {};
+  return { monthly_budget: parseNum(s.monthly_budget), start_month: s.start_month || null };
+}
+
+// One engine for the whole tab. Returns { byId, clearMonth, unplanned, budget, start }.
+// byId[debtId] = { balance, rows, remaining, clearMonth, committed }
+function debtSchedule() {
+  const cfg = debtSettings();
+  const live = (debts || [])
+    .filter(d => d.type !== 'receivable' && d.status !== 'paid' && parseNum(d.current_balance) > 0);
+
+  const st = live.map(d => ({
+    id: d.id,
+    balance: parseNum(d.current_balance),
+    bal: parseNum(d.current_balance),
+    order: d.payoff_order == null || d.payoff_order === '' ? 9999 : parseNum(d.payoff_order),
+    chunks: debtPlanSteps(d).filter(s => s.kind !== 'monthly' && parseNum(s.amount) > 0),
+    own: debtPlanSteps(d).filter(s => s.kind === 'monthly' && parseNum(s.amount) > 0),
+    rows: [], pot: null, clearMonth: null,
+  })).sort((a, b) => a.order - b.order || b.bal - a.bal);
+
+  // Start at the earliest thing that happens: any chunk, any per-debt monthly, or
+  // the pot's own start month.
+  const marks = [];
+  st.forEach(x => {
+    x.chunks.forEach(c => { if (c.from) marks.push(c.from); });
+    x.own.forEach(o => { if (o.from) marks.push(o.from); });
+  });
+  if (cfg.start_month) marks.push(cfg.start_month);
+  if (!marks.length) {
+    const byId = {};
+    st.forEach(x => { byId[x.id] = { balance: x.balance, rows: [], remaining: x.balance, clearMonth: null, committed: 0 }; });
+    return { byId, clearMonth: null, unplanned: st.reduce((s, x) => s + x.balance, 0), budget: cfg.monthly_budget, start: null };
+  }
+  const start = marks.sort()[0];
+
+  for (let m = 0; m < DEBT_HORIZON_MONTHS; m++) {
+    if (st.every(x => x.bal <= 0.005)) break;
+    const ym = addMonthsISO(start, m);
+
+    // 1. Earmarked money lands on its own debt first.
+    st.forEach(x => {
+      if (x.bal <= 0.005) return;
+      x.chunks.filter(c => c.from === ym).forEach(c => {
+        const applied = Math.min(parseNum(c.amount), x.bal);
+        if (applied <= 0) return;
+        x.bal -= applied;
+        x.rows.push({ kind: c.kind || 'oneoff', source: c.source, from: ym, to: ym, applied, remaining: Math.max(0, x.bal) });
+        if (x.bal <= 0.005 && !x.clearMonth) x.clearMonth = ym;
+      });
+    });
+
+    // 2. Any per-debt standing payment he keeps outside the pot.
+    st.forEach(x => {
+      if (x.bal <= 0.005) return;
+      x.own.forEach(o => {
+        if (!o.from || String(ym) < String(o.from)) return;
+        const elapsed = monthsBetween(o.from, ym);
+        if (o.months && elapsed >= parseNum(o.months)) return;
+        const applied = Math.min(parseNum(o.amount), x.bal);
+        if (applied <= 0) return;
+        x.bal -= applied;
+        const key = 'own:' + (o.id || o.source);
+        const prev = x.rows.find(r => r.key === key);
+        if (prev) { prev.applied += applied; prev.n += 1; prev.to = ym; prev.remaining = Math.max(0, x.bal); }
+        else x.rows.push({ key, kind: 'monthly', source: o.source, per: parseNum(o.amount), n: 1, from: ym, to: ym, applied, remaining: Math.max(0, x.bal) });
+        if (x.bal <= 0.005 && !x.clearMonth) x.clearMonth = ym;
+      });
+    });
+
+    // 3. The shared pot, strictly in queue order, rolling over as each dies.
+    if (cfg.monthly_budget > 0 && cfg.start_month && String(ym) >= String(cfg.start_month)) {
+      let left = cfg.monthly_budget;
+      for (const x of st) {
+        if (left <= 0.005) break;
+        if (x.bal <= 0.005) continue;
+        const applied = Math.min(left, x.bal);
+        x.bal -= applied; left -= applied;
+        if (!x.pot) {
+          x.pot = { kind: 'pot', source: 'Shared pot', from: ym, to: ym, applied, n: 1, remaining: Math.max(0, x.bal) };
+          x.rows.push(x.pot);
+        } else {
+          x.pot.applied += applied; x.pot.n += 1; x.pot.to = ym; x.pot.remaining = Math.max(0, x.bal);
+        }
+        if (x.bal <= 0.005 && !x.clearMonth) x.clearMonth = ym;
+      }
+    }
+  }
+
+  const byId = {};
+  st.forEach(x => {
+    byId[x.id] = {
+      balance: x.balance, rows: x.rows, remaining: Math.max(0, x.bal),
+      clearMonth: x.bal <= 0.005 ? x.clearMonth : null,
+      committed: x.balance - Math.max(0, x.bal),
+    };
+  });
+  const unplanned = st.reduce((s, x) => s + Math.max(0, x.bal), 0);
+  // st.every() on an empty board is vacuously true, and .pop() on an empty array
+  // is undefined — so an empty debt list would report a clear date of `undefined`.
+  // Coerce to null so callers only ever see a month string or null.
+  const allClear = st.length > 0 && st.every(x => x.bal <= 0.005);
+  const clearMonth = allClear ? (st.map(x => x.clearMonth).filter(Boolean).sort().pop() || null) : null;
+  return { byId, clearMonth, unplanned, budget: cfg.monthly_budget, start: cfg.start_month };
+}
+
+function monthsBetween(a, b) {
+  const pa = String(a || '').split('-'), pb = String(b || '').split('-');
+  if (pa.length < 2 || pb.length < 2) return 0;
+  return (Number(pb[0]) - Number(pa[0])) * 12 + (Number(pb[1]) - Number(pa[1]));
+}
+
+// Kept for a single debt in isolation (no pot). The card uses debtSchedule().
+function debtProjection(d) {
+  const balance = parseNum(d.current_balance);
+  const steps = debtPlanSteps(d)
+    .filter(s => s && parseNum(s.amount) > 0)
+    .slice()
+    .sort((a, b) => String(a.from || '9999-99').localeCompare(String(b.from || '9999-99')));
+  let remaining = balance;
+  const rows = [];
+  for (const s of steps) {
+    if (remaining <= 0.005) break;
+    const amt = parseNum(s.amount);
+    if (s.kind === 'monthly') {
+      const need = Math.ceil((remaining - 0.005) / amt);
+      const n = s.months ? Math.min(parseNum(s.months), need) : need;
+      if (n <= 0) continue;
+      const applied = Math.min(amt * n, remaining);
+      remaining -= applied;
+      rows.push({
+        kind: 'monthly', source: s.source, per: amt, n,
+        from: s.from, to: addMonthsISO(s.from, n - 1),
+        applied, remaining: Math.max(0, remaining), done: !!s.done,
+      });
+    } else {
+      const applied = Math.min(amt, remaining);
+      remaining -= applied;
+      rows.push({
+        kind: s.kind || 'oneoff', source: s.source, applied,
+        from: s.from, to: s.from, remaining: Math.max(0, remaining), done: !!s.done,
+      });
+    }
+  }
+  remaining = Math.max(0, remaining);
+  const last = rows.length ? rows[rows.length - 1].to : null;
+  return {
+    balance, rows, remaining,
+    committed: balance - remaining,
+    clearMonth: remaining <= 0.005 ? last : null,
+  };
+}
+
+function renderDebtPlan(d) {
+  const sched = window._debtSchedCache;
+  const p = (sched && sched.byId && sched.byId[d.id]) || debtProjection(d);
+  if (!p.rows.length) {
+    return `<div class="debt-plan debt-plan-empty">
+        <button type="button" class="debt-plan-btn" data-plan-id="${esc(d.id)}">+ Add a plan</button>
+      </div>`;
+  }
+  const lines = p.rows.map(r => {
+    const spread = (r.kind === 'monthly' || r.kind === 'pot') && r.to !== r.from;
+    const when = spread
+      ? `${invoiceMonthLabel(r.from)} → ${invoiceMonthLabel(r.to)}`
+      : invoiceMonthLabel(r.from);
+    const what = r.kind === 'pot'
+      ? `${fmt(r.applied)} over ${r.n} mo`
+      : r.kind === 'monthly'
+        ? `${fmt(r.per)}/mo × ${r.n}`
+        : fmt(r.applied);
+    return `<div class="debt-plan-row${r.done ? ' done' : ''}${r.kind === 'pot' ? ' pot' : ''}">
+        <span class="debt-plan-when">${esc(when)}</span>
+        <span class="debt-plan-src">${esc(r.source || (r.kind === 'monthly' ? 'Monthly payment' : 'Payment'))}</span>
+        <span class="debt-plan-amt">${esc(what)}</span>
+        <span class="debt-plan-left">${r.remaining <= 0.005 ? 'clear' : fmt(r.remaining) + ' left'}</span>
+      </div>`;
+  }).join('');
+  const head = p.clearMonth
+    ? `<span class="debt-plan-clear">Clear by ${esc(invoiceMonthLabel(p.clearMonth))}</span>`
+    : `<span class="debt-plan-short">${fmt(p.remaining)} unplanned</span>`;
+  return `<div class="debt-plan">
+      <div class="debt-plan-head">
+        <span class="debt-plan-title">Plan</span>${head}
+        <button type="button" class="debt-plan-btn" data-plan-id="${esc(d.id)}">Edit</button>
+      </div>
+      ${lines}
+    </div>`;
+}
+
+/* ── shared pot editor: the amount, the start month, and the queue order ── */
+function openPotBudgetEditor() {
+  const cfg = debtSettings();
+  window._potDraft = {
+    monthly_budget: cfg.monthly_budget || '',
+    start_month: cfg.start_month || '',
+    queue: (debts || [])
+      .filter(d => d.type !== 'receivable' && d.status !== 'paid' && parseNum(d.current_balance) > 0)
+      .map(d => ({ id: d.id, creditor: d.creditor, bal: parseNum(d.current_balance),
+                   order: d.payoff_order == null || d.payoff_order === '' ? 9999 : parseNum(d.payoff_order) }))
+      .sort((a, b) => a.order - b.order || b.bal - a.bal),
+  };
+  renderPotQueue();
+  const dlg = document.getElementById('pot-budget-editor');
+  if (dlg && dlg.showModal) dlg.showModal();
+}
+
+function potMove(i, dir) {
+  const q = window._potDraft.queue;
+  const j = i + dir;
+  if (j < 0 || j >= q.length) return;
+  const t = q[i]; q[i] = q[j]; q[j] = t;
+  renderPotQueue();
+}
+function potFieldChange(f, v) { window._potDraft[f] = v; renderPotQueue(); }
+
+function renderPotQueue() {
+  const d = window._potDraft;
+  const amt = document.getElementById('pot-amount');
+  const mon = document.getElementById('pot-start');
+  if (amt && amt.value !== String(d.monthly_budget)) amt.value = d.monthly_budget;
+  if (mon && mon.value !== String(d.start_month)) mon.value = d.start_month;
+  const wrap = document.getElementById('pot-queue');
+  if (!wrap) return;
+  wrap.innerHTML = d.queue.map((x, i) => `
+    <div class="pot-q-row">
+      <span class="pot-q-num">${i + 1}</span>
+      <span class="pot-q-name">${esc(x.creditor || '')}</span>
+      <span class="pot-q-bal">${fmt(x.bal)}</span>
+      <button type="button" onclick="potMove(${i},-1)" ${i === 0 ? 'disabled' : ''} aria-label="Move up">↑</button>
+      <button type="button" onclick="potMove(${i},1)" ${i === d.queue.length - 1 ? 'disabled' : ''} aria-label="Move down">↓</button>
+    </div>`).join('');
+  // Live answer to the only question: when does this finish.
+  const prev = document.getElementById('pot-preview');
+  if (prev) {
+    const saved = window._debtSettings, savedOrders = (debts || []).map(x => x.payoff_order);
+    window._debtSettings = { monthly_budget: parseNum(d.monthly_budget), start_month: d.start_month || null };
+    d.queue.forEach((x, i) => { const row = debts.find(r => r.id === x.id); if (row) row.payoff_order = i + 1; });
+    const s = debtSchedule();
+    window._debtSettings = saved;
+    (debts || []).forEach((x, i) => { x.payoff_order = savedOrders[i]; });
+    prev.innerHTML = s.clearMonth
+      ? `<span class="plan-ok">Everything clear by ${esc(invoiceMonthLabel(s.clearMonth))}</span>`
+      : `<span class="plan-short">${fmt(s.unplanned)} never gets paid at this rate</span>`;
+  }
+}
+
+async function savePotBudget() {
+  const d = window._potDraft;
+  if (!d || !window.SUPABASE_CONFIGURED) return;
+  const budget = parseNum(d.monthly_budget);
+  const start = d.start_month || null;
+  if (budget > 0 && !start) { alert('Pick the month the pot starts.'); return; }
+  const s = await window.db.from('debt_settings')
+    .upsert({ id: 1, monthly_budget: budget, start_month: start }).select();
+  if (s.error) {
+    const missing = /debt_settings|column/i.test(s.error.message || '');
+    alert(missing
+      ? 'The shared pot is not set up yet.\n\nRun debt_plans_setup.sql in the Supabase SQL editor, then try again.'
+      : 'Could not save: ' + s.error.message);
+    return;
+  }
+  for (let i = 0; i < d.queue.length; i++) {
+    const r = await window.db.from('debts').update({ payoff_order: i + 1 }).eq('id', d.queue[i].id);
+    if (r.error) { alert('Saved the pot, but the queue order failed: ' + r.error.message); break; }
+  }
+  const dlg = document.getElementById('pot-budget-editor');
+  if (dlg && dlg.close) dlg.close();
+  await loadAll();
+}
+
+/* ── plan editor ── */
+function openPlanEditor(id) {
+  const d = debts.find(x => x.id === id);
+  if (!d) return;
+  window._planDebtId = id;
+  window._planDraft = debtPlanSteps(d).map(s => ({
+    id: s.id || ('s' + Math.random().toString(36).slice(2, 8)),
+    kind: s.kind || 'oneoff', source: s.source || '', amount: s.amount,
+    from: s.from || currentMonth(), months: s.months == null ? '' : s.months,
+    done: !!s.done, note: s.note || '',
+  }));
+  const t = document.getElementById('plan-editor-title');
+  if (t) t.textContent = 'Plan — ' + (d.creditor || 'debt');
+  const sub = document.getElementById('plan-editor-sub');
+  if (sub) sub.textContent = fmt(parseNum(d.current_balance)) + ' outstanding';
+  renderPlanRows();
+  const dlg = document.getElementById('plan-editor');
+  if (dlg && dlg.showModal) dlg.showModal();
+}
+
+function planAddStep() {
+  (window._planDraft = window._planDraft || []).push({
+    id: 's' + Math.random().toString(36).slice(2, 8),
+    kind: 'invoice', source: '', amount: '', from: currentMonth(), months: '', done: false, note: '',
+  });
+  renderPlanRows();
+}
+function planRemoveStep(i) {
+  (window._planDraft || []).splice(i, 1);
+  renderPlanRows();
+}
+function planFieldChange(i, field, val) {
+  const s = (window._planDraft || [])[i];
+  if (!s) return;
+  s[field] = val;
+  if (field === 'kind') renderPlanRows();   // months only applies to monthly
+  else planUpdatePreview();
+}
+
+function renderPlanRows() {
+  const wrap = document.getElementById('plan-rows');
+  if (!wrap) return;
+  const draft = window._planDraft || [];
+  // Invoice titles offered as a datalist so the source matches what he actually raised.
+  const opts = (invoices || []).map(i => `<option value="${esc(i.title || '')}"></option>`).join('');
+  wrap.innerHTML = draft.map((s, i) => `
+    <div class="plan-row">
+      <select onchange="planFieldChange(${i},'kind',this.value)">
+        <option value="invoice"${s.kind === 'invoice' ? ' selected' : ''}>From an invoice</option>
+        <option value="monthly"${s.kind === 'monthly' ? ' selected' : ''}>Monthly payment</option>
+        <option value="oneoff"${s.kind === 'oneoff' ? ' selected' : ''}>One-off lump</option>
+      </select>
+      <input list="plan-invoice-list" placeholder="${s.kind === 'monthly' ? 'Label, e.g. standing order' : 'Where it comes from'}"
+             value="${esc(s.source || '')}" oninput="planFieldChange(${i},'source',this.value)" />
+      <div class="plan-row-nums">
+        <input type="number" step="0.01" inputmode="decimal" placeholder="${s.kind === 'monthly' ? '£ per month' : '£ amount'}"
+               value="${s.amount === '' || s.amount == null ? '' : esc(String(s.amount))}" oninput="planFieldChange(${i},'amount',this.value)" />
+        <input type="month" value="${esc(s.from || '')}" onchange="planFieldChange(${i},'from',this.value)" />
+        ${s.kind === 'monthly'
+          ? `<input type="number" min="1" step="1" placeholder="months (blank = until clear)" value="${s.months === '' || s.months == null ? '' : esc(String(s.months))}" oninput="planFieldChange(${i},'months',this.value)" />`
+          : ''}
+      </div>
+      <button type="button" class="plan-row-del" onclick="planRemoveStep(${i})" aria-label="Remove step">✕</button>
+    </div>`).join('') +
+    `<datalist id="plan-invoice-list">${opts}</datalist>` +
+    (draft.length ? '' : '<div class="empty">No steps yet. Add the first one below.</div>');
+  planUpdatePreview();
+}
+
+// Live projection while he edits, so a plan that does not actually cover the debt
+// is obvious before he saves it rather than after.
+function planUpdatePreview() {
+  const el = document.getElementById('plan-preview');
+  if (!el) return;
+  const d = debts.find(x => x.id === window._planDebtId);
+  if (!d) return;
+  const p = debtProjection({ current_balance: d.current_balance, plan: planCleanDraft() });
+  el.innerHTML = p.rows.length
+    ? (p.clearMonth
+        ? `<span class="plan-ok">Clears ${esc(invoiceMonthLabel(p.clearMonth))}</span> · ${fmt(p.committed)} of ${fmt(p.balance)} planned`
+        : `<span class="plan-short">${fmt(p.remaining)} still unplanned</span> · ${fmt(p.committed)} of ${fmt(p.balance)} covered`)
+    : '<span class="muted">Nothing planned yet.</span>';
+}
+
+function planCleanDraft() {
+  return (window._planDraft || []).map(s => ({
+    id: s.id,
+    kind: s.kind || 'oneoff',
+    source: (s.source || '').trim(),
+    amount: parseNum(s.amount),
+    from: s.from || currentMonth(),
+    months: s.kind === 'monthly' && s.months !== '' && s.months != null ? parseNum(s.months) : null,
+    done: !!s.done,
+    note: s.note || '',
+  })).filter(s => s.amount > 0);
+}
+
+async function savePlan() {
+  const id = window._planDebtId;
+  if (!id || !window.SUPABASE_CONFIGURED) return;
+  const plan = planCleanDraft();
+  const { error } = await window.db.from('debts').update({ plan }).eq('id', id);
+  if (error) {
+    const missing = /column .*plan/i.test(error.message || '');
+    alert(missing
+      ? 'Debt plans are not set up yet.\n\nRun debt_plans_setup.sql in the Supabase SQL editor, then try again.'
+      : 'Could not save the plan: ' + error.message);
+    return;
+  }
+  const dlg = document.getElementById('plan-editor');
+  if (dlg && dlg.close) dlg.close();
+  await loadAll();
+}
+
 function renderDebt(d) {
   const original = parseNum(d.original_amount);
   const current = parseNum(d.current_balance);
@@ -1855,7 +2308,8 @@ function renderDebt(d) {
         ${monthsLeft ? `<span>~${monthsLeft} months left</span>` : ''}
         ${paymentCount > 0 ? `<span>${paymentCount} payment${paymentCount !== 1 ? 's' : ''}</span>` : ''}
       </div>
-      ${isPaid ? `<div class="debt-settled-line">Settled ${_fmtDay(debtSettledDate(d))}</div>` : `<button type="button" class="debt-pay-btn" data-id="${esc(d.id)}">+ Log payment</button>`}
+      ${isPaid ? `<div class="debt-settled-line">Settled ${_fmtDay(debtSettledDate(d))}</div>` : renderDebtPlan(d)}
+      ${isPaid ? '' : `<button type="button" class="debt-pay-btn" data-id="${esc(d.id)}">+ Log payment</button>`}
       ${(d.notes && !d.notes.trim().startsWith('{')) ? `<div class="card-notes">${esc(d.notes)}</div>` : ''}
     </div>
   `;
@@ -5252,3 +5706,251 @@ function agentVoice(){
   rec.onerror=function(){}; try{ rec.start(); }catch(e){}
 }
 
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CONTACTS — encrypted at rest (2026-08-17)
+   ───────────────────────────────────────────────────────────────────────────
+   These are Razin's "special contacts". A password that hides a tab would be
+   theatre: src/supabase.js ships the publishable key in plaintext, so anything
+   the app can read, anyone with the URL can read straight off the REST API.
+
+   So the records are sealed, not hidden:
+     passphrase --PBKDF2(250k, SHA-256, per-install salt)--> AES-256-GCM key
+     each record --AES-GCM(random 12-byte IV)--> base64 ciphertext in Postgres
+
+   The passphrase and the derived key live in a module variable for the session
+   only. Never written to the database, never to localStorage, never sent
+   anywhere. What lands in Postgres is unreadable without the passphrase
+   regardless of the API key, the RLS policies, or who gets the URL.
+
+   A wrong passphrase fails on the GCM authentication tag, so it errors cleanly
+   instead of producing garbage. contacts_meta holds a "verifier" blob so a wrong
+   passphrase can be told apart from an empty list before any contact exists.
+
+   THERE IS NO RESET. Lose the passphrase, lose the records. That is the design.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+var contacts = contacts || [];          // raw rows from Postgres (ciphertext)
+var contactsMeta = contactsMeta || null;
+var _cKey = null;                        // CryptoKey, session only
+var _cOpen = [];                         // decrypted contacts, in memory only
+var _cState = { locked: true, busy: false, err: '', q: '', setup: false };
+var _cLastTouch = 0;
+var CONTACTS_IDLE_MS = 15 * 60 * 1000;   // re-lock after 15 min untouched
+
+function _b64(buf) {
+  const b = new Uint8Array(buf); let s = '';
+  for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+  return btoa(s);
+}
+function _unb64(s) {
+  const raw = atob(String(s || '')); const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+async function _deriveKey(pass, saltB64) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: _unb64(saltB64), iterations: 250000, hash: 'SHA-256' },
+    base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function _seal(key, obj) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key,
+    new TextEncoder().encode(JSON.stringify(obj)));
+  return { iv: _b64(iv), payload: _b64(ct) };
+}
+async function _open(key, ivB64, ctB64) {
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: _unb64(ivB64) }, key, _unb64(ctB64));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+
+const CONTACT_VERIFIER = '12world-contacts-ok';
+
+// First run: mint a salt and a verifier blob so future unlocks can be checked.
+async function contactsSetPassphrase(pass) {
+  const salt = _b64(crypto.getRandomValues(new Uint8Array(16)));
+  const key = await _deriveKey(pass, salt);
+  const v = await _seal(key, CONTACT_VERIFIER);
+  const row = { id: 1, salt, verifier_iv: v.iv, verifier: v.payload };
+  const res = await window.db.from('contacts_meta').upsert(row).select();
+  if (res.error) throw new Error(res.error.message);
+  contactsMeta = row;
+  _cKey = key;
+  return key;
+}
+
+async function contactsUnlock(pass) {
+  if (!contactsMeta) return contactsSetPassphrase(pass);
+  const key = await _deriveKey(pass, contactsMeta.salt);
+  // Throws on a wrong passphrase — AES-GCM verifies its auth tag.
+  const v = await _open(key, contactsMeta.verifier_iv, contactsMeta.verifier);
+  if (v !== CONTACT_VERIFIER) throw new Error('bad');
+  _cKey = key;
+  return key;
+}
+
+function contactsLock() {
+  _cKey = null; _cOpen = []; _cState.locked = true; _cState.err = '';
+  const i = document.getElementById('c-pass'); if (i) i.value = '';
+  render();
+}
+
+async function submitContactPass() {
+  const inp = document.getElementById('c-pass');
+  const pass = inp ? inp.value : '';
+  if (!pass || _cState.busy) return;
+  if (!contactsMeta && pass.length < 10) {
+    _cState.err = 'First passphrase must be at least 10 characters. There is no reset.';
+    render(); return;
+  }
+  _cState.busy = true; _cState.err = ''; render();
+  try {
+    await contactsUnlock(pass);
+    await decryptAllContacts();
+    _cState.locked = false;
+    _cLastTouch = Date.now();
+  } catch (e) {
+    _cState.err = contactsMeta ? 'Wrong passphrase.' : ('Could not set it up: ' + (e.message || e));
+    _cKey = null;
+  }
+  _cState.busy = false;
+  render();
+}
+
+async function decryptAllContacts() {
+  const out = [];
+  for (const row of (contacts || [])) {
+    try {
+      const data = await _open(_cKey, row.iv, row.payload);
+      out.push(Object.assign({ id: row.id, label: row.label, sort_order: row.sort_order }, data));
+    } catch (e) {
+      // A single unreadable row must not take the whole tab down — surface it.
+      out.push({ id: row.id, label: row.label, name: '(unreadable — encrypted with a different passphrase)', _broken: true });
+    }
+  }
+  _cOpen = out;
+}
+
+async function saveContact() {
+  if (!_cKey) return;
+  const g = id => (document.getElementById(id) || {}).value || '';
+  const data = {
+    name: g('c-name').trim(), role: g('c-role').trim(), company: g('c-company').trim(),
+    phone: g('c-phone').trim(), email: g('c-email').trim(),
+    tags: g('c-tags').trim(), notes: g('c-notes').trim(),
+  };
+  if (!data.name) { alert('A name is the one thing it needs.'); return; }
+  const sealed = await _seal(_cKey, data);
+  const id = window._cEditId || ((crypto.randomUUID && crypto.randomUUID()) ||
+    Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+  const row = {
+    id, label: g('c-label').trim() || null,
+    iv: sealed.iv, payload: sealed.payload, updated_at: new Date().toISOString(),
+  };
+  const res = window._cEditId
+    ? await window.db.from('contacts').update(row).eq('id', id)
+    : await window.db.from('contacts').insert([row]);
+  if (res.error) {
+    const missing = /contacts/i.test(res.error.message || '');
+    alert(missing
+      ? 'Contacts are not set up yet.\n\nRun contacts_setup.sql in the Supabase SQL editor, then try again.'
+      : 'Could not save: ' + res.error.message);
+    return;
+  }
+  const dlg = document.getElementById('contact-editor'); if (dlg && dlg.close) dlg.close();
+  await loadAll();
+  if (_cKey) { await decryptAllContacts(); render(); }
+}
+
+async function deleteContact() {
+  if (!window._cEditId) return;
+  if (!confirm('Delete this contact? It cannot be recovered.')) return;
+  const res = await window.db.from('contacts').delete().eq('id', window._cEditId);
+  if (res.error) { alert('Could not delete: ' + res.error.message); return; }
+  const dlg = document.getElementById('contact-editor'); if (dlg && dlg.close) dlg.close();
+  await loadAll();
+  if (_cKey) { await decryptAllContacts(); render(); }
+}
+
+function openContactEditor(id) {
+  if (!_cKey) return;
+  window._cEditId = id || null;
+  const c = id ? _cOpen.find(x => x.id === id) : null;
+  const set = (el, v) => { const e = document.getElementById(el); if (e) e.value = v || ''; };
+  set('c-name', c && c.name); set('c-role', c && c.role); set('c-company', c && c.company);
+  set('c-phone', c && c.phone); set('c-email', c && c.email); set('c-tags', c && c.tags);
+  set('c-notes', c && c.notes); set('c-label', c && c.label);
+  const t = document.getElementById('contact-editor-title');
+  if (t) t.textContent = id ? 'Edit contact' : 'New contact';
+  const del = document.getElementById('c-delete-btn');
+  if (del) del.style.display = id ? '' : 'none';
+  const dlg = document.getElementById('contact-editor');
+  if (dlg && dlg.showModal) dlg.showModal();
+}
+
+function contactSearch(v) { _cState.q = v; _cLastTouch = Date.now(); renderContacts(); }
+
+function renderContacts() {
+  // Idle re-lock. Walking away with the tab open should not leave it readable.
+  if (!_cState.locked && _cLastTouch && Date.now() - _cLastTouch > CONTACTS_IDLE_MS) {
+    _cKey = null; _cOpen = []; _cState.locked = true;
+  }
+
+  if (_cState.locked) {
+    const first = !contactsMeta;
+    list.innerHTML = `<div class="c-lock">
+        <svg viewBox="0 0 40 40" class="c-lock-icon" fill="none"><rect x="8" y="18" width="24" height="18" rx="3" fill="currentColor" opacity="0.85"/><path d="M13 18v-6a7 7 0 0114 0v6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+        <h2>${first ? 'Set a passphrase' : 'Contacts'}</h2>
+        <p class="c-lock-p">${first
+          ? 'These records are encrypted before they leave this device. Nothing readable is stored in the database.<br><strong>There is no reset — lose this passphrase and the contacts are gone.</strong>'
+          : 'Encrypted. Enter your passphrase to decrypt on this device.'}</p>
+        <input type="password" id="c-pass" class="c-pass" placeholder="${first ? 'Choose a passphrase (10+ chars)' : 'Passphrase'}" autocomplete="off" ${_cState.busy ? 'disabled' : ''} />
+        <button class="c-unlock" onclick="submitContactPass()" ${_cState.busy ? 'disabled' : ''}>${_cState.busy ? 'Working…' : (first ? 'Set and open' : 'Unlock')}</button>
+        ${_cState.err ? `<div class="c-err">${esc(_cState.err)}</div>` : ''}
+        ${!first && contacts.length ? `<div class="c-count">${contacts.length} sealed record${contacts.length === 1 ? '' : 's'}</div>` : ''}
+      </div>`;
+    const i = document.getElementById('c-pass');
+    if (i && !_cState.busy) {
+      i.addEventListener('keydown', e => { if (e.key === 'Enter') submitContactPass(); });
+      i.focus();
+    }
+    return;
+  }
+
+  const q = (_cState.q || '').toLowerCase();
+  const shown = _cOpen.filter(c => !q || [c.name, c.role, c.company, c.phone, c.email, c.tags, c.notes]
+    .some(v => String(v || '').toLowerCase().includes(q)));
+
+  list.innerHTML = `<div class="c-page">
+      <div class="c-bar">
+        <input id="c-search" class="c-search" type="search" placeholder="Search contacts…" value="${esc(_cState.q)}" oninput="contactSearch(this.value)" />
+        <button class="c-new" onclick="openContactEditor()">+ New</button>
+        <button class="c-relock" onclick="contactsLock()">Lock</button>
+      </div>
+      <div class="c-note">Decrypted on this device only · auto-locks after 15 minutes idle</div>
+      ${shown.length === 0
+        ? `<div class="empty">${_cOpen.length ? 'Nothing matches that.' : 'No contacts yet. Hit <strong>+ New</strong>.'}</div>`
+        : shown.map(renderContactCard).join('')}
+    </div>`;
+}
+
+function renderContactCard(c) {
+  const line = [c.role, c.company].filter(Boolean).join(' · ');
+  const tags = (c.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+  return `<div class="card c-card${c._broken ? ' c-broken' : ''}" onclick="openContactEditor('${esc(c.id)}')">
+      <div class="c-card-head">
+        <span class="c-name">${esc(c.name || 'Unnamed')}</span>
+        ${c.label ? `<span class="c-label">${esc(c.label)}</span>` : ''}
+      </div>
+      ${line ? `<div class="c-sub">${esc(line)}</div>` : ''}
+      <div class="c-contact-lines">
+        ${c.phone ? `<a class="c-link" href="tel:${esc(c.phone)}" onclick="event.stopPropagation()">${esc(c.phone)}</a>` : ''}
+        ${c.email ? `<a class="c-link" href="mailto:${esc(c.email)}" onclick="event.stopPropagation()">${esc(c.email)}</a>` : ''}
+      </div>
+      ${tags.length ? `<div class="c-tags">${tags.map(t => `<span class="c-tag">${esc(t)}</span>`).join('')}</div>` : ''}
+      ${c.notes ? `<div class="card-notes">${esc(c.notes)}</div>` : ''}
+    </div>`;
+}
