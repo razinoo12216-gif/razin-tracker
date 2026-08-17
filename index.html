@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" type="image/svg+xml" href="icon.svg" />
   <title>Razin — 12 World</title>
-  <link rel="stylesheet" href="src/styles.css?v=23" />
+  <link rel="stylesheet" href="src/styles.css?v=25" />
 </head>
 <body>
 <!-- Lock Screen -->
@@ -49,6 +49,7 @@
       <button class="tab" data-tab="debt" type="button">Debts <span class="tab-count" id="tc-debt">0</span></button>
       <button class="tab" data-tab="review" type="button">Weekly Recap <span class="tab-count" id="tc-review">0</span></button>
       <button class="tab" data-tab="notes" type="button">Notes</button>
+      <button class="tab" data-tab="contacts" type="button">Contacts</button>
       <button class="tab" data-tab="drive" type="button">Drive</button>
     </div>
   </header>
@@ -506,6 +507,53 @@
     </div>
   </form>
 </dialog>
+<dialog id="contact-editor">
+  <h2 id="contact-editor-title">New contact</h2>
+  <div class="plan-sub">Encrypted on this device before it is saved. Nothing readable reaches the database.</div>
+  <label>Name<input id="c-name" autocomplete="off" /></label>
+  <div class="row">
+    <label>Role<input id="c-role" autocomplete="off" /></label>
+    <label>Company<input id="c-company" autocomplete="off" /></label>
+  </div>
+  <div class="row">
+    <label>Phone<input id="c-phone" type="tel" autocomplete="off" /></label>
+    <label>Email<input id="c-email" type="email" autocomplete="off" /></label>
+  </div>
+  <label>Tags<input id="c-tags" placeholder="comma separated" autocomplete="off" /></label>
+  <label>Notes<textarea id="c-notes" rows="3"></textarea></label>
+  <label>Public nickname (optional)<input id="c-label" placeholder="shown while locked - leave blank to stay anonymous" autocomplete="off" /></label>
+  <div class="row">
+    <button type="button" id="c-delete-btn" class="danger" onclick="deleteContact()" style="display:none">Delete</button>
+    <button type="button" onclick="document.getElementById('contact-editor').close()">Cancel</button>
+    <button type="button" onclick="saveContact()">Save</button>
+  </div>
+</dialog>
+<dialog id="pot-budget-editor">
+  <h2>Shared pot</h2>
+  <div class="plan-sub">One monthly amount, paid down the queue in order. When one dies the rest of that month rolls onto the next.</div>
+  <div class="row">
+    <label>£ per month<input id="pot-amount" type="number" step="1" inputmode="decimal" placeholder="1000" oninput="potFieldChange('monthly_budget',this.value)" /></label>
+    <label>Starts<input id="pot-start" type="month" onchange="potFieldChange('start_month',this.value)" /></label>
+  </div>
+  <div class="pot-q-head">Order paid</div>
+  <div id="pot-queue"></div>
+  <div id="pot-preview" class="plan-preview"></div>
+  <div class="row">
+    <button type="button" onclick="document.getElementById('pot-budget-editor').close()">Cancel</button>
+    <button type="button" onclick="savePotBudget()">Save</button>
+  </div>
+</dialog>
+<dialog id="plan-editor">
+  <h2 id="plan-editor-title">Plan</h2>
+  <div id="plan-editor-sub" class="plan-sub"></div>
+  <div id="plan-rows"></div>
+  <div id="plan-preview" class="plan-preview"></div>
+  <div class="row">
+    <button type="button" onclick="planAddStep()">+ Add step</button>
+    <button type="button" onclick="document.getElementById('plan-editor').close()">Cancel</button>
+    <button type="button" onclick="savePlan()">Save plan</button>
+  </div>
+</dialog>
 <dialog id="macros-editor">
   <form id="macros-form">
     <h2>Log Macros</h2>
@@ -548,6 +596,6 @@
   });
 })();
 </script>
-  <script src="src/app.js?v=40"></script>
+  <script src="src/app.js?v=42"></script>
 </body>
 </html>
