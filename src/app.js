@@ -390,7 +390,8 @@ function rebuildMonthSelect() {
 }
 
 function rebuildSecondaryFilter() {
-  if (activeTab === 'review' || activeTab === 'invoice' || activeTab === 'drive' || activeTab === 'today' || activeTab === 'ticket' || activeTab === 'debt') {
+  // Contacts has its own search box and must not show the global filter bar.
+  if (activeTab === 'review' || activeTab === 'invoice' || activeTab === 'drive' || activeTab === 'today' || activeTab === 'ticket' || activeTab === 'debt' || activeTab === 'contacts') {
     filterBar.style.display = 'none';
     return;
   }
@@ -502,7 +503,11 @@ function render() {
   // Operator Log removed 2026-07-30 — dead feature, never logged against. renderOperator()
   // is left in place but unreachable so nothing else that referenced it breaks.
   if(activeTab==='operator')activeTab='today';
-  if(!['today','drive','review','invoice','ticket','debt','gym','project','potential','expense','notes','pots','income','life','agent'].includes(activeTab))activeTab='today';
+  // ⚠️ ADDING A TAB? IT MUST GO IN THIS LIST TOO.
+  // Anything not listed is silently rewritten to 'today', so a new tab renders the
+  // 12 Ticks page and looks like a broken route. Cost an hour on 'contacts' (2026-08-17):
+  // the button existed, the render branch existed, and this line quietly undid both.
+  if(!['today','drive','review','invoice','ticket','debt','gym','project','potential','expense','notes','contacts','pots','income','life','agent'].includes(activeTab))activeTab='today';
   // Month-scoped: expenses use month filter; projects are ongoing (not month-scoped)
   const moneyEntries = entries.filter((e) => e.type !== 'potential');
   const inMonth = moneyEntries.filter((e) => matchesMonth(e, selectedMonth));
@@ -542,10 +547,10 @@ function render() {
   const totalsEl = document.querySelector('.totals');
   const monthSelEl = $('#month-select');
   const addBtnEl = $('#add-btn');
-  const hideContext = activeTab === 'drive' || activeTab === 'today';
+  const hideContext = activeTab === 'drive' || activeTab === 'today' || activeTab === 'contacts';
   if (totalsEl) totalsEl.style.display = (hideContext || activeTab === 'income' || activeTab === 'life' || activeTab === 'operator' || activeTab === 'agent') ? 'none' : '';
   if (monthSelEl) monthSelEl.style.display = (hideContext || activeTab === 'ticket' || activeTab === 'debt' || activeTab === 'pots' || activeTab === 'income' || activeTab === 'life' || activeTab === 'operator' || activeTab === 'agent') ? 'none' : '';
-  if (addBtnEl) addBtnEl.style.display = (activeTab === 'today' || activeTab === 'pots' || activeTab === 'income' || activeTab === 'life' || activeTab === 'operator' || activeTab === 'agent') ? 'none' : '';
+  if (addBtnEl) addBtnEl.style.display = (activeTab === 'today' || activeTab === 'contacts' || activeTab === 'pots' || activeTab === 'income' || activeTab === 'life' || activeTab === 'operator' || activeTab === 'agent') ? 'none' : '';
 
   if (activeTab === 'ticket') renderTicketTotals();
   if (activeTab === 'debt') renderDebtTotals();
