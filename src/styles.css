@@ -2360,3 +2360,34 @@ dialog .actions {
   color:var(--border-2); font-weight:700; margin-bottom:2px; }
 .work-renew-btn { margin-top:8px; width:100%; }
 .work-renewed-on { font-size:0.68rem; color:var(--muted); text-align:center; padding-top:4px; }
+
+/* ─── TODAY'S TICKS on 12 Ticks (2026-08-27) ───────────────────────────────── */
+.dt-wrap { background:var(--panel); border:1px solid var(--border); border-radius:12px;
+  padding:11px 13px; margin:12px 0; }
+.dt-head { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:9px; }
+.dt-title { font-size:0.68rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); font-weight:700; }
+.dt-score { font-size:0.85rem; font-weight:800; color:var(--muted); font-variant-numeric:tabular-nums; }
+.dt-score.all { color:var(--green); }
+.dt-group { margin-bottom:9px; }
+.dt-group:last-child { margin-bottom:0; }
+.dt-dom { font-size:0.62rem; text-transform:uppercase; letter-spacing:.08em; color:var(--border-2);
+  font-weight:700; margin-bottom:5px; }
+.dt-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.dt-item { display:flex; align-items:center; gap:8px; width:100%; text-align:left;
+  background:var(--panel-2); border:1px solid var(--border); border-radius:10px;
+  padding:9px 10px; min-height:42px; color:var(--text); font-size:0.8rem;
+  font-family:inherit; cursor:pointer; }
+.dt-tap:active { transform:scale(0.98); }
+.dt-item.on { border-color:var(--green); background:rgba(34,197,94,0.10); }
+.dt-auto { cursor:default; opacity:0.85; }
+.dt-box { flex:0 0 18px; width:18px; height:18px; border-radius:5px; border:1.5px solid var(--border-2);
+  display:flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:800; color:#0b1a10; }
+.dt-item.on .dt-box { background:var(--green); border-color:var(--green); }
+.dt-name { flex:1; line-height:1.25; overflow:hidden; text-overflow:ellipsis; }
+.dt-streak { flex:0 0 auto; font-size:0.65rem; color:var(--gold); font-weight:800; }
+.dt-streak::before { content:'🔥 '; }
+.dt-count { display:flex; align-items:center; gap:5px; flex:0 0 auto; }
+.dt-cbtn { width:22px; height:22px; border-radius:5px; border:1px solid var(--border-2);
+  background:var(--panel-3); color:var(--text); font-size:0.8rem; line-height:1; padding:0; cursor:pointer; }
+.dt-cval { font-size:0.72rem; color:var(--muted); font-variant-numeric:tabular-nums; min-width:26px; text-align:center; }
+@media (max-width:380px) { .dt-grid { grid-template-columns:1fr; } }

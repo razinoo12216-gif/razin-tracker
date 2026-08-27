@@ -872,6 +872,64 @@ function renderCaptureBox(){
     </div>`;
 }
 
+
+/* ─── TODAY'S TICKS on 12 Ticks (2026-08-27) ──────────────────────────────────
+ * The daily targets already lived on Life Progress, but Razin opens 12 Ticks
+ * every morning and asked for something he can "open my phone and tick off".
+ * Same daily_targets / daily_logs rows, same streaks — just surfaced where his
+ * thumb already is. Always acts on TODAY, never the day he happens to be
+ * browsing, so a tick can never land on the wrong date.
+ * ─────────────────────────────────────────────────────────────────────────── */
+function tickToday(id){ lifeDay = todayISO(); toggleDailyCheck(id); }
+function tickTodayCount(ev, id, d){ lifeDay = todayISO(); adjustDailyCount(ev, id, d); }
+
+function renderDailyStrip(){
+  const day = todayISO();
+  const ad = (dailyTargets||[]).filter(t => t.active !== false)
+    .sort((a,b) => (a.sort_order||0) - (b.sort_order||0));
+  if (!ad.length) return '';
+  const met = ad.filter(t => dailyMet(t, day)).length;
+
+  const groups = {};
+  ad.forEach(t => { const d = t.domain || 'Other'; (groups[d] = groups[d] || []).push(t); });
+
+  const blocks = Object.keys(groups).map(dom => {
+    const items = groups[dom].map(t => {
+      const eff = dailyEffective(t, day), isMet = dailyMet(t, day), streak = dailyStreak(t);
+      const flame = streak > 1 ? `<span class="dt-streak">${streak}</span>` : '';
+      if (t.type === 'count' && !eff.auto) {
+        return `<div class="dt-item${isMet?' on':''}">
+            <span class="dt-name">${esc(t.title)}</span>
+            <span class="dt-count">
+              <button class="dt-cbtn" onclick="tickTodayCount(event,'${t.id}',-1)">−</button>
+              <span class="dt-cval">${eff.v}/${t.target_count||1}</span>
+              <button class="dt-cbtn" onclick="tickTodayCount(event,'${t.id}',1)">+</button>
+            </span>${flame}
+          </div>`;
+      }
+      if (eff.auto) {
+        return `<div class="dt-item dt-auto${isMet?' on':''}">
+            <span class="dt-box">${isMet?'✓':''}</span>
+            <span class="dt-name">${esc(t.title)}</span>${flame}
+          </div>`;
+      }
+      return `<button type="button" class="dt-item dt-tap${isMet?' on':''}" onclick="tickToday('${t.id}')">
+          <span class="dt-box">${isMet?'✓':''}</span>
+          <span class="dt-name">${esc(t.title)}</span>${flame}
+        </button>`;
+    }).join('');
+    return `<div class="dt-group"><div class="dt-dom">${esc(dom)}</div><div class="dt-grid">${items}</div></div>`;
+  }).join('');
+
+  return `<div class="dt-wrap">
+      <div class="dt-head">
+        <span class="dt-title">Today</span>
+        <span class="dt-score${met===ad.length?' all':''}">${met}/${ad.length}</span>
+      </div>
+      ${blocks}
+    </div>`;
+}
+
 function renderToday() {
   const dayTasks = buildDayTasks(selectedDay).sort(taskSort);
   const done = dayTasks.filter((t) => t.done).length;
@@ -894,6 +952,7 @@ function renderToday() {
         </div>
       </div>
       ${renderCaptureBox()}
+      ${renderDailyStrip()}
       <div class="task-search-bar" style="margin:10px 0;">
         <input id="task-search" type="text" placeholder="\u{1F50D} Search all tasks across every day\u2026" autocomplete="off" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#10151c;color:#fff;border:1px solid rgba(255,255,255,0.12);border-radius:12px;font-size:0.9rem" />
         <div id="task-search-results" style="margin-top:6px;"></div>
@@ -2891,7 +2950,21 @@ async function doWorkCHLookup() {
   if (conDue) document.getElementById('work-confirm-due').value = conDue;
   const ni = document.querySelector('#work-company-form input[name="name"]');
   if (ni && !ni.value && data.company_name) ni.value = data.company_name;
-  alert('Filled from Companies House' + (data.company_name ? ': ' + data.company_name : '') + '.');
+  // Registered office comes straight from Companies House, same as the dates.
+  // The RENEWAL date deliberately does not — that is a private registered-office
+  // service (MYCO and the like) billing annually, and CH holds no record of it.
+  const roEl = document.querySelector('#work-company-form textarea[name="registered_office"]');
+  const ro = data.registered_office_address;
+  let roText = '';
+  if (roEl && ro) {
+    roText = [ro.care_of, ro.po_box, ro.address_line_1, ro.address_line_2,
+              ro.locality, ro.region, ro.postal_code, ro.country]
+             .map(x => (x || '').trim()).filter(Boolean).join(', ');
+    if (roText) roEl.value = roText;
+  }
+  alert('Filled from Companies House' + (data.company_name ? ': ' + data.company_name : '') + '.'
+    + (roText ? '\n\nRegistered office: ' + roText : '')
+    + '\n\nOffice renewal date is not held by Companies House — set it by hand.');
 }
 
 function showWorkModal(html) {
