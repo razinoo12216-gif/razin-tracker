@@ -317,11 +317,33 @@ async function loadAll() {
     list.innerHTML = '<div class="empty error">Supabase keys not set.</div>';
     return;
   }
+  // Fetches a whole table in 1000-row pages. Returns the same {data, error} shape
+  // as a normal supabase-js query so callers do not need special handling.
+  async function selectAllRows(table, orderCol, ascending) {
+    const PAGE = 1000, MAX_PAGES = 25;   // 25k rows is far beyond anything here
+    let all = [];
+    for (let p = 0; p < MAX_PAGES; p++) {
+      let q = window.db.from(table).select('*').range(p * PAGE, (p + 1) * PAGE - 1);
+      if (orderCol) q = q.order(orderCol, { ascending: !!ascending });
+      const { data, error } = await q;
+      if (error) return { data: null, error };
+      all = all.concat(data || []);
+      if (!data || data.length < PAGE) break;   // short page = last page
+    }
+    return { data: all, error: null };
+  }
   const [eRes, rRes, iRes, tRes, kRes, dRes, pRes, gRes, mRes, trRes]= await Promise.all([
     window.db.from('projects').select('*').order('created_at', { ascending: false }),
     window.db.from('reviews').select('*').order('week_of', { ascending: false }),
     window.db.from('invoices').select('*').order('month', { ascending: false }),
-    window.db.from('tasks').select('*').order('created_at', { ascending: true }),
+    // PAGINATED — DO NOT put this back to a plain select('*').
+    // PostgREST caps a single request at 1000 rows. This query is ordered OLDEST
+    // FIRST, so once the table passed 1000 the app was loading the 1000 oldest
+    // tasks and silently dropping every newer one. Razin added tasks, the INSERT
+    // succeeded, and they vanished on reload — "nothing I add is saving"
+    // (2026-08-27, table was at 1000+). Any table that can exceed 1000 rows needs
+    // selectAllRows(), not select('*').
+    selectAllRows('tasks', 'created_at', true),
     window.db.from('tickets').select('*').order('date', { ascending: false }),
     window.db.from('debts').select('*').order('created_at', { ascending: false }),
     window.db.from('debt_payments').select('*').order('date', { ascending: false }),
@@ -5933,6 +5955,7 @@ function renderContacts() {
       <div class="c-bar">
         <input id="c-search" class="c-search" type="search" placeholder="Search contacts…" value="${esc(_cState.q)}" oninput="contactSearch(this.value)" />
         <button class="c-new" onclick="openContactEditor()">+ New</button>
+        <button class="c-import" onclick="openContactImport()">Import</button>
         <button class="c-relock" onclick="contactsLock()">Lock</button>
       </div>
       <div class="c-note">Decrypted on this device only · auto-locks after 15 minutes idle</div>
@@ -5958,4 +5981,95 @@ function renderContactCard(c) {
       ${tags.length ? `<div class="c-tags">${tags.map(t => `<span class="c-tag">${esc(t)}</span>`).join('')}</div>` : ''}
       ${c.notes ? `<div class="card-notes">${esc(c.notes)}</div>` : ''}
     </div>`;
+}
+
+
+/* ─── CONTACTS: bulk import ───────────────────────────────────────────────────
+ * Claude cannot write contacts on Razin's behalf — they are sealed with a
+ * passphrase that never leaves his device, by design. So the import runs here,
+ * in the browser, after he has unlocked: parse -> encrypt each -> insert.
+ *
+ * Format is whatever his Apple Notes list already looks like:
+ *   Contacts list:            <- a line ending in ':' becomes the category
+ *   Marc - Lawyer             <- "Name - role"
+ *   Arif- Rentals             <- missing space is fine
+ *   Ash                       <- role optional
+ * Checkbox glyphs and bullets are stripped, blank lines ignored.
+ * ─────────────────────────────────────────────────────────────────────────── */
+function parseContactImport(text) {
+  const out = [];
+  let cat = '';
+  for (const raw of String(text || '').split('\n')) {
+    // Strip list bullets and Notes checkbox glyphs from the front.
+    const line = raw.replace(/^[\s\-•*○☐☑✓✔•]+/, '').trim();
+    if (!line) continue;
+    if (/:\s*$/.test(line)) { cat = line.replace(/:\s*$/, '').trim(); continue; }
+    let name = line, role = '';
+    const m = line.match(/^(.*?)\s*[-–—]\s*(.+)$/);
+    if (m && m[1].trim()) { name = m[1].trim(); role = m[2].trim(); }
+    if (!name) continue;
+    out.push({ name, role, tags: cat });
+  }
+  return out;
+}
+
+function openContactImport() {
+  if (!_cKey) return;
+  const ta = document.getElementById('ci-text'); if (ta) ta.value = '';
+  const p = document.getElementById('ci-preview'); if (p) p.innerHTML = '';
+  const dlg = document.getElementById('contact-import');
+  if (dlg && dlg.showModal) dlg.showModal();
+}
+
+function previewContactImport() {
+  const ta = document.getElementById('ci-text');
+  const rows = parseContactImport(ta ? ta.value : '');
+  const el = document.getElementById('ci-preview');
+  if (!el) return;
+  if (!rows.length) { el.innerHTML = '<span class="muted">Nothing to import yet.</span>'; return; }
+  const cats = [...new Set(rows.map(r => r.tags).filter(Boolean))];
+  const dupes = rows.filter(r => _cOpen.some(c => (c.name || '').toLowerCase() === r.name.toLowerCase()));
+  el.innerHTML = `<strong>${rows.length}</strong> contact${rows.length === 1 ? '' : 's'}` +
+    (cats.length ? ` in ${cats.length} categor${cats.length === 1 ? 'y' : 'ies'}: ${cats.map(esc).join(', ')}` : '') +
+    (dupes.length ? `<div class="ci-warn">${dupes.length} already exist by name and will be skipped: ${dupes.slice(0, 6).map(d => esc(d.name)).join(', ')}${dupes.length > 6 ? '…' : ''}</div>` : '');
+}
+
+async function runContactImport() {
+  if (!_cKey) return;
+  const ta = document.getElementById('ci-text');
+  const rows = parseContactImport(ta ? ta.value : '');
+  if (!rows.length) return;
+  const btn = document.getElementById('ci-run');
+  if (btn) { btn.disabled = true; btn.textContent = 'Encrypting…'; }
+
+  const fresh = rows.filter(r => !_cOpen.some(c => (c.name || '').toLowerCase() === r.name.toLowerCase()));
+  const payload = [];
+  for (const r of fresh) {
+    const sealed = await _seal(_cKey, {
+      name: r.name, role: r.role || '', company: '', phone: '', email: '',
+      tags: r.tags || '', notes: '',
+    });
+    payload.push({
+      id: (crypto.randomUUID && crypto.randomUUID()) ||
+        Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+      label: null, iv: sealed.iv, payload: sealed.payload,
+    });
+  }
+  // Chunked so a long list does not hit a request size limit halfway and leave
+  // Razin guessing which half landed.
+  let done = 0;
+  for (let i = 0; i < payload.length; i += 50) {
+    const res = await window.db.from('contacts').insert(payload.slice(i, i + 50));
+    if (res.error) {
+      alert('Imported ' + done + ' before failing: ' + res.error.message);
+      break;
+    }
+    done += Math.min(50, payload.length - i);
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'Import'; }
+  const dlg = document.getElementById('contact-import'); if (dlg && dlg.close) dlg.close();
+  await loadAll();
+  if (_cKey) { await decryptAllContacts(); render(); }
+  alert('Imported ' + done + ' contact' + (done === 1 ? '' : 's') +
+    (fresh.length < rows.length ? ' (' + (rows.length - fresh.length) + ' skipped as duplicates)' : ''));
 }
