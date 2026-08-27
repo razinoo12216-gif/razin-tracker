@@ -2765,7 +2765,45 @@ function renderWorkCompanyCard(c) {
   const owner  = {raz:'Raz',partial:'Partial',other:'Other'}[status] || 'Other';
   const accBdg = meta.accounts_due     ? workDaysBadge(meta.accounts_due)     : '<span class="work-na">—</span>';
   const conBdg = meta.confirmation_due ? workDaysBadge(meta.confirmation_due) : '<span class="work-na">—</span>';
-  return `<div class="card work-company-card" style="border-left:3px solid ${col}" onclick="openWorkCompanyEditor('${c.id}')"><div class="work-co-head"><span class="work-co-name">${esc(c.name)}</span><span class="work-owner-badge" style="color:${col};border-color:${col}">${owner}</span></div>${meta.company_number?`<div class="work-ch-ref">CH: ${esc(meta.company_number)}</div>`:''}<div class="work-due-row"><span class="work-due-lbl">Accounts due</span>${accBdg}</div><div class="work-due-row"><span class="work-due-lbl">Conf. statement</span>${conBdg}</div>${meta.rent?`<div class="work-due-row"><span class="work-due-lbl">Rent</span><span class="work-days-badge work-badge-ok">£${esc(String(meta.rent))}</span></div>`:``}${meta.salary?`<div class="work-due-row"><span class="work-due-lbl">Salary</span><span class="work-days-badge work-badge-ok">£${esc(String(meta.salary))}</span></div>`:``}${meta.notes?`<div class="work-card-notes">${esc(meta.notes)}</div>`:``}</div>`;
+  const renBdg = meta.office_renewal   ? workDaysBadge(meta.office_renewal)   : '<span class="work-na">—</span>';
+  return `<div class="card work-company-card" style="border-left:3px solid ${col}" onclick="openWorkCompanyEditor('${c.id}')"><div class="work-co-head"><span class="work-co-name">${esc(c.name)}</span><span class="work-owner-badge" style="color:${col};border-color:${col}">${owner}</span></div>${meta.company_number?`<div class="work-ch-ref">CH: ${esc(meta.company_number)}</div>`:''}<div class="work-due-row"><span class="work-due-lbl">Accounts due</span>${accBdg}</div><div class="work-due-row"><span class="work-due-lbl">Conf. statement</span>${conBdg}</div><div class="work-due-row"><span class="work-due-lbl">Office renewal</span>${renBdg}</div>${meta.registered_office?`<div class="work-office"><span class="work-office-lbl">Registered office</span>${esc(meta.registered_office)}</div>`:''}${meta.office_renewal?`<button type="button" class="work-btn-ghost work-renew-btn" onclick="event.stopPropagation();markOfficeRenewed('${c.id}')">Mark renewed</button>`:''}${meta.office_renewed_on?`<div class="work-renewed-on">last renewed ${esc(fmtUKDate(meta.office_renewed_on))}</div>`:''}${meta.rent?`<div class="work-due-row"><span class="work-due-lbl">Rent</span><span class="work-days-badge work-badge-ok">£${esc(String(meta.rent))}</span></div>`:``}${meta.salary?`<div class="work-due-row"><span class="work-due-lbl">Salary</span><span class="work-days-badge work-badge-ok">£${esc(String(meta.salary))}</span></div>`:``}${meta.notes?`<div class="work-card-notes">${esc(meta.notes)}</div>`:``}</div>`;
+}
+
+/* ─── COMPANY OFFICE RENEWALS (2026-08-27) ────────────────────────────────────
+ * Registered office services renew annually and are easy to miss — miss one and
+ * the company loses its registered address, which is a filing problem, not just
+ * an admin one. Stored in the same JSON blob in projects.notes as the rest of the
+ * company meta, so this needed no migration.
+ *   registered_office   — the address itself
+ *   office_renewal      — next renewal due date
+ *   office_renewed_on   — when he last ticked it
+ * ─────────────────────────────────────────────────────────────────────────── */
+function addYearISO(iso, n) {
+  const p = String(iso || '').slice(0, 10).split('-');
+  if (p.length !== 3) return iso;
+  const y = Number(p[0]) + (n || 1);
+  const m = Number(p[1]);
+  let day = Number(p[2]);
+  const daysInMonth = new Date(y, m, 0).getDate();   // 29 Feb -> 28 Feb next year
+  if (day > daysInMonth) day = daysInMonth;
+  return y + '-' + String(m).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+}
+
+async function markOfficeRenewed(id) {
+  const c = entries.find(e => e.id === id);
+  if (!c) return;
+  let meta = {};
+  try { meta = JSON.parse(c.notes || '{}'); } catch (e) { meta = {}; }
+  // Roll forward from the due date, not from today — renewing three days late
+  // must not shift every future renewal three days later.
+  const base = meta.office_renewal || todayISO();
+  const next = addYearISO(base, 1);
+  if (!confirm('Mark renewed?\n\nNext renewal moves to ' + fmtUKDate(next) + '.')) return;
+  meta.office_renewal = next;
+  meta.office_renewed_on = todayISO();
+  const res = await window.db.from('projects').update({ notes: JSON.stringify(meta) }).eq('id', id);
+  if (res.error) { alert('Could not update: ' + res.error.message); return; }
+  await loadAll();
 }
 
 function workDaysBadge(dateStr) {
@@ -2824,12 +2862,12 @@ function openWorkCompanyEditor(id) {
   const c = id ? entries.find(e => e.id === id) : null;
   let meta = {};
   try { meta = JSON.parse((c && c.notes) || '{}'); } catch (_) {}
-  showWorkModal(`<h3 class="work-modal-title">${c ? 'Edit Company' : 'New Company'}</h3><form id="work-company-form"><label class="work-lbl">Company Name</label><input class="work-input" name="name" required value="${c?esc(c.name):''}" placeholder="Company Ltd"/><label class="work-lbl">Ownership</label><select class="work-input" name="status"><option value="raz"${(c&&c.status)==='raz'?' selected':''}>Raz (Mine)</option><option value="partial"${(c&&c.status)==='partial'?' selected':''}>Partial</option><option value="other"${!c||(c&&c.status)==='other'?' selected':''}>Other</option></select><label class="work-lbl">Companies House Number</label><div class="work-ch-lookup-row"><input class="work-input" name="company_number" id="work-ch-num" value="${esc(meta.company_number||'')}" placeholder="e.g. 12345678"/><button type="button" class="work-btn-ghost" onclick="doWorkCHLookup()">Look up</button></div><div class="work-row-2"><div><label class="work-lbl">Accounts Due</label><input class="work-input" type="date" name="accounts_due" id="work-accounts-due" value="${meta.accounts_due||''}"/></div><div><label class="work-lbl">Conf. Statement Due</label><input class="work-input" type="date" name="confirmation_due" id="work-confirm-due" value="${meta.confirmation_due||''}"/></div></div><div class="work-row-2"><div><label class="work-lbl">Monthly Rent (£)</label><input class="work-input" type="number" name="rent" value="${meta.rent||''}" placeholder="0"/></div><div><label class="work-lbl">Monthly Salary (£)</label><input class="work-input" type="number" name="salary" value="${meta.salary||''}" placeholder="0"/></div></div><label class="work-lbl">Notes</label><textarea class="work-input" name="company_notes" rows="2">${esc(meta.notes||'')}</textarea><div class="work-modal-actions">${c?`<button type="button" class="work-btn-danger" onclick="deleteWorkItem('${c.id}','company')">Delete</button>`:'<span></span>'}<div class="work-modal-right"><button type="button" class="work-btn-ghost" onclick="closeWorkModal()">Cancel</button><button type="submit" class="work-btn-primary" id="work-co-submit">Save</button></div></div></form>`);
+  showWorkModal(`<h3 class="work-modal-title">${c ? 'Edit Company' : 'New Company'}</h3><form id="work-company-form"><label class="work-lbl">Company Name</label><input class="work-input" name="name" required value="${c?esc(c.name):''}" placeholder="Company Ltd"/><label class="work-lbl">Ownership</label><select class="work-input" name="status"><option value="raz"${(c&&c.status)==='raz'?' selected':''}>Raz (Mine)</option><option value="partial"${(c&&c.status)==='partial'?' selected':''}>Partial</option><option value="other"${!c||(c&&c.status)==='other'?' selected':''}>Other</option></select><label class="work-lbl">Companies House Number</label><div class="work-ch-lookup-row"><input class="work-input" name="company_number" id="work-ch-num" value="${esc(meta.company_number||'')}" placeholder="e.g. 12345678"/><button type="button" class="work-btn-ghost" onclick="doWorkCHLookup()">Look up</button></div><div class="work-row-2"><div><label class="work-lbl">Accounts Due</label><input class="work-input" type="date" name="accounts_due" id="work-accounts-due" value="${meta.accounts_due||''}"/></div><div><label class="work-lbl">Conf. Statement Due</label><input class="work-input" type="date" name="confirmation_due" id="work-confirm-due" value="${meta.confirmation_due||''}"/></div></div><div class="work-row-2"><div><label class="work-lbl">Office Renewal Due</label><input class="work-input" type="date" name="office_renewal" value="${meta.office_renewal||''}"/></div><div><label class="work-lbl">Last Renewed</label><input class="work-input" type="date" name="office_renewed_on" value="${meta.office_renewed_on||''}"/></div></div><label class="work-lbl">Registered Office Address</label><textarea class="work-input" name="registered_office" rows="2" placeholder="e.g. 71-75 Shelton Street, Covent Garden, London, WC2H 9JQ">${esc(meta.registered_office||'')}</textarea><div class="work-row-2"><div><label class="work-lbl">Monthly Rent (£)</label><input class="work-input" type="number" name="rent" value="${meta.rent||''}" placeholder="0"/></div><div><label class="work-lbl">Monthly Salary (£)</label><input class="work-input" type="number" name="salary" value="${meta.salary||''}" placeholder="0"/></div></div><label class="work-lbl">Notes</label><textarea class="work-input" name="company_notes" rows="2">${esc(meta.notes||'')}</textarea><div class="work-modal-actions">${c?`<button type="button" class="work-btn-danger" onclick="deleteWorkItem('${c.id}','company')">Delete</button>`:'<span></span>'}<div class="work-modal-right"><button type="button" class="work-btn-ghost" onclick="closeWorkModal()">Cancel</button><button type="submit" class="work-btn-primary" id="work-co-submit">Save</button></div></div></form>`);
   document.getElementById('work-company-form').addEventListener('submit', async ev => {
     ev.preventDefault();
     const fd = new FormData(ev.target);
     const name = (fd.get('name')||'').trim(); if (!name) return;
-    const notes = JSON.stringify({ company_number: (fd.get('company_number')||'').trim(), accounts_due: fd.get('accounts_due')||null, confirmation_due: fd.get('confirmation_due')||null, rent: (fd.get('rent')||'').trim()||null, salary: (fd.get('salary')||'').trim()||null, notes: (fd.get('company_notes')||'').trim() });
+    const notes = JSON.stringify({ company_number: (fd.get('company_number')||'').trim(), accounts_due: fd.get('accounts_due')||null, confirmation_due: fd.get('confirmation_due')||null, rent: (fd.get('rent')||'').trim()||null, salary: (fd.get('salary')||'').trim()||null, registered_office: (fd.get('registered_office')||'').trim(), office_renewal: fd.get('office_renewal')||null, office_renewed_on: fd.get('office_renewed_on')||null, notes: (fd.get('company_notes')||'').trim() });
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2,8);
     const payload = { id, name, type: 'work-company', status: fd.get('status'), notes };
     document.getElementById('work-co-submit').disabled = true;

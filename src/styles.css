@@ -2352,3 +2352,11 @@ dialog .actions {
 .c-import:hover { color:var(--text); border-color:var(--text); }
 #contact-import textarea { width:100%; box-sizing:border-box; font-family:ui-monospace,monospace; font-size:0.8rem; }
 .ci-warn { color:var(--amber); font-size:0.75rem; margin-top:6px; }
+
+/* company registered office + annual renewal (2026-08-27) */
+.work-office { font-size:0.74rem; color:var(--muted); line-height:1.45; padding:6px 0 2px;
+  border-top:1px dashed rgba(255,255,255,0.06); margin-top:6px; white-space:pre-line; }
+.work-office-lbl { display:block; font-size:0.62rem; text-transform:uppercase; letter-spacing:.07em;
+  color:var(--border-2); font-weight:700; margin-bottom:2px; }
+.work-renew-btn { margin-top:8px; width:100%; }
+.work-renewed-on { font-size:0.68rem; color:var(--muted); text-align:center; padding-top:4px; }
