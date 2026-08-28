@@ -866,6 +866,10 @@ async function sendCapture(){
   // written his words stay where they are, so a retry costs him no retyping.
   if(captureState.wrote){ captureDraft=''; await loadAll(); }
   else render();
+  // The capture box now sits BELOW the checklist (moved 2026-08-28 so the ticks and
+  // tasks are what he lands on). That puts the receipt off-screen after a send, and
+  // an unseen receipt defeats the whole point of the trust layer — so scroll to it.
+  try { const _b=document.querySelector('.cap-wrap'); if(_b) _b.scrollIntoView({behavior:'smooth',block:'center'}); } catch(_e) {}
 }
 
 function renderCaptureBox(){
@@ -965,7 +969,6 @@ function renderToday() {
           <input type="date" id="day-picker" value="${esc(selectedDay)}" aria-label="Pick a date" style="background:#1e293b;color:#fff;border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:5px 10px;font-size:0.8rem;color-scheme:dark;cursor:pointer;margin-top:6px" />
         </div>
       </div>
-      ${renderCaptureBox()}
       ${renderDailyStrip()}
       <div class="task-search-bar" style="margin:10px 0;">
         <input id="task-search" type="text" placeholder="\u{1F50D} Search all tasks across every day\u2026" autocomplete="off" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#10151c;color:#fff;border:1px solid rgba(255,255,255,0.12);border-radius:12px;font-size:0.9rem" />
@@ -981,6 +984,7 @@ function renderToday() {
         <select id="task-quick-cat" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.82rem;"><option value="admin">Admin</option><option value="deep-work">Deep Work</option><option value="call">Call</option><option value="finance">Finance</option><option value="errand">Errand</option><option value="travel">Travel</option><option value="personal">Personal</option><option value="reminders">Reminders</option><option value="meeting">Meeting</option></select>
         <button id="task-quick-btn" type="button">Add</button>
       </div>
+      ${renderCaptureBox()}
       <div class="today-actions">
         <button type="button" class="ghost" id="copy-yesterday-btn">Copy yesterday's tasks</button>
       </div>
