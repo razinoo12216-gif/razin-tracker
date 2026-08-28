@@ -317,6 +317,8 @@ async function loadAll() {
     list.innerHTML = '<div class="empty error">Supabase keys not set.</div>';
     return;
   }
+  // Blank + £0 is indistinguishable from a broken app. Say what is happening.
+  if (list && !list.innerHTML.trim()) list.innerHTML = '<div class="empty">Loading your data…</div>';
   // Fetches a whole table in 1000-row pages. Returns the same {data, error} shape
   // as a normal supabase-js query so callers do not need special handling.
   async function selectAllRows(table, orderCol, ascending) {
@@ -373,29 +375,41 @@ async function loadAll() {
   rebuildMonthSelect();
   rebuildSecondaryFilter();
   render();
-  try { const {data:_dm} = await window.db.from('daily_macros').select('*').order('date',{ascending:false}); dailyMacros = _dm || []; } catch(_e) {}
-  try { const {data:_rv} = await window.db.from('debts').select('*').or('type.eq.receivable,type.is.null').order('created_at',{ascending:false}); receivables = _rv || []; } catch(_e) {}
-  try { const {data:_nts} = await window.db.from('user_notes').select('*').order('created_at',{ascending:false}); userNotes = _nts || []; } catch(_e) {}
-  try { const {data:_pots} = await window.db.from('pots').select('*').order('priority',{ascending:true}); pots = _pots || []; } catch(_e) {}
-  try { const {data:_ps} = await window.db.from('pot_settings').select('*').eq('id',1).single(); if (_ps) potSettings = _ps; } catch(_e) {}
-  try { const {data:_inc} = await window.db.from('income_entries').select('*').order('date',{ascending:false}); incomeEntries = _inc || []; } catch(_e) {}
-  try { const {data:_lg} = await window.db.from('life_goals').select('*').order('sort_order',{ascending:true}); lifeGoals = _lg || []; } catch(_e) {}
-  try { const {data:_dt} = await window.db.from('daily_targets').select('*').order('sort_order',{ascending:true}); dailyTargets = _dt || []; } catch(_e) {}
-  try { const {data:_dl} = await window.db.from('daily_logs').select('*'); dailyLogs = _dl || []; } catch(_e) {}
-  try { const {data:_wt} = await window.db.from('weekly_targets').select('*').order('sort_order',{ascending:true}); weeklyTargets = _wt || []; } catch(_e) {}
-  try { const {data:_wl} = await window.db.from('weekly_logs').select('*'); weeklyLogs = _wl || []; } catch(_e) {}
-  try { const {data:_wq} = await window.db.from('work_quotes').select('*').order('created_at',{ascending:false}); workQuotes = _wq || []; } catch(_e) {}
-  try { const {data:_ds} = await window.db.from('debt_settings').select('*').eq('id',1).single(); if(_ds) window._debtSettings = _ds; } catch(_e) {}
-  // Contacts arrive as ciphertext. Nothing is decrypted until a passphrase is entered.
-  try { const {data:_ct} = await window.db.from('contacts').select('*').order('created_at',{ascending:false}); contacts = _ct || []; } catch(_e) {}
-  try { const {data:_cm} = await window.db.from('contacts_meta').select('*').eq('id',1).single(); contactsMeta = _cm || null; } catch(_e) {}
-  try { const {data:_od} = await window.db.from('op_daily_logs').select('*').order('date',{ascending:false}); opDailyLogs = _od || []; } catch(_e) {}
-  try { const {data:_odb} = await window.db.from('op_debt').select('*').eq('id',1).single(); if(_odb) opDebt = _odb; } catch(_e) {}
-  try { const {data:_oi} = await window.db.from('op_income').select('*').order('date',{ascending:false}); opIncome = _oi || []; } catch(_e) {}
-  try { const {data:_os} = await window.db.from('op_spend').select('*').order('date',{ascending:false}); opSpend = _os || []; } catch(_e) {}
-  try { const {data:_op} = await window.db.from('op_projects').select('*'); opProjects = _op || []; } catch(_e) {}
-  try { const {data:_opc} = await window.db.from('op_partner_checks').select('*').order('week_label',{ascending:false}); opPartner = _opc || []; } catch(_e) {}
-  try { const {data:_cm} = await window.db.from('coach_messages').select('*').order('created_at',{ascending:true}); agentMessages = (_cm||[]).map(m=>({role:m.role,content:m.content})); } catch(_e) {}
+  // ── PARALLEL TRAILING LOADS ──────────────────────────────────────────────
+  // These 22 reads used to run one after another, each awaiting the last. On a
+  // nano Postgres instance that is 5-15 seconds of blank screen showing £0
+  // totals, which Razin reasonably read as "the app is broken" (2026-08-27).
+  // None of them depend on each other, so they now go out in a single wave.
+  // Errors stay swallowed per-query exactly as the old try/catch did — one dead
+  // or RLS-blocked table must never take the whole load down.
+  const grab = (q, assign) => Promise.resolve(q)
+    .then(r => { if (r && !r.error) assign(r.data); })
+    .catch(() => {});
+  await Promise.all([
+    grab(window.db.from('daily_macros').select('*').order('date',{ascending:false}), d => dailyMacros = d || []),
+    grab(window.db.from('debts').select('*').or('type.eq.receivable,type.is.null').order('created_at',{ascending:false}), d => receivables = d || []),
+    grab(window.db.from('user_notes').select('*').order('created_at',{ascending:false}), d => userNotes = d || []),
+    grab(window.db.from('pots').select('*').order('priority',{ascending:true}), d => pots = d || []),
+    grab(window.db.from('pot_settings').select('*').eq('id',1).single(), d => { if (d) potSettings = d; }),
+    grab(window.db.from('income_entries').select('*').order('date',{ascending:false}), d => incomeEntries = d || []),
+    grab(window.db.from('life_goals').select('*').order('sort_order',{ascending:true}), d => lifeGoals = d || []),
+    grab(window.db.from('daily_targets').select('*').order('sort_order',{ascending:true}), d => dailyTargets = d || []),
+    grab(window.db.from('daily_logs').select('*'), d => dailyLogs = d || []),
+    grab(window.db.from('weekly_targets').select('*').order('sort_order',{ascending:true}), d => weeklyTargets = d || []),
+    grab(window.db.from('weekly_logs').select('*'), d => weeklyLogs = d || []),
+    grab(window.db.from('work_quotes').select('*').order('created_at',{ascending:false}), d => workQuotes = d || []),
+    grab(window.db.from('debt_settings').select('*').eq('id',1).single(), d => { if (d) window._debtSettings = d; }),
+    // Contacts arrive as ciphertext. Nothing is decrypted until a passphrase is entered.
+    grab(window.db.from('contacts').select('*').order('created_at',{ascending:false}), d => contacts = d || []),
+    grab(window.db.from('contacts_meta').select('*').eq('id',1).single(), d => contactsMeta = d || null),
+    grab(window.db.from('op_daily_logs').select('*').order('date',{ascending:false}), d => opDailyLogs = d || []),
+    grab(window.db.from('op_debt').select('*').eq('id',1).single(), d => { if (d) opDebt = d; }),
+    grab(window.db.from('op_income').select('*').order('date',{ascending:false}), d => opIncome = d || []),
+    grab(window.db.from('op_spend').select('*').order('date',{ascending:false}), d => opSpend = d || []),
+    grab(window.db.from('op_projects').select('*'), d => opProjects = d || []),
+    grab(window.db.from('op_partner_checks').select('*').order('week_label',{ascending:false}), d => opPartner = d || []),
+    grab(window.db.from('coach_messages').select('*').order('created_at',{ascending:true}), d => agentMessages = (d||[]).map(m => ({role:m.role, content:m.content}))),
+  ]);
   render(); // re-render once trailing loads (pots, receivables, notes, macros) are in — fixes stale header/sections on first load
   try { saveLocalBackup(); } catch(_e) {}
   try { checkBackupRestore(); } catch(_e) {}
