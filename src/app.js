@@ -24,7 +24,8 @@ let receivables = [];
 let userNotes = [];
 let pots = [];
 let potSettings = { bank_balance: 0 };
-const MACRO_TARGETS = {protein:180, carbs:280, fats:70, calories:2500};
+const MACRO_TARGETS = {protein:180, carbs:280, fats:70, calories:2500}; // fallback only — real values live in the macro_targets table
+let macroTargets = null;
 let bodyMetrics = [];
 let roadTrips = [];
 let debtPayments = [];
@@ -387,6 +388,7 @@ async function loadAll() {
     .catch(() => {});
   await Promise.all([
     grab(window.db.from('daily_macros').select('*').order('date',{ascending:false}), d => dailyMacros = d || []),
+    grab(window.db.from('macro_targets').select('*').eq('id',1).single(), d => { if (d) macroTargets = d; }),
     grab(window.db.from('debts').select('*').or('type.eq.receivable,type.is.null').order('created_at',{ascending:false}), d => receivables = d || []),
     grab(window.db.from('user_notes').select('*').order('created_at',{ascending:false}), d => userNotes = d || []),
     grab(window.db.from('pots').select('*').order('priority',{ascending:true}), d => pots = d || []),
@@ -891,6 +893,240 @@ function renderCaptureBox(){
 }
 
 
+/* ─── PHOTO MEAL LOGGING (2026-08-28) ─────────────────────────────────────────
+ * The macro form on the Gym tab was never used once. It asked Razin to arrive
+ * already knowing the protein content of his dinner — the one number a person
+ * cannot produce while eating it. So the form was not the friction, the
+ * ARITHMETIC was, and no amount of moving the form would have fixed it.
+ *
+ * This replaces the ask entirely: photograph the plate, /api/meal reads it and
+ * writes the row. Two taps, no typing, no numbers.
+ *
+ * It saves immediately rather than showing a confirm step. A confirmation is
+ * one more tap between him and a logged meal, and the tap is where the habit
+ * dies. Wrong-and-fixable beats right-and-never-entered — hence Undo and Fix,
+ * both one tap, both on the receipt.
+ * ─────────────────────────────────────────────────────────────────────────── */
+var mealState = mealState || { busy:false, result:null, err:null, lastImage:null, lastType:null, fixing:false };
+
+function macroTargetsNow(){
+  const t = (typeof macroTargets !== 'undefined' && macroTargets) ? macroTargets : null;
+  return {
+    calories: +(t && t.calories) || MACRO_TARGETS.calories,
+    protein:  +(t && t.protein)  || MACRO_TARGETS.protein,
+    carbs:    +(t && t.carbs)    || MACRO_TARGETS.carbs,
+    fats:     +(t && t.fats)     || MACRO_TARGETS.fats,
+  };
+}
+
+function macroTotalsFor(day){
+  return (dailyMacros||[]).filter(m => m && m.date === day).reduce(
+    (a,m) => ({ cal:a.cal+(+m.calories||0), p:a.p+(+m.protein||0), c:a.c+(+m.carbs||0), f:a.f+(+m.fats||0), n:a.n+1 }),
+    { cal:0, p:0, c:0, f:0, n:0 });
+}
+
+// Downscale in the browser before upload. A modern phone photo is 3-5MB, Vercel
+// caps a request body at 4.5MB, and the model gains nothing above ~1100px — it
+// is judging portion sizes, not reading labels. This keeps a send under ~300KB
+// so it works on a bad signal in a car park.
+function shrinkImage(file){
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onerror = () => reject(new Error('Could not read that photo'));
+    fr.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Could not open that photo'));
+      img.onload = () => {
+        const MAX = 1100;
+        let { width:w, height:h } = img;
+        if (Math.max(w,h) > MAX) { const s = MAX / Math.max(w,h); w = Math.round(w*s); h = Math.round(h*s); }
+        const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+        cv.getContext('2d').drawImage(img, 0, 0, w, h);
+        const durl = cv.toDataURL('image/jpeg', 0.72);
+        resolve({ data: durl.slice(durl.indexOf(',')+1), mediaType: 'image/jpeg' });
+      };
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+async function onMealPhoto(input){
+  const file = input && input.files && input.files[0];
+  if (!file) return;
+  input.value = ''; // so re-photographing the same plate still fires a change event
+  let shrunk;
+  try { shrunk = await shrinkImage(file); }
+  catch(e){ mealState.err = e.message; render(); return; }
+  mealState.lastImage = shrunk.data; mealState.lastType = shrunk.mediaType;
+  await sendMeal({ image: shrunk.data, mediaType: shrunk.mediaType });
+}
+
+async function sendMealText(){
+  const el = document.getElementById('meal-text');
+  const t = ((el ? el.value : '') || '').trim();
+  if (!t) return;
+  mealState.lastImage = null; mealState.lastType = null;
+  await sendMeal({ text: t });
+}
+
+// A correction re-runs the estimate with the same photo plus what he told us, then
+// removes the row it is replacing — so a fix never leaves two meals on the day.
+async function fixMeal(){
+  const el = document.getElementById('meal-fix');
+  const t = ((el ? el.value : '') || '').trim();
+  if (!t || mealState.busy) return;
+  const oldId = mealState.result && mealState.result.row ? mealState.result.row.id : null;
+  mealState.fixing = true;
+  await sendMeal({ image: mealState.lastImage, mediaType: mealState.lastType, note: t, replacing: oldId });
+}
+
+async function sendMeal(opts){
+  if (mealState.busy) return;
+  mealState.busy = true; mealState.err = null;
+  if (!mealState.fixing) mealState.result = null;
+  render();
+  try {
+    const payload = { date: todayISO() };
+    if (opts.image) { payload.image = opts.image; payload.mediaType = opts.mediaType; }
+    if (opts.text)  payload.text = opts.text;
+    if (opts.note)  payload.note = opts.note;
+
+    const r = await fetch('/api/meal', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    });
+    const d = await r.json().catch(() => ({ error:'Server sent something unreadable' }));
+
+    if (!r.ok || d.error || !d.wrote) {
+      mealState.err = d.error || ('HTTP ' + r.status);
+      mealState.result = (d && d.calories) ? d : null;
+    } else {
+      // Only now, with a row read back out of Postgres, is the old one safe to drop.
+      if (opts.replacing) { try { await window.db.from('daily_macros').delete().eq('id', opts.replacing); } catch(_e) {} }
+      mealState.result = d;
+      await loadAll();
+    }
+  } catch(e){ mealState.err = e.message || 'Network error'; }
+  mealState.busy = false; mealState.fixing = false;
+  render();
+  try { const b = document.querySelector('.meal-wrap'); if (b) b.scrollIntoView({behavior:'smooth', block:'center'}); } catch(_e) {}
+}
+
+async function undoMeal(id){
+  if (!id) return;
+  try { await window.db.from('daily_macros').delete().eq('id', id); } catch(_e) {}
+  mealState.result = null; mealState.err = null;
+  await loadAll();
+  render();
+}
+
+function mealBar(pct, cls){
+  return `<div class="meal-bar"><div class="meal-fill ${cls}" style="width:${Math.min(100, Math.max(0, pct)).toFixed(0)}%"></div></div>`;
+}
+
+function renderMealReceipt(){
+  const d = mealState.result;
+  if (mealState.busy) return `<div class="meal-out meal-wait">Reading the plate…</div>`;
+  if (mealState.err && !d) return `<div class="meal-out meal-bad">⚠ ${esc(mealState.err)}</div>`;
+  if (!d) return '';
+  const conf = d.confidence || 'medium';
+  const id = d.row ? d.row.id : null;
+  const items = (d.items||[]).map(i =>
+    `<div class="meal-item"><span>${esc(i.name||'')}${i.portion?` <em>${esc(i.portion)}</em>`:''}</span><b>${Math.round(+i.calories||0)}</b></div>`).join('');
+  return `<div class="meal-out">
+      ${mealState.err ? `<div class="meal-bad">⚠ ${esc(mealState.err)}</div>` : ''}
+      <div class="meal-head-row">
+        <span class="meal-label">${esc(d.label||'Meal')}</span>
+        <span class="meal-conf meal-conf-${esc(conf)}">${esc(conf)} confidence</span>
+      </div>
+      <div class="meal-totals">
+        <b>${Math.round(+d.calories||0)}</b> kcal
+        · ${Math.round(+d.protein||0)}g P · ${Math.round(+d.carbs||0)}g C · ${Math.round(+d.fats||0)}g F
+      </div>
+      ${items ? `<div class="meal-items">${items}</div>` : ''}
+      ${d.assumptions ? `<div class="meal-assume">Assumed: ${esc(d.assumptions)}</div>` : ''}
+      ${d.question ? `<div class="meal-assume">${esc(d.question)}</div>` : ''}
+      <div class="meal-fixrow">
+        <input id="meal-fix" class="meal-fixinput" type="text" placeholder="Wrong? e.g. 'that was double' or 'no oil'" />
+        <button class="meal-btn ghost" onclick="fixMeal()">Fix</button>
+        ${id ? `<button class="meal-btn ghost" onclick="undoMeal('${id}')">Undo</button>` : ''}
+      </div>
+    </div>`;
+}
+
+// Targets used to be a constant in this file, which made "change my protein target" a code
+// deploy. One row in macro_targets, edited in place here.
+var targetsEditing = false;
+function openTargetsEditor(){ targetsEditing = true; render(); }
+function cancelTargets(){ targetsEditing = false; render(); }
+async function saveTargets(){
+  const g = (id) => { const el = document.getElementById(id); return el ? (parseFloat(el.value)||0) : 0; };
+  const rec = { id:1, calories:g('tg-cal'), protein:g('tg-pro'), carbs:g('tg-carb'), fats:g('tg-fat'), updated_at:new Date().toISOString() };
+  try {
+    await window.db.from('macro_targets').upsert(rec, { onConflict:'id' });
+    const { data } = await window.db.from('macro_targets').select('*').eq('id',1).single();
+    if (data) macroTargets = data;   // read back, do not assume the write took
+  } catch(e){ alert('Could not save targets: ' + (e.message||e)); }
+  targetsEditing = false;
+  render();
+}
+
+function renderTargetsForm(){
+  const t = macroTargetsNow();
+  return '<div class="gym-target-form">'
+    + '<label>Calories<input id="tg-cal" type="number" inputmode="numeric" value="'+Math.round(t.calories)+'"></label>'
+    + '<label>Protein g<input id="tg-pro" type="number" inputmode="numeric" value="'+Math.round(t.protein)+'"></label>'
+    + '<label>Carbs g<input id="tg-carb" type="number" inputmode="numeric" value="'+Math.round(t.carbs)+'"></label>'
+    + '<label>Fats g<input id="tg-fat" type="number" inputmode="numeric" value="'+Math.round(t.fats)+'"></label>'
+    + '<div class="gym-target-actions"><button class="meal-btn" onclick="saveTargets()">Save</button>'
+    + '<button class="meal-btn ghost" onclick="cancelTargets()">Cancel</button></div></div>';
+}
+
+// Compact strip for 12 Ticks: where he is against the day, and the camera.
+function renderMealBar(){
+  const day = todayISO();
+  const t = macroTargetsNow();
+  const s = macroTotalsFor(day);
+  const calPct = t.calories ? (s.cal / t.calories * 100) : 0;
+  const pPct   = t.protein  ? (s.p   / t.protein  * 100) : 0;
+  const over   = s.cal > t.calories;
+  return `<div class="meal-wrap">
+      <div class="meal-top">
+        <div class="meal-nums">
+          <div class="meal-line"><span>Calories</span><b class="${over?'meal-over':''}">${Math.round(s.cal)} / ${Math.round(t.calories)}</b></div>
+          ${mealBar(calPct, over ? 'over' : 'cal')}
+          <div class="meal-line"><span>Protein</span><b>${Math.round(s.p)} / ${Math.round(t.protein)}g</b></div>
+          ${mealBar(pPct, 'pro')}
+          <div class="meal-sub">${s.n ? `${s.n} meal${s.n>1?'s':''} · ${Math.round(s.c)}g C · ${Math.round(s.f)}g F` : 'Nothing logged today'}</div>
+        </div>
+        <label class="meal-cam" for="meal-cam-input">
+          <span class="meal-cam-ico">📷</span>
+          <span class="meal-cam-txt">${mealState.busy ? 'Reading…' : 'Snap a meal'}</span>
+        </label>
+        <input id="meal-cam-input" class="meal-hidden" type="file" accept="image/*" capture="environment"
+               onchange="onMealPhoto(this)" ${mealState.busy ? 'disabled' : ''} />
+      </div>
+      <div class="meal-textrow">
+        <input id="meal-text" class="meal-textinput" type="text" placeholder="…or type it: chicken shawarma, large" ${mealState.busy?'disabled':''}
+               onkeydown="if(event.key==='Enter'){event.preventDefault();sendMealText();}" />
+        <button class="meal-btn" onclick="sendMealText()" ${mealState.busy?'disabled':''}>Log</button>
+      </div>
+      ${renderMealReceipt()}
+    </div>`;
+}
+
+// Inline onclick/onchange handlers resolve off window. These are top-level declarations so they
+// are already global, but the rest of this file states its handlers explicitly and a future
+// wrapper (an IIFE, a module tag) would silently break every button here without it.
+window.onMealPhoto = onMealPhoto;
+window.sendMealText = sendMealText;
+window.fixMeal = fixMeal;
+window.undoMeal = undoMeal;
+window.renderMealBar = renderMealBar;
+window.openTargetsEditor = openTargetsEditor;
+window.cancelTargets = cancelTargets;
+window.saveTargets = saveTargets;
+
 /* ─── TODAY'S TICKS on 12 Ticks (2026-08-27) ──────────────────────────────────
  * The daily targets already lived on Life Progress, but Razin opens 12 Ticks
  * every morning and asked for something he can "open my phone and tick off".
@@ -900,6 +1136,21 @@ function renderCaptureBox(){
  * ─────────────────────────────────────────────────────────────────────────── */
 function tickToday(id){ lifeDay = todayISO(); toggleDailyCheck(id); }
 function tickTodayCount(ev, id, d){ lifeDay = todayISO(); adjustDailyCount(ev, id, d); }
+
+// The strip moved to the BOTTOM of 12 Ticks on 2026-09-07 at his request — he wants his
+// tasks first. But the strip is the one behavioural ask that makes the briefs, streaks and
+// Sunday review mean anything, and out of sight is how it stops getting ticked. So the score
+// stays in the header as a one-tap jump: he can still see 3/15 without scrolling.
+function dailyStripScore(){
+  const day = todayISO();
+  const ad = (dailyTargets||[]).filter(t => t.active !== false);
+  return { met: ad.filter(t => dailyMet(t, day)).length, total: ad.length };
+}
+function jumpToStrip(){
+  const el = document.querySelector('.dt-wrap');
+  if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+window.jumpToStrip = jumpToStrip;
 
 function renderDailyStrip(){
   const day = todayISO();
@@ -960,6 +1211,7 @@ function renderToday() {
       <div class="today-header">
         <h2 class="today-date">${esc(dateLabel)}</h2>
         <div class="today-progress">${total > 0 ? `${done} of ${total} done` : 'No tasks yet'}</div>
+        ${(() => { const t = dailyStripScore(); return t.total ? `<button type="button" class="dt-jump${t.met===t.total?' all':''}" onclick="jumpToStrip()">Ticks ${t.met}/${t.total}</button>` : ''; })()}
         <button onclick="openPlannerModal()" style="display:flex;align-items:center;gap:6px;padding:7px 16px;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:0.82rem;font-weight:700;letter-spacing:.02em;margin-top:8px">&#9889; Plan My Day</button>
         <button id="notif-btn" onclick="requestNotificationPermission()" style="display:flex;align-items:center;gap:6px;padding:7px 16px;background:#1e293b;color:#fff;border:1px solid rgba(255,255,255,0.12);border-radius:20px;cursor:pointer;font-size:0.82rem;font-weight:700;letter-spacing:.02em;margin-top:8px" onclick="requestNotificationPermission()">🔔 Notifications</button>
         <div class="today-nav">
@@ -969,7 +1221,7 @@ function renderToday() {
           <input type="date" id="day-picker" value="${esc(selectedDay)}" aria-label="Pick a date" style="background:#1e293b;color:#fff;border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:5px 10px;font-size:0.8rem;color-scheme:dark;cursor:pointer;margin-top:6px" />
         </div>
       </div>
-      ${renderDailyStrip()}
+      ${renderMealBar()}
       <div class="task-search-bar" style="margin:10px 0;">
         <input id="task-search" type="text" placeholder="\u{1F50D} Search all tasks across every day\u2026" autocomplete="off" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#10151c;color:#fff;border:1px solid rgba(255,255,255,0.12);border-radius:12px;font-size:0.9rem" />
         <div id="task-search-results" style="margin-top:6px;"></div>
@@ -985,6 +1237,7 @@ function renderToday() {
         <button id="task-quick-btn" type="button">Add</button>
       </div>
       ${renderCaptureBox()}
+      ${renderDailyStrip()}
       <div class="today-actions">
         <button type="button" class="ghost" id="copy-yesterday-btn">Copy yesterday's tasks</button>
       </div>
@@ -2676,12 +2929,95 @@ function renderWorkTasksView(tasks, companies) {
   list.innerHTML = `<div class="work-header-bar">${toggle}<button class="work-fab" onclick="openWorkTaskEditor()">+ Task</button></div>${pending.map(t => renderWorkTaskCard(t, companies)).join('')}${done.length ? `<div class="work-section-divider">Completed (${done.length})</div>${done.map(t => renderWorkTaskCard(t, companies)).join('')}` : ''}`;
 }
 
+/* ─── COMPANY SEARCH (2026-09-07) ──────────────────────────────────────────────
+ * 33 registered companies rendered as one unsorted grid meant finding a named one
+ * was a scroll-and-scan every time. Two changes: the grid is now sorted A-Z so
+ * position is predictable, and the box above it filters live.
+ *
+ * It searches the company name, its Companies House number, its registered office
+ * and its notes — so "shelton" finds every company at that address, and a CH number
+ * pasted from an email lands straight on the right card.
+ *
+ * Filtering repaints ONLY the grid, never the whole view. Re-rendering the page on
+ * each keystroke would destroy and recreate the input, and the caret and the phone
+ * keyboard would go with it — the classic way a search box becomes unusable on mobile.
+ * ─────────────────────────────────────────────────────────────────────────────── */
+var companyQuery = '';
+
+function companyHaystack(c) {
+  let meta = {};
+  try { meta = JSON.parse(c.notes || '{}'); } catch (_) {}
+  return [
+    c.name,
+    { raz: 'raz mine', partial: 'partial', other: 'other' }[c.status || 'other'],
+    meta.company_number,
+    meta.incorporated,
+    meta.registered_office,
+    meta.notes,
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function filterCompanies(companies) {
+  // Sorted first, so clearing the box always returns him to the same predictable order.
+  const sorted = companies.slice().sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'en', { sensitivity: 'base' }));
+  const q = companyQuery.trim().toLowerCase();
+  if (!q) return sorted;
+  // Every word must match somewhere, so "raz shelton" narrows rather than widens.
+  const terms = q.split(/\s+/);
+  return sorted.filter(c => { const h = companyHaystack(c); return terms.every(t => h.includes(t)); });
+}
+
+function paintCompanyGrid(companies) {
+  const shown = filterCompanies(companies);
+  const grid = document.querySelector('.work-companies-grid');
+  const cnt  = document.getElementById('co-count');
+  const clr  = document.getElementById('co-clear');
+  if (grid) {
+    grid.innerHTML = shown.length
+      ? shown.map(c => renderWorkCompanyCard(c)).join('')
+      : `<div class="empty">Nothing matches &ldquo;${esc(companyQuery.trim())}&rdquo;.</div>`;
+  }
+  if (cnt) cnt.textContent = companyQuery.trim()
+    ? `${shown.length} of ${companies.length}`
+    : `${companies.length} ${companies.length === 1 ? 'company' : 'companies'}`;
+  if (clr) clr.style.visibility = companyQuery ? 'visible' : 'hidden';
+}
+
+function clearCompanySearch() {
+  companyQuery = '';
+  const si = document.getElementById('co-search');
+  if (si) { si.value = ''; si.focus(); }
+  paintCompanyGrid(entries.filter(e => e.type === 'work-company'));
+}
+
 // PATCH C: updated companies toggle — 3 buttons
 function renderWorkCompaniesView(companies) {
   const toggle = `<div class="ticket-type-filter"><button class="ticket-filter active" onclick="workView='companies';renderWork()">Companies</button><button class="ticket-filter" onclick="workView='invoices';renderWork()">Invoices</button><button class="ticket-filter" onclick="workView='travel';renderWork()">Travel</button><button class="ticket-filter" onclick="workView='pricing';renderWork()">Pricing</button></div>`;
   const chKey  = localStorage.getItem('ch_api_key') || '';
-  list.innerHTML = `<div class="work-header-bar">${toggle}<button class="work-fab" onclick="openWorkCompanyEditor()">+ Company</button></div><div class="work-ch-bar"><span class="work-ch-label">CH API Key</span><input type="password" id="ch-key-input" value="${esc(chKey)}" placeholder="Your Companies House API key"/><button class="work-ch-save" onclick="saveCHKey()">Save</button></div>${companies.length === 0 ? '<div class="empty">No companies yet. Hit <strong>+ Company</strong> to add one.</div>' : ''}<div class="work-companies-grid">${companies.map(c => renderWorkCompanyCard(c)).join('')}</div>`;
+  const shown  = filterCompanies(companies);
+  list.innerHTML = `<div class="work-header-bar">${toggle}<button class="work-fab" onclick="openWorkCompanyEditor()">+ Company</button></div>`
+    + `<div class="co-search-bar">`
+    +   `<span class="co-search-ico">&#128269;</span>`
+    +   `<input id="co-search" class="co-search-input" type="search" autocomplete="off" placeholder="Search name, CH number, office, notes…" value="${esc(companyQuery)}" />`
+    +   `<button type="button" id="co-clear" class="co-search-clear" onclick="clearCompanySearch()" aria-label="Clear search" style="visibility:${companyQuery ? 'visible' : 'hidden'}">&times;</button>`
+    +   `<span id="co-count" class="co-search-count">${companyQuery.trim() ? `${shown.length} of ${companies.length}` : `${companies.length} ${companies.length === 1 ? 'company' : 'companies'}`}</span>`
+    + `</div>`
+    + `<div class="work-ch-bar"><span class="work-ch-label">CH API Key</span><input type="password" id="ch-key-input" value="${esc(chKey)}" placeholder="Your Companies House API key"/><button class="work-ch-save" onclick="saveCHKey()">Save</button></div>`
+    + (companies.length === 0 ? '<div class="empty">No companies yet. Hit <strong>+ Company</strong> to add one.</div>' : '')
+    + `<div class="work-companies-grid">${shown.map(c => renderWorkCompanyCard(c)).join('')}</div>`;
+
+  const si = document.getElementById('co-search');
+  if (si) {
+    // No autofocus: on a phone that would throw the keyboard up every time he opens the tab.
+    si.addEventListener('input', (e) => { companyQuery = e.target.value; paintCompanyGrid(companies); });
+    si.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); clearCompanySearch(); }
+      if (e.key === 'Enter')  { e.preventDefault(); si.blur(); } // dismiss the keyboard, keep the filter
+    });
+  }
 }
+window.clearCompanySearch = clearCompanySearch;
+window.paintCompanyGrid = paintCompanyGrid;
 
 // PATCH D: new invoices view
 function renderWorkInvoicesView() {
@@ -2834,6 +3170,22 @@ function renderWorkTaskCard(t, companies) {
   return `<div class="card work-task-card${isDone?' work-task-done':''}" onclick="openWorkTaskEditor('${t.id}')"><div class="work-task-row"><button class="work-check${isDone?' checked':''}" onclick="event.stopPropagation();toggleWorkTaskDone('${t.id}',${isDone})">${isDone?'&#10003;':''}</button><span class="work-task-name">${esc(t.name)}</span>${dueBadge}</div>${(co||meta.category||meta.priority)?`<div class="work-task-tags">${co?`<span class="work-tag">${co}</span>`:''} ${meta.category?`<span class="work-tag">${esc(meta.category)}</span>`:''} ${meta.priority?`<span class="work-tag ${priCls}">${esc(meta.priority)}</span>`:''}</div>`:''}${meta.notes?`<div class="work-card-notes">${esc(meta.notes)}</div>`:''}</div>`;
 }
 
+// Incorporation date is on the card as of 2026-09-07. The age matters more than the date
+// for most of what he uses these for — trading history, and what a shelf company is worth —
+// so both are shown. Years and months only; days are noise at this scale.
+function companyAge(iso){
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
+  const d = new Date(iso + 'T00:00:00'), n = new Date();
+  if (isNaN(d) || d > n) return '';
+  let m = (n.getFullYear() - d.getFullYear()) * 12 + (n.getMonth() - d.getMonth());
+  if (n.getDate() < d.getDate()) m--;
+  if (m < 0) return '';
+  const y = Math.floor(m / 12), r = m % 12;
+  if (y === 0) return r + 'm';
+  return r ? y + 'y ' + r + 'm' : y + 'y';
+}
+window.companyAge = companyAge;
+
 function renderWorkCompanyCard(c) {
   let meta = {};
   try { meta = JSON.parse(c.notes || '{}'); } catch (_) {}
@@ -2843,7 +3195,7 @@ function renderWorkCompanyCard(c) {
   const accBdg = meta.accounts_due     ? workDaysBadge(meta.accounts_due)     : '<span class="work-na">—</span>';
   const conBdg = meta.confirmation_due ? workDaysBadge(meta.confirmation_due) : '<span class="work-na">—</span>';
   const renBdg = meta.office_renewal   ? workDaysBadge(meta.office_renewal)   : '<span class="work-na">—</span>';
-  return `<div class="card work-company-card" style="border-left:3px solid ${col}" onclick="openWorkCompanyEditor('${c.id}')"><div class="work-co-head"><span class="work-co-name">${esc(c.name)}</span><span class="work-owner-badge" style="color:${col};border-color:${col}">${owner}</span></div>${meta.company_number?`<div class="work-ch-ref">CH: ${esc(meta.company_number)}</div>`:''}<div class="work-due-row"><span class="work-due-lbl">Accounts due</span>${accBdg}</div><div class="work-due-row"><span class="work-due-lbl">Conf. statement</span>${conBdg}</div><div class="work-due-row"><span class="work-due-lbl">Office renewal</span>${renBdg}</div>${meta.registered_office?`<div class="work-office"><span class="work-office-lbl">Registered office</span>${esc(meta.registered_office)}</div>`:''}${meta.office_renewal?`<button type="button" class="work-btn-ghost work-renew-btn" onclick="event.stopPropagation();markOfficeRenewed('${c.id}')">Mark renewed</button>`:''}${meta.office_renewed_on?`<div class="work-renewed-on">last renewed ${esc(fmtUKDate(meta.office_renewed_on))}</div>`:''}${meta.rent?`<div class="work-due-row"><span class="work-due-lbl">Rent</span><span class="work-days-badge work-badge-ok">£${esc(String(meta.rent))}</span></div>`:``}${meta.salary?`<div class="work-due-row"><span class="work-due-lbl">Salary</span><span class="work-days-badge work-badge-ok">£${esc(String(meta.salary))}</span></div>`:``}${meta.notes?`<div class="work-card-notes">${esc(meta.notes)}</div>`:``}</div>`;
+  return `<div class="card work-company-card" style="border-left:3px solid ${col}" onclick="openWorkCompanyEditor('${c.id}')"><div class="work-co-head"><span class="work-co-name">${esc(c.name)}</span><span class="work-owner-badge" style="color:${col};border-color:${col}">${owner}</span></div>${meta.company_number?`<div class="work-ch-ref">CH: ${esc(meta.company_number)}</div>`:''}${meta.incorporated?`<div class="work-due-row"><span class="work-due-lbl">Incorporated</span><span class="work-inc-val">${esc(fmtUKDate(meta.incorporated))}${companyAge(meta.incorporated)?` <em>${companyAge(meta.incorporated)}</em>`:''}</span></div>`:''}<div class="work-due-row"><span class="work-due-lbl">Accounts due</span>${accBdg}</div><div class="work-due-row"><span class="work-due-lbl">Conf. statement</span>${conBdg}</div><div class="work-due-row"><span class="work-due-lbl">Office renewal</span>${renBdg}</div>${meta.registered_office?`<div class="work-office"><span class="work-office-lbl">Registered office</span>${esc(meta.registered_office)}</div>`:''}${meta.office_renewal?`<button type="button" class="work-btn-ghost work-renew-btn" onclick="event.stopPropagation();markOfficeRenewed('${c.id}')">Mark renewed</button>`:''}${meta.office_renewed_on?`<div class="work-renewed-on">last renewed ${esc(fmtUKDate(meta.office_renewed_on))}</div>`:''}${meta.rent?`<div class="work-due-row"><span class="work-due-lbl">Rent</span><span class="work-days-badge work-badge-ok">£${esc(String(meta.rent))}</span></div>`:``}${meta.salary?`<div class="work-due-row"><span class="work-due-lbl">Salary</span><span class="work-days-badge work-badge-ok">£${esc(String(meta.salary))}</span></div>`:``}${meta.notes?`<div class="work-card-notes">${esc(meta.notes)}</div>`:``}</div>`;
 }
 
 /* ─── COMPANY OFFICE RENEWALS (2026-08-27) ────────────────────────────────────
@@ -2939,12 +3291,12 @@ function openWorkCompanyEditor(id) {
   const c = id ? entries.find(e => e.id === id) : null;
   let meta = {};
   try { meta = JSON.parse((c && c.notes) || '{}'); } catch (_) {}
-  showWorkModal(`<h3 class="work-modal-title">${c ? 'Edit Company' : 'New Company'}</h3><form id="work-company-form"><label class="work-lbl">Company Name</label><input class="work-input" name="name" required value="${c?esc(c.name):''}" placeholder="Company Ltd"/><label class="work-lbl">Ownership</label><select class="work-input" name="status"><option value="raz"${(c&&c.status)==='raz'?' selected':''}>Raz (Mine)</option><option value="partial"${(c&&c.status)==='partial'?' selected':''}>Partial</option><option value="other"${!c||(c&&c.status)==='other'?' selected':''}>Other</option></select><label class="work-lbl">Companies House Number</label><div class="work-ch-lookup-row"><input class="work-input" name="company_number" id="work-ch-num" value="${esc(meta.company_number||'')}" placeholder="e.g. 12345678"/><button type="button" class="work-btn-ghost" onclick="doWorkCHLookup()">Look up</button></div><div class="work-row-2"><div><label class="work-lbl">Accounts Due</label><input class="work-input" type="date" name="accounts_due" id="work-accounts-due" value="${meta.accounts_due||''}"/></div><div><label class="work-lbl">Conf. Statement Due</label><input class="work-input" type="date" name="confirmation_due" id="work-confirm-due" value="${meta.confirmation_due||''}"/></div></div><div class="work-row-2"><div><label class="work-lbl">Office Renewal Due</label><input class="work-input" type="date" name="office_renewal" value="${meta.office_renewal||''}"/></div><div><label class="work-lbl">Last Renewed</label><input class="work-input" type="date" name="office_renewed_on" value="${meta.office_renewed_on||''}"/></div></div><label class="work-lbl">Registered Office Address</label><textarea class="work-input" name="registered_office" rows="2" placeholder="e.g. 71-75 Shelton Street, Covent Garden, London, WC2H 9JQ">${esc(meta.registered_office||'')}</textarea><div class="work-row-2"><div><label class="work-lbl">Monthly Rent (£)</label><input class="work-input" type="number" name="rent" value="${meta.rent||''}" placeholder="0"/></div><div><label class="work-lbl">Monthly Salary (£)</label><input class="work-input" type="number" name="salary" value="${meta.salary||''}" placeholder="0"/></div></div><label class="work-lbl">Notes</label><textarea class="work-input" name="company_notes" rows="2">${esc(meta.notes||'')}</textarea><div class="work-modal-actions">${c?`<button type="button" class="work-btn-danger" onclick="deleteWorkItem('${c.id}','company')">Delete</button>`:'<span></span>'}<div class="work-modal-right"><button type="button" class="work-btn-ghost" onclick="closeWorkModal()">Cancel</button><button type="submit" class="work-btn-primary" id="work-co-submit">Save</button></div></div></form>`);
+  showWorkModal(`<h3 class="work-modal-title">${c ? 'Edit Company' : 'New Company'}</h3><form id="work-company-form"><label class="work-lbl">Company Name</label><input class="work-input" name="name" required value="${c?esc(c.name):''}" placeholder="Company Ltd"/><label class="work-lbl">Ownership</label><select class="work-input" name="status"><option value="raz"${(c&&c.status)==='raz'?' selected':''}>Raz (Mine)</option><option value="partial"${(c&&c.status)==='partial'?' selected':''}>Partial</option><option value="other"${!c||(c&&c.status)==='other'?' selected':''}>Other</option></select><label class="work-lbl">Companies House Number</label><div class="work-ch-lookup-row"><input class="work-input" name="company_number" id="work-ch-num" value="${esc(meta.company_number||'')}" placeholder="e.g. 12345678"/><button type="button" class="work-btn-ghost" onclick="doWorkCHLookup()">Look up</button></div><div class="work-row-2"><div><label class="work-lbl">Incorporated</label><input class="work-input" type="date" name="incorporated" id="work-incorporated" value="${meta.incorporated||''}"/></div><div><label class="work-lbl">Accounts Due</label><input class="work-input" type="date" name="accounts_due" id="work-accounts-due" value="${meta.accounts_due||''}"/></div></div><div class="work-row-2"><div><div><label class="work-lbl">Conf. Statement Due</label><input class="work-input" type="date" name="confirmation_due" id="work-confirm-due" value="${meta.confirmation_due||''}"/></div></div><div class="work-row-2"><div><label class="work-lbl">Office Renewal Due</label><input class="work-input" type="date" name="office_renewal" value="${meta.office_renewal||''}"/></div><div><label class="work-lbl">Last Renewed</label><input class="work-input" type="date" name="office_renewed_on" value="${meta.office_renewed_on||''}"/></div></div><label class="work-lbl">Registered Office Address</label><textarea class="work-input" name="registered_office" rows="2" placeholder="e.g. 71-75 Shelton Street, Covent Garden, London, WC2H 9JQ">${esc(meta.registered_office||'')}</textarea><div class="work-row-2"><div><label class="work-lbl">Monthly Rent (£)</label><input class="work-input" type="number" name="rent" value="${meta.rent||''}" placeholder="0"/></div><div><label class="work-lbl">Monthly Salary (£)</label><input class="work-input" type="number" name="salary" value="${meta.salary||''}" placeholder="0"/></div></div><label class="work-lbl">Notes</label><textarea class="work-input" name="company_notes" rows="2">${esc(meta.notes||'')}</textarea><div class="work-modal-actions">${c?`<button type="button" class="work-btn-danger" onclick="deleteWorkItem('${c.id}','company')">Delete</button>`:'<span></span>'}<div class="work-modal-right"><button type="button" class="work-btn-ghost" onclick="closeWorkModal()">Cancel</button><button type="submit" class="work-btn-primary" id="work-co-submit">Save</button></div></div></form>`);
   document.getElementById('work-company-form').addEventListener('submit', async ev => {
     ev.preventDefault();
     const fd = new FormData(ev.target);
     const name = (fd.get('name')||'').trim(); if (!name) return;
-    const notes = JSON.stringify({ company_number: (fd.get('company_number')||'').trim(), accounts_due: fd.get('accounts_due')||null, confirmation_due: fd.get('confirmation_due')||null, rent: (fd.get('rent')||'').trim()||null, salary: (fd.get('salary')||'').trim()||null, registered_office: (fd.get('registered_office')||'').trim(), office_renewal: fd.get('office_renewal')||null, office_renewed_on: fd.get('office_renewed_on')||null, notes: (fd.get('company_notes')||'').trim() });
+    const notes = JSON.stringify({ company_number: (fd.get('company_number')||'').trim(), incorporated: fd.get('incorporated')||null, accounts_due: fd.get('accounts_due')||null, confirmation_due: fd.get('confirmation_due')||null, rent: (fd.get('rent')||'').trim()||null, salary: (fd.get('salary')||'').trim()||null, registered_office: (fd.get('registered_office')||'').trim(), office_renewal: fd.get('office_renewal')||null, office_renewed_on: fd.get('office_renewed_on')||null, notes: (fd.get('company_notes')||'').trim() });
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2,8);
     const payload = { id, name, type: 'work-company', status: fd.get('status'), notes };
     document.getElementById('work-co-submit').disabled = true;
@@ -2966,6 +3318,11 @@ async function doWorkCHLookup() {
   const conDue = data.confirmation_statement && data.confirmation_statement.next_due;
   if (accDue) document.getElementById('work-accounts-due').value = accDue;
   if (conDue) document.getElementById('work-confirm-due').value = conDue;
+  // date_of_creation is the incorporation date on the CH company profile. Unlike the
+  // office renewal, this one IS public record, so it never needs typing by hand.
+  const inc = data.date_of_creation;
+  const incEl = document.getElementById('work-incorporated');
+  if (inc && incEl) incEl.value = inc;
   const ni = document.querySelector('#work-company-form input[name="name"]');
   if (ni && !ni.value && data.company_name) ni.value = data.company_name;
   // Registered office comes straight from Companies House, same as the dates.
@@ -2981,6 +3338,7 @@ async function doWorkCHLookup() {
     if (roText) roEl.value = roText;
   }
   alert('Filled from Companies House' + (data.company_name ? ': ' + data.company_name : '') + '.'
+    + (inc ? '\n\nIncorporated: ' + fmtUKDate(inc) : '')
     + (roText ? '\n\nRegistered office: ' + roText : '')
     + '\n\nOffice renewal date is not held by Companies House — set it by hand.');
 }
@@ -3634,20 +3992,43 @@ function renderGym() {
   window._gymViewDate = (window._gymViewDate && window._gymViewDate <= todayStr) ? window._gymViewDate : todayStr;
   const gymViewDate = window._gymViewDate;
   const todayEntries = dailyMacros.filter(m => m && m.date === gymViewDate);
-  const todayTotals = todayEntries.reduce(function(acc,m){return{p:acc.p+(m.protein||0),c:acc.c+(m.carbs||0),f:acc.f+(m.fats||0)};},{p:0,c:0,f:0});
-  const macroHtml = true
-  ? '<div class="gym-macro-targets">'
-    + '<div class="gym-macro-row"><span class="gym-macro-label">Protein</span><span class="gym-macro-val">'+Math.round(todayTotals.p)+'g / ' + MACRO_TARGETS.protein + 'g</span><div class="gym-macro-bar"><div class="gym-macro-fill" style="width:'+Math.min(100,+(todayTotals.p/180*100).toFixed(1))+'%"></div></div></div>'
-    + '<div class="gym-macro-row"><span class="gym-macro-label">Carbs</span><span class="gym-macro-val">'+Math.round(todayTotals.c)+'g / ' + MACRO_TARGETS.carbs   + 'g</span><div class="gym-macro-bar"><div class="gym-macro-fill" style="width:'+Math.min(100,+(todayTotals.c/280*100).toFixed(1))+'%"></div></div></div>'
-    + '<div class="gym-macro-row"><span class="gym-macro-label">Fats</span><span class="gym-macro-val">'+Math.round(todayTotals.f)+'g / ' + MACRO_TARGETS.fats    + 'g</span><div class="gym-macro-bar"><div class="gym-macro-fill" style="width:'+Math.min(100,+(todayTotals.f/70*100).toFixed(1))+'%"></div></div></div>'
+  // Rebuilt 2026-08-28. The old version had three faults: the bar widths divided by
+  // hardcoded 180/280/70 rather than the targets beside them (so changing a target moved
+  // the number but not the bar), calories were tracked but never shown, and the
+  // "Nothing logged today" branch sat behind a literal `true ?` so it could never render.
+  const _mt = macroTargetsNow();
+  const todayTotals = todayEntries.reduce(function(acc,m){
+    return { cal:acc.cal+(+m.calories||0), p:acc.p+(+m.protein||0), c:acc.c+(+m.carbs||0), f:acc.f+(+m.fats||0) };
+  }, {cal:0,p:0,c:0,f:0});
+  const _mrow = function(label, got, target, unit){
+    const pct = target ? Math.min(100, got/target*100) : 0;
+    const over = got > target;
+    return '<div class="gym-macro-row"><span class="gym-macro-label">'+label+'</span>'
+      + '<span class="gym-macro-val'+(over?' over':'')+'">'+Math.round(got)+unit+' / '+Math.round(target)+unit+'</span>'
+      + '<div class="gym-macro-bar"><div class="gym-macro-fill'+(over?' over':'')+'" style="width:'+pct.toFixed(1)+'%"></div></div></div>';
+  };
+  const macroHtml = '<div class="gym-macro-targets">'
+    + _mrow('Calories', todayTotals.cal, _mt.calories, '')
+    + _mrow('Protein',  todayTotals.p,   _mt.protein,  'g')
+    + _mrow('Carbs',    todayTotals.c,   _mt.carbs,    'g')
+    + _mrow('Fats',     todayTotals.f,   _mt.fats,     'g')
+    + (targetsEditing ? renderTargetsForm() : '<button class="gym-target-edit" onclick="openTargetsEditor()">Edit targets</button>')
     + '</div>'
-    + todayEntries.map(function(m){
+    + (todayEntries.length ? todayEntries.map(function(m){
+        var conf = m.confidence ? '<span class="meal-conf meal-conf-'+esc(m.confidence)+'">'+esc(m.confidence)+'</span>' : '';
+        var src  = m.source === 'photo' ? '📷 ' : (m.source === 'text' ? '✎ ' : '');
         return '<div class="gym-macros-entry">'
-          + '<span>Protein: '+Math.round(m.protein||0)+'g · Carbs: '+Math.round(m.carbs||0)+'g · Fats: '+Math.round(m.fats||0)+'g'+(m.calories?' · '+Math.round(m.calories)+'kcal':'')+'</span>'
-          + '<button class="ghost" onclick="openMacrosEditor(\'' + m.date + '\',\'' + m.id + '\')" >Edit</button>'
-          + '</div>';
+          + '<span><b>'+src+esc(m.label || 'Meal')+'</b> '+conf+'<br>'
+          + (m.calories?Math.round(m.calories)+' kcal · ':'')
+          + Math.round(m.protein||0)+'g P · '+Math.round(m.carbs||0)+'g C · '+Math.round(m.fats||0)+'g F'
+          + (m.assumptions ? '<br><em class="meal-assume-inline">'+esc(m.assumptions)+'</em>' : '')
+          + '</span>'
+          + '<span class="gym-macros-btns">'
+          + '<button class="ghost" onclick="openMacrosEditor(\'' + m.date + '\',\'' + m.id + '\')">Edit</button>'
+          + '<button class="ghost" onclick="undoMeal(\'' + m.id + '\')">Delete</button>'
+          + '</span></div>';
       }).join('')
-  : '<p class="gym-macros-empty">Nothing logged today</p>';
+    : '<p class="gym-macros-empty">Nothing logged for this day</p>');
   list.innerHTML = `
     <div class="section-header"><h2>Gym</h2><button class="add-btn" onclick="openGymEditor(null)">+ Log Session</button></div>
     <div class="gym-stats-row">
@@ -3662,7 +4043,7 @@ function renderGym() {
       <div class="gym-cal-grid">${cells}</div>
     </div>
     <div class="gym-legend">${legendHtml}</div>
-    <div class="gym-macros-section"><div class="gym-macros-hdr"><button class="gym-date-nav" onclick="gymShiftDate(-1)">&#8592;</button><span class="gym-macros-title">${gymViewDate}</span><button class="gym-date-nav" onclick="gymShiftDate(1)">&#8594;</button><button class="add-btn" onclick="openMacrosEditor('${gymViewDate}')">+ Log</button></div>${macroHtml}</div></div>
+    <div class="gym-macros-section"><div class="gym-macros-hdr"><button class="gym-date-nav" onclick="gymShiftDate(-1)">&#8592;</button><span class="gym-macros-title">${gymViewDate}</span><button class="gym-date-nav" onclick="gymShiftDate(1)">&#8594;</button><button class="add-btn" onclick="openMacrosEditor('${gymViewDate}')">+ Manual</button></div>${gymViewDate === todayISO() ? renderMealBar() : ''}${macroHtml}</div></div>
     
   `;
 }
