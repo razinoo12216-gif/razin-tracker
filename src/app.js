@@ -987,12 +987,14 @@ async function sendMeal(opts){
   if (!mealState.fixing) mealState.result = null;
   render();
   try {
-    const payload = { date: todayISO() };
+    // Posts to /api/capture, not /api/meal — the Hobby plan's 12-function cap meant meal
+    // logging had to ride on an existing endpoint. kind:'meal' is what routes it.
+    const payload = { kind: 'meal', date: todayISO() };
     if (opts.image) { payload.image = opts.image; payload.mediaType = opts.mediaType; }
     if (opts.text)  payload.text = opts.text;
     if (opts.note)  payload.note = opts.note;
 
-    const r = await fetch('/api/meal', {
+    const r = await fetch('/api/capture', {
       method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
     });
     const d = await r.json().catch(() => ({ error:'Server sent something unreadable' }));
