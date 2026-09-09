@@ -2396,7 +2396,9 @@ dialog .actions {
    Sits under the ticks strip on 12 Ticks and inside the Gym macros section.
    Designed thumb-first: the camera is the largest tap target on the card,
    because it is the only control that has to work one-handed in a car park. */
-.meal-wrap { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 12px; margin: 12px 0; }
+.meal-wrap { background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+  padding: 12px; margin: 12px 0; max-width: 100%; overflow-wrap: anywhere; }
+.meal-wrap * { min-width: 0; }   /* flex children default to min-width:auto and refuse to shrink */
 .meal-top { display: flex; gap: 12px; align-items: stretch; }
 .meal-nums { flex: 1 1 auto; min-width: 0; }
 .meal-line { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.78rem; color: var(--muted); margin-bottom: 2px; }
@@ -2425,10 +2427,13 @@ dialog .actions {
 .meal-btn.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border-2); }
 .meal-btn:disabled { opacity: .5; cursor: default; }
 
-.meal-out { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 0.82rem; }
+.meal-out { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+  font-size: 0.82rem; max-width: 100%; }
 .meal-wait { color: var(--gold); }
 .meal-bad { color: var(--danger); margin-bottom: 6px; }
-.meal-head-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
+.meal-head-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 4px; }
+.meal-label { min-width: 0; overflow-wrap: anywhere; }
+.meal-head-row .meal-conf { flex: 0 0 auto; }
 .meal-label { font-weight: 700; }
 .meal-conf { font-size: 0.66rem; text-transform: uppercase; letter-spacing: .04em; padding: 2px 7px; border-radius: 20px; white-space: nowrap; }
 .meal-conf-high { background: rgba(34,197,94,.15); color: var(--green); }
@@ -2437,11 +2442,19 @@ dialog .actions {
 .meal-totals { font-size: 0.85rem; margin-bottom: 6px; }
 .meal-totals b { font-size: 1.05rem; color: var(--gold); }
 .meal-items { border-left: 2px solid var(--border-2); padding-left: 9px; margin: 6px 0; }
-.meal-item { display: flex; justify-content: space-between; gap: 10px; font-size: 0.76rem; color: var(--muted); padding: 1px 0; }
+.meal-item { display: flex; justify-content: space-between; gap: 10px; font-size: 0.76rem;
+  color: var(--muted); padding: 1px 0; align-items: baseline; }
+.meal-item > span { min-width: 0; overflow-wrap: anywhere; }
+.meal-item b { flex: 0 0 auto; }
 .meal-item em { font-style: normal; opacity: .7; }
 .meal-item b { color: var(--text); font-variant-numeric: tabular-nums; }
 .meal-assume, .meal-assume-inline { font-size: 0.72rem; color: var(--muted); font-style: italic; margin: 4px 0; display: block; }
-.meal-fixrow { display: flex; gap: 6px; margin-top: 8px; }
+/* Fix/Undo row. Was a single flex line of input + 2 buttons, which overflowed the card on a
+   phone — the buttons ran off the right edge and the input collapsed to nothing (2026-09-09).
+   Now the input takes a full line and the two buttons split the next one, at any width. */
+.meal-fixrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.meal-fixrow .meal-fixinput { flex: 1 1 100%; min-width: 0; }
+.meal-fixrow .meal-btn { flex: 1 1 0; min-width: 0; }
 
 /* Gym tab macro section additions */
 .gym-macro-val.over { color: var(--amber); }
