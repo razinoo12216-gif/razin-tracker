@@ -18,6 +18,7 @@
 // Writes go through the same auditedWrite -> verifyActions -> receipt path as everything else,
 // so every row comes back verified out of Postgres and is undoable via /api/agentUndo.
 import { runAgent } from '../lib/agentCore.js';
+import { estimateAndLogMeal } from '../lib/mealEstimate.js';
 
 const MAX_LEN = 1500;
 
@@ -31,6 +32,19 @@ export default async function handler(req, res) {
   };
   if (!env.url || !env.key || !env.anthropic) {
     return res.status(500).json({ error: 'Missing env (SUPABASE_URL / SUPABASE_SERVICE_KEY / ANTHROPIC_API_KEY)' });
+  }
+
+  // Meal photos come through this same endpoint. Not for tidiness — Vercel's Hobby plan
+  // caps a deployment at 12 Serverless Functions and the repo was already at 12, so a
+  // standalone api/meal.js made 13 and every build failed. The estimator lives in
+  // lib/mealEstimate.js, which is bundled rather than counted. See that file's header.
+  if (req.body && (req.body.kind === 'meal' || req.body.image)) {
+    try {
+      const out = await estimateAndLogMeal(req.body, env);
+      return res.status(out.status).json(out.body);
+    } catch (e) {
+      return res.status(500).json({ error: e.message || 'meal error' });
+    }
   }
 
   const raw = (req.body && (req.body.text || req.body.note)) || '';
